@@ -33,7 +33,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const today = new Date().toISOString().split('T')[0];
       
       const { data, error } = await supabase
-        .from('daily_checkins')
+        .from('checkin_sessions')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
@@ -63,7 +63,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       startDate.setDate(startDate.getDate() - days);
 
       const { data, error } = await supabase
-        .from('daily_checkins')
+        .from('checkin_sessions')
         .select('*')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
@@ -87,7 +87,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
       // Check if already checked in today
       const { data: existing } = await supabase
-        .from('daily_checkins')
+        .from('checkin_sessions')
         .select('id')
         .eq('user_id', user.id)
         .eq('date', today)
@@ -99,7 +99,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
       // Insert new checkin
       const { data, error } = await supabase
-        .from('daily_checkins')
+        .from('checkin_sessions')
         .insert({
           ...checkinData,
           user_id: user.id,
