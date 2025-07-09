@@ -11,9 +11,9 @@ import { supabase } from '../services/supabase';
 
 // Screens
 import DailyCheckinScreen from '../screens/checkin/DailyCheckinScreen';
-import HomeScreen from '../screens/home/HomeScreen';
-import InsightsScreen from '../screens/insights/InsightsScreen';
-import ProfileScreen from '../screens/profile/ProfileScreen';
+import HomeScreen from '../screens/home';
+import InsightsScreen from '../screens/insights';
+import ProfileScreen from '../screens/profile';
 import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
 
 // Types
@@ -150,30 +150,56 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, profile, isLoading, loadProfile } = useAuthStore();
-  const [initializing, setInitializing] = useState(true);
+  const { user, profile, isLoading, isInitializing, loadProfile, setInitializing } = useAuthStore();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    let initialized = false;
+
+    // Checagem inicial da sessão
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        useAuthStore.setState({ 
-          user: session.user, 
-          isAuthenticated: true 
+        useAuthStore.setState({
+          user: session.user,
+          isAuthenticated: true
         });
         await loadProfile();
       } else {
-        useAuthStore.setState({ 
-          user: null, 
-          profile: null, 
-          isAuthenticated: false 
+        useAuthStore.setState({
+          user: null,
+          profile: null,
+          isAuthenticated: false
         });
       }
-      if (initializing) setInitializing(false);
+      if (!initialized) {
+        setInitializing(false);
+        initialized = true;
+      }
+    });
+
+    // Listener para mudanças futuras
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        useAuthStore.setState({
+          user: session.user,
+          isAuthenticated: true
+        });
+        await loadProfile();
+      } else {
+        useAuthStore.setState({
+          user: null,
+          profile: null,
+          isAuthenticated: false
+        });
+      }
+      if (!initialized) {
+        setInitializing(false);
+        initialized = true;
+      }
     });
     return () => subscription.unsubscribe();
-  }, [initializing, loadProfile]);
+  }, [loadProfile, setInitializing]);
 
-  if (initializing || isLoading) {
+  if (isInitializing || isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#2196F3" />

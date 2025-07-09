@@ -8,6 +8,7 @@ interface AuthState {
   profile: Profile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isInitializing: boolean;
   
   // Actions
   signIn: (email: string, password: string) => Promise<void>;
@@ -15,6 +16,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   loadProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
+  setInitializing: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -22,6 +24,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profile: null,
   isLoading: false,
   isAuthenticated: false,
+  isInitializing: true,
 
   signIn: async (email: string, password: string) => {
     set({ isLoading: true });
@@ -128,4 +131,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
   },
+
+  setInitializing: (value: boolean) => set({ isInitializing: value }),
 }));
