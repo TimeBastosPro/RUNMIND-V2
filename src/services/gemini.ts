@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { UserAnalytics } from '../types/database';
 
 const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY!;
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -11,7 +12,7 @@ export const geminiModel = genAI.getGenerativeModel({
   }
 });
 
-export async function generateInsight(userData: any): Promise<string> {
+export async function generateInsight(userData: UserAnalytics): Promise<string> {
   try {
     const prompt = `Analise os dados e gere insight personalizado em português:
     

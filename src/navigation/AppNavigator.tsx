@@ -11,6 +11,10 @@ import { supabase } from '../services/supabase';
 
 // Screens
 import DailyCheckinScreen from '../screens/checkin/DailyCheckinScreen';
+import HomeScreen from '../screens/home/HomeScreen';
+import InsightsScreen from '../screens/insights/InsightsScreen';
+import ProfileScreen from '../screens/profile/ProfileScreen';
+import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
 
 // Types
 type TabParamList = {
@@ -23,71 +27,12 @@ type TabParamList = {
 type StackParamList = {
   Main: undefined;
   Auth: undefined;
+  Onboarding: undefined;
 };
 
 type NavigationProps = {
   navigation?: any;
 };
-
-// Temporary placeholder screens
-function HomeScreen() {
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
-      <Card>
-        <Card.Content style={{ alignItems: 'center' }}>
-          <Text variant="headlineMedium">🏠 Home</Text>
-          <Text variant="bodyLarge" style={{ textAlign: 'center', marginTop: 16 }}>
-            Bem-vindo ao RunMind! Sua tela inicial será implementada em breve.
-          </Text>
-        </Card.Content>
-      </Card>
-    </View>
-  );
-}
-
-function InsightsScreen() {
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
-      <Card>
-        <Card.Content style={{ alignItems: 'center' }}>
-          <Text variant="headlineMedium">💡 Insights</Text>
-          <Text variant="bodyLarge" style={{ textAlign: 'center', marginTop: 16 }}>
-            Seus insights personalizados aparecerão aqui após alguns check-ins!
-          </Text>
-        </Card.Content>
-      </Card>
-    </View>
-  );
-}
-
-function ProfileScreen() {
-  const { signOut, profile } = useAuthStore();
-  
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
-      <Card>
-        <Card.Content style={{ alignItems: 'center' }}>
-          <Text variant="headlineMedium">👤 Perfil</Text>
-          <Text variant="bodyLarge" style={{ textAlign: 'center', marginTop: 16 }}>
-            Olá, {profile?.full_name || 'Usuário'}!
-          </Text>
-          <Text variant="bodyMedium" style={{ textAlign: 'center', marginTop: 8, opacity: 0.7 }}>
-            {profile?.email}
-          </Text>
-          <View style={{ marginTop: 24 }}>
-            <Text variant="bodyMedium">Nível: {profile?.experience_level}</Text>
-            <Text variant="bodyMedium">Objetivo: {profile?.main_goal}</Text>
-          </View>
-        </Card.Content>
-        <Card.Actions style={{ justifyContent: 'center', marginTop: 16 }}>
-          <Button mode="outlined" onPress={signOut}>
-            Sair da conta
-          </Button>
-        </Card.Actions>
-      </Card>
-    </View>
-  );
-}
 
 function AuthScreen() {
   const { signIn, signUp, isLoading } = useAuthStore();
@@ -205,7 +150,7 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, isLoading, loadProfile } = useAuthStore();
+  const { user, profile, isLoading, loadProfile } = useAuthStore();
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
@@ -223,10 +168,8 @@ export default function AppNavigator() {
           isAuthenticated: false 
         });
       }
-      
       if (initializing) setInitializing(false);
     });
-
     return () => subscription.unsubscribe();
   }, [initializing, loadProfile]);
 
@@ -242,10 +185,12 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          <Stack.Screen name="Main" component={MainTabs} />
-        ) : (
+        {!user ? (
           <Stack.Screen name="Auth" component={AuthScreen} />
+        ) : profile && profile.onboarding_completed === false ? (
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        ) : (
+          <Stack.Screen name="Main" component={MainTabs} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
