@@ -33,7 +33,6 @@ export default function DailyCheckinScreen({ navigation }: NavigationProps) {
   const [sleepHours, setSleepHours] = useState<string>('7');
   const [sleepQuality, setSleepQuality] = useState<number>(3);
   const [notes, setNotes] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -53,7 +52,6 @@ export default function DailyCheckinScreen({ navigation }: NavigationProps) {
       return;
     }
 
-    setIsLoading(true);
     try {
       const checkinData: CheckinData = {
         date: new Date().toISOString().split('T')[0],
@@ -78,8 +76,6 @@ export default function DailyCheckinScreen({ navigation }: NavigationProps) {
       );
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Erro ao fazer check-in');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -224,12 +220,12 @@ export default function DailyCheckinScreen({ navigation }: NavigationProps) {
       <Button
         mode="contained"
         onPress={handleSubmit}
-        loading={isLoading || isSubmitting}
-        disabled={isLoading || isSubmitting}
+        loading={isSubmitting}
+        disabled={isSubmitting}
         style={{ marginBottom: 32 }}
         contentStyle={{ paddingVertical: 8 }}
       >
-        {isLoading || isSubmitting ? 'Salvando...' : 'Finalizar Check-in'}
+        {isSubmitting ? 'Enviando...' : 'Enviar Check-in'}
       </Button>
     </ScrollView>
   );

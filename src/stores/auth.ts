@@ -93,6 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadProfile: async () => {
+    console.log('Carregando perfil para o usuário:', get().user?.id);
     const { user } = get();
     if (!user) return;
     
@@ -106,7 +107,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (error) throw error;
       
       set({ profile: data });
+      console.log('Perfil carregado com sucesso:', data);
     } catch (error) {
+      console.log('ERRO ao carregar perfil:', error);
       console.error('Error loading profile:', error);
     }
   },

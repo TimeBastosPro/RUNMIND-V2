@@ -3,12 +3,21 @@ import { supabase } from '../services/supabase';
 import { generateInsight } from '../services/gemini';
 import type { DailyCheckin, UserAnalytics } from '../types/database';
 
+interface RecentCheckin {
+  mood_score: number;
+  energy_score: number;
+  sleep_hours: number;
+  sleep_quality: number;
+  date: string;
+}
+
 interface CheckinState {
   todayCheckin: DailyCheckin | null;
-  recentCheckins: DailyCheckin[];
+  recentCheckins: RecentCheckin[];
   hasCheckedInToday: boolean;
   isLoading: boolean;
   isSubmitting: boolean;
+  insights: string[];
   
   // Actions
   loadTodayCheckin: () => Promise<void>;
@@ -23,6 +32,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   hasCheckedInToday: false,
   isLoading: false,
   isSubmitting: false,
+  insights: [],
 
   loadTodayCheckin: async () => {
     set({ isLoading: true });
@@ -64,7 +74,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('checkin_sessions')
-        .select('*')
+        .select('mood_score, energy_score, sleep_hours, sleep_quality, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
@@ -119,15 +129,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       // Reload recent checkins and generate insight
       await get().loadRecentCheckins();
       
-      // Generate AI insight in background
+      // Generate AI insight em background
       const analytics = get().calculateAnalytics();
-      if (analytics) {
-        try {
-          await generateInsight(analytics);
-        } catch (error) {
-          console.error('Error generating insight:', error);
-        }
+      // if (analytics) {
+      try {
+        const insightText = await generateInsight(checkinData);
+        set(state => ({ insights: [...state.insights, insightText] }));
+        console.log('✨ Insight gerado pela IA:', insightText);
+      } catch (error) {
+        console.error('Erro ao gerar insight com IA:', error);
       }
+      // }
 
     } catch (error) {
       set({ isSubmitting: false });

@@ -14,7 +14,7 @@ import DailyCheckinScreen from '../screens/checkin/DailyCheckinScreen';
 import HomeScreen from '../screens/home';
 import InsightsScreen from '../screens/insights';
 import ProfileScreen from '../screens/profile';
-import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
+import OnboardingProfileScreen from '../screens/onboarding/OnboardingProfileScreen';
 
 // Types
 type TabParamList = {
@@ -150,54 +150,56 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, profile, isLoading, isInitializing, loadProfile, setInitializing } = useAuthStore();
+  console.log('AppNavigator renderizou');
+  const { user, profile, isLoading, isInitializing, isAuthenticated, loadProfile, setInitializing } = useAuthStore();
 
   useEffect(() => {
+    console.log('Efeito onAuthStateChange INICIOU');
     let initialized = false;
 
     // Checagem inicial da sessão
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('onAuthStateChange DISPAROU', { event: 'initial', session });
       if (session?.user) {
         useAuthStore.setState({
           user: session.user,
           isAuthenticated: true
         });
-        await loadProfile();
+        useAuthStore.setState({ isInitializing: false });
+        loadProfile();
       } else {
         useAuthStore.setState({
           user: null,
           profile: null,
-          isAuthenticated: false
+          isAuthenticated: false,
+          isInitializing: false
         });
-      }
-      if (!initialized) {
-        setInitializing(false);
-        initialized = true;
       }
     });
 
     // Listener para mudanças futuras
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('onAuthStateChange DISPAROU', { event, session });
       if (session?.user) {
         useAuthStore.setState({
           user: session.user,
           isAuthenticated: true
         });
-        await loadProfile();
+        useAuthStore.setState({ isInitializing: false });
+        loadProfile();
       } else {
         useAuthStore.setState({
           user: null,
           profile: null,
-          isAuthenticated: false
+          isAuthenticated: false,
+          isInitializing: false
         });
-      }
-      if (!initialized) {
-        setInitializing(false);
-        initialized = true;
       }
     });
     return () => subscription.unsubscribe();
   }, [loadProfile, setInitializing]);
+
+  console.log('ESTADO ATUAL:', { isLoading, user, isAuthenticated });
 
   if (isInitializing || isLoading) {
     return (
@@ -214,7 +216,7 @@ export default function AppNavigator() {
         {!user ? (
           <Stack.Screen name="Auth" component={AuthScreen} />
         ) : profile && profile.onboarding_completed === false ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen name="Onboarding" component={OnboardingProfileScreen} />
         ) : (
           <Stack.Screen name="Main" component={MainTabs} />
         )}
