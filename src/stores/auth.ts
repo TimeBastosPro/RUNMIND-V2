@@ -17,6 +17,17 @@ interface AuthState {
   loadProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   setInitializing: (value: boolean) => void;
+  submitPreferences: (prefs: {
+    trainingDays: string[];
+    trainingPeriod: string;
+    terrainType: string;
+    workIntensity: number;
+    sleepQuality: string;
+    wakeFeeling: string;
+    hydration: string;
+    recoveryTechniques: string;
+    stressManagement: string[];
+  }) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -131,6 +142,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ profile: data });
     } catch (error) {
       console.error('Error updating profile:', error);
+      throw error;
+    }
+  },
+
+  submitPreferences: async (prefs: {
+    trainingDays: string[];
+    trainingPeriod: string;
+    terrainType: string;
+    workIntensity: number;
+    sleepQuality: string;
+    wakeFeeling: string;
+    hydration: string;
+    recoveryTechniques: string;
+    stressManagement: string[];
+  }) => {
+    const { user } = get();
+    if (!user) throw new Error('Usuário não autenticado');
+    try {
+      const upsertData = {
+        user_id: user.id,
+        ...prefs,
+      };
+      const { error } = await supabase
+        .from('profile_preferences')
+        .upsert(upsertData, { onConflict: 'user_id' });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Erro ao salvar preferências:', error);
       throw error;
     }
   },

@@ -1,41 +1,54 @@
 import React from 'react';
-import { View, FlatList, ActivityIndicator } from 'react-native';
-import { Card, Text } from 'react-native-paper';
+import { View, FlatList, StyleSheet } from 'react-native';
+import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 
 export default function InsightsScreen() {
   const insights = useCheckinStore(state => state.insights);
-  const isLoading = false; // Ajuste aqui se houver loading real no futuro
+  const isLoading = useCheckinStore(state => state.isLoading);
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
-    <View style={{ flex: 1, padding: 20 }}>
-      {isLoading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#2196F3" />
-        </View>
-      ) : insights.length === 0 ? (
-        <Card>
-          <Card.Content style={{ alignItems: 'center' }}>
-            <Text variant="headlineMedium">💡 Insights</Text>
-            <Text variant="bodyLarge" style={{ textAlign: 'center', marginTop: 16 }}>
+    <View style={{ flex: 1, backgroundColor: '#fff', padding: 16 }}>
+      <FlatList
+        data={insights}
+        keyExtractor={(item, idx) => idx.toString()}
+        renderItem={({ item }) => (
+          <Card style={styles.card}>
+            <Card.Content style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontSize: 20, marginRight: 8 }}>💡</Text>
+              <Text style={{ fontSize: 16, flex: 1 }}>{item}</Text>
+            </Card.Content>
+          </Card>
+        )}
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Text style={{ color: '#888', fontSize: 16, textAlign: 'center' }}>
               Seus insights personalizados aparecerão aqui após alguns check-ins!
             </Text>
-          </Card.Content>
-        </Card>
-      ) : (
-        <FlatList
-          data={insights}
-          keyExtractor={(item, idx) => idx.toString()}
-          renderItem={({ item }) => (
-            <Card style={{ marginBottom: 16, elevation: 2 }}>
-              <Card.Content style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <Text style={{ fontSize: 24, marginRight: 12 }}>💡</Text>
-                <Text variant="bodyLarge" style={{ flex: 1 }}>{item}</Text>
-              </Card.Content>
-            </Card>
-          )}
-        />
-      )}
+          </View>
+        }
+        contentContainerStyle={insights.length === 0 ? { flex: 1 } : undefined}
+      />
     </View>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  card: {
+    marginVertical: 8,
+    elevation: 2,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+}); 

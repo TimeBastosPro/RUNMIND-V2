@@ -8,6 +8,9 @@ export interface Profile {
     onboarding_completed: boolean;
     created_at: string;
     updated_at: string;
+    date_of_birth?: string;
+    weight_kg?: number;
+    height_cm?: number;
   }
   
   export interface DailyCheckin {
@@ -18,6 +21,9 @@ export interface Profile {
     energy_score: number; // 1-10
     sleep_hours: number;
     sleep_quality: number; // 1-5
+    fatigue_score?: number; // 1-7
+    stress_score?: number; // 1-7
+    soreness_score?: number; // 1-7
     notes?: string;
     created_at: string;
   }

@@ -18,12 +18,37 @@ interface CheckinState {
   isLoading: boolean;
   isSubmitting: boolean;
   insights: string[];
-  
+  trainingSessions: any[];
   // Actions
   loadTodayCheckin: () => Promise<void>;
   loadRecentCheckins: (days?: number) => Promise<void>;
   submitCheckin: (checkinData: Omit<DailyCheckin, 'id' | 'user_id' | 'created_at'>) => Promise<void>;
   calculateAnalytics: () => UserAnalytics | null;
+  submitParqAnswers: (answers: {
+    q1: boolean;
+    q2: boolean;
+    q3: boolean;
+    q4: boolean;
+    q5: boolean;
+    q6: boolean;
+    q7: boolean;
+    details?: string;
+  }) => Promise<void>;
+  submitTrainingSession: (trainingData: {
+    training_date: string;
+    title: string;
+    training_type: string;
+    distance_km: number | null;
+    duration_minutes: number | null;
+    elevation_gain_meters: number | null;
+    avg_heart_rate: number | null;
+    perceived_effort: number;
+    notes: string;
+    source?: string;
+  }) => Promise<any>;
+  fetchTrainingSessions: (startDate: string, endDate: string) => Promise<void>;
+  saveTrainingSession: (trainingData: any) => Promise<any>;
+  deleteTrainingSession: (sessionId: number) => Promise<boolean>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -33,6 +58,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   isLoading: false,
   isSubmitting: false,
   insights: [],
+  trainingSessions: [], // Initialize trainingSessions
 
   loadTodayCheckin: async () => {
     set({ isLoading: true });
@@ -92,46 +118,24 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
-
       const today = new Date().toISOString().split('T')[0];
-
-      // Check if already checked in today
-      const { data: existing } = await supabase
-        .from('checkin_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('date', today)
-        .single();
-
-      if (existing) {
-        throw new Error('Você já fez o check-in hoje!');
-      }
-
-      // Insert new checkin
+      const upsertData = {
+        ...checkinData,
+        user_id: user.id,
+        date: today,
+      };
       const { data, error } = await supabase
         .from('checkin_sessions')
-        .insert({
-          ...checkinData,
-          user_id: user.id,
-          date: today,
-        })
+        .upsert([upsertData], { onConflict: 'user_id,date' })
         .select()
         .single();
-
       if (error) throw error;
-
       set({ 
         todayCheckin: data,
         hasCheckedInToday: true,
         isSubmitting: false 
       });
-
-      // Reload recent checkins and generate insight
       await get().loadRecentCheckins();
-      
-      // Generate AI insight em background
-      const analytics = get().calculateAnalytics();
-      // if (analytics) {
       try {
         const insightText = await generateInsight(checkinData);
         set(state => ({ insights: [...state.insights, insightText] }));
@@ -139,11 +143,125 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       } catch (error) {
         console.error('Erro ao gerar insight com IA:', error);
       }
-      // }
-
     } catch (error) {
       set({ isSubmitting: false });
       throw error;
+    }
+  },
+
+  submitParqAnswers: async (answers: {
+    q1: boolean;
+    q2: boolean;
+    q3: boolean;
+    q4: boolean;
+    q5: boolean;
+    q6: boolean;
+    q7: boolean;
+    details?: string;
+  }) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const upsertData = {
+        user_id: user.id,
+        ...answers,
+      };
+      const { error } = await supabase
+        .from('parq_answers')
+        .upsert(upsertData, { onConflict: 'user_id' });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Erro ao salvar respostas do PAR-Q+:', error);
+      throw error;
+    }
+  },
+
+  submitTrainingSession: async (trainingData: {
+    training_date: string;
+    title: string;
+    training_type: string;
+    distance_km: number | null;
+    duration_minutes: number | null;
+    elevation_gain_meters: number | null;
+    avg_heart_rate: number | null;
+    perceived_effort: number;
+    notes: string;
+    source?: string;
+  }) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const upsertData = {
+        user_id: user.id,
+        ...trainingData,
+      };
+      console.log('--- DADOS DO TREINO PARA DEBUG ---', trainingData);
+      console.log('OBJETO ENVIADO PARA O SUPABASE:', upsertData);
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .upsert(upsertData, { onConflict: 'id' })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao salvar treino:', error);
+      throw error;
+    }
+  },
+
+  saveTrainingSession: async (trainingData: any) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const upsertData = {
+        user_id: user.id,
+        ...trainingData,
+      };
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .upsert([upsertData], { onConflict: 'id' })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao salvar treino (upsert):', error);
+      throw error;
+    }
+  },
+  deleteTrainingSession: async (sessionId: number) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const { error } = await supabase
+        .from('training_sessions')
+        .delete()
+        .eq('id', sessionId);
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao deletar treino:', error);
+      throw error;
+    }
+  },
+
+  fetchTrainingSessions: async (startDate: string, endDate: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('training_date', startDate)
+        .lte('training_date', endDate)
+        .order('training_date', { ascending: true });
+      if (error) throw error;
+      set({ trainingSessions: data || [] });
+    } catch (error) {
+      console.error('Erro ao buscar treinos:', error);
+      set({ trainingSessions: [] });
     }
   },
 

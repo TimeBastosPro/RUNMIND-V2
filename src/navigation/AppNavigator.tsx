@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Text, Card, TextInput, Button } from 'react-native-paper';
+import { Text, Card, TextInput, Button, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuthStore } from '../stores/auth';
@@ -14,42 +14,66 @@ import DailyCheckinScreen from '../screens/checkin/DailyCheckinScreen';
 import HomeScreen from '../screens/home';
 import InsightsScreen from '../screens/insights';
 import ProfileScreen from '../screens/profile';
-import OnboardingProfileScreen from '../screens/onboarding/OnboardingProfileScreen';
+import InitialLoadingScreen from '../screens/auth/InitialLoadingScreen';
+import TrainingScreen from '../screens/training/TrainingScreen';
 
 // Types
 type TabParamList = {
   Home: undefined;
   'Check-in': undefined;
   Insights: undefined;
+  Treinos: undefined;
   Profile: undefined;
 };
 
 type StackParamList = {
   Main: undefined;
   Auth: undefined;
-  Onboarding: undefined;
+  InitialLoading: undefined;
 };
 
 type NavigationProps = {
   navigation?: any;
 };
 
+import { useForm, Controller } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const loginSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
+});
+const signUpSchema = loginSchema.extend({
+  fullName: z.string().min(1, 'O nome completo é obrigatório'),
+});
+
+type LoginForm = z.infer<typeof loginSchema>;
+type SignUpForm = z.infer<typeof signUpSchema>;
+
 function AuthScreen() {
   const { signIn, signUp, isLoading } = useAuthStore();
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
 
-  const handleSubmit = async () => {
+  const {
+    control,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<LoginForm | SignUpForm>({
+    resolver: zodResolver(isLogin ? loginSchema : signUpSchema),
+    defaultValues: { email: '', password: '', fullName: '' },
+  });
+
+  const onSubmit = async (data: any) => {
     try {
       if (isLogin) {
-        await signIn(email, password);
+        await signIn(data.email, data.password);
       } else {
-        await signUp(email, password, fullName);
+        await signUp(data.email, data.password, data.fullName);
       }
     } catch (error: any) {
-      alert(error.message);
+      setError('root', { message: error.message || 'Erro ao autenticar.' });
     }
   };
 
@@ -60,43 +84,87 @@ function AuthScreen() {
           <Text variant="headlineMedium" style={{ textAlign: 'center', marginBottom: 24 }}>
             🏃‍♂️ RunMind
           </Text>
-          
           <Text variant="bodyLarge" style={{ textAlign: 'center', marginBottom: 24 }}>
             {isLogin ? 'Entre na sua conta' : 'Crie sua conta'}
           </Text>
 
           {!isLogin && (
-            <TextInput
-              label="Nome completo"
-              value={fullName}
-              onChangeText={setFullName}
-              style={{ marginBottom: 16 }}
-              mode="outlined"
+            <Controller
+              control={control}
+              name="fullName"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <>
+                  <TextInput
+                    label="Nome completo"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    style={{ marginBottom: 4 }}
+                    mode="outlined"
+                  />
+                  <HelperText type="error" visible={
+                    !isLogin &&
+                    typeof errors === 'object' &&
+                    'fullName' in errors &&
+                    !!(errors as any).fullName
+                  }>
+                    {(!isLogin && typeof errors === 'object' && 'fullName' in errors && (errors as any).fullName?.message) || ''}
+                  </HelperText>
+                </>
+              )}
             />
           )}
 
-          <TextInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            style={{ marginBottom: 16 }}
-            mode="outlined"
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <>
+                <TextInput
+                  label="Email"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={{ marginBottom: 4 }}
+                  mode="outlined"
+                />
+                <HelperText type="error" visible={!!errors.email}>
+                  {errors.email?.message}
+                </HelperText>
+              </>
+            )}
           />
 
-          <TextInput
-            label="Senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            style={{ marginBottom: 24 }}
-            mode="outlined"
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <>
+                <TextInput
+                  label="Senha"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  secureTextEntry
+                  style={{ marginBottom: 4 }}
+                  mode="outlined"
+                />
+                <HelperText type="error" visible={!!errors.password}>
+                  {errors.password?.message}
+                </HelperText>
+              </>
+            )}
           />
+
+          <HelperText type="error" visible={!!errors.root}>
+            {errors.root?.message}
+          </HelperText>
 
           <Button
             mode="contained"
-            onPress={handleSubmit}
+            onPress={handleSubmit(onSubmit)}
             loading={isLoading}
             disabled={isLoading}
             style={{ marginBottom: 16 }}
@@ -130,6 +198,8 @@ function MainTabs() {
             iconName = 'clipboard-check';
           } else if (route.name === 'Insights') {
             iconName = 'lightbulb';
+          } else if (route.name === 'Treinos') {
+            iconName = 'run';
           } else if (route.name === 'Profile') {
             iconName = 'account';
           }
@@ -144,6 +214,7 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Início' }} />
       <Tab.Screen name="Check-in" component={DailyCheckinScreen} />
       <Tab.Screen name="Insights" component={InsightsScreen} />
+      <Tab.Screen name="Treinos" component={TrainingScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
     </Tab.Navigator>
   );
@@ -215,10 +286,11 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <Stack.Screen name="Auth" component={AuthScreen} />
-        ) : profile && profile.onboarding_completed === false ? (
-          <Stack.Screen name="Onboarding" component={OnboardingProfileScreen} />
         ) : (
-          <Stack.Screen name="Main" component={MainTabs} />
+          <>
+            <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
+            <Stack.Screen name="Main" component={MainTabs} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

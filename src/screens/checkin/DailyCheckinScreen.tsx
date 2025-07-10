@@ -1,232 +1,243 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, Alert } from 'react-native';
-import { Text, Card, Button, TextInput } from 'react-native-paper';
+import { View } from 'react-native';
+import { Card, Text, Button, ActivityIndicator, TextInput } from 'react-native-paper';
 import Slider from '@react-native-community/slider';
 import { useCheckinStore } from '../../stores/checkin';
-import { useAuthStore } from '../../stores/auth';
 
-// Definindo tipos para melhor TypeScript
-interface CheckinData {
-  date: string;
-  mood_score: number;
-  energy_score: number;
-  sleep_hours: number;
-  sleep_quality: number;
-  notes?: string;
-}
+const moodEmojis = ['😞', '😕', '😐', '🙂', '😊', '😃', '😄', '😁', '🤩', '😍'];
 
-interface NavigationProps {
-  navigation: {
-    navigate: (screen: string) => void;
-  };
-}
+export default function DailyCheckinScreen() {
+  const todayCheckin = useCheckinStore(s => s.todayCheckin);
+  const hasCheckedInToday = useCheckinStore(s => s.hasCheckedInToday);
+  const isSubmitting = useCheckinStore(s => s.isSubmitting);
+  const submitCheckin = useCheckinStore(s => s.submitCheckin);
+  const loadTodayCheckin = useCheckinStore(s => s.loadTodayCheckin);
 
-const moodEmojis = ['😢', '😟', '😐', '🙂', '😊', '😄', '😆', '🤩', '🤗', '🥳'];
-const energyEmojis = ['😴', '😪', '😑', '🙂', '😊', '😄', '💪', '⚡', '🔥', '🚀'];
+  // Estados do wizard
+  const [step, setStep] = useState(0);
+  const [sleepQuality, setSleepQuality] = useState(3);
+  const [fatigue, setFatigue] = useState(4);
+  const [stress, setStress] = useState(4);
+  const [soreness, setSoreness] = useState(4);
+  const [mood, setMood] = useState(5);
+  const [notes, setNotes] = useState('');
+  const [formMode, setFormMode] = useState<'form' | 'view'>('form');
 
-export default function DailyCheckinScreen({ navigation }: NavigationProps) {
-  const { submitCheckin, hasCheckedInToday, isSubmitting, loadTodayCheckin } = useCheckinStore();
-  const { isAuthenticated } = useAuthStore();
-  
-  const [moodScore, setMoodScore] = useState<number>(5);
-  const [energyScore, setEnergyScore] = useState<number>(5);
-  const [sleepHours, setSleepHours] = useState<string>('7');
-  const [sleepQuality, setSleepQuality] = useState<number>(3);
-  const [notes, setNotes] = useState<string>('');
-
+  // Preencher dados ao editar
   useEffect(() => {
-    if (isAuthenticated) {
-      loadTodayCheckin();
+    if (hasCheckedInToday && todayCheckin) {
+      setFormMode('view');
+      setSleepQuality(todayCheckin.sleep_quality ?? 3);
+      setFatigue(todayCheckin.fatigue_score ?? 4);
+      setStress(todayCheckin.stress_score ?? 4);
+      setSoreness(todayCheckin.soreness_score ?? 4);
+      setMood(todayCheckin.mood_score ?? 5);
+      setNotes(todayCheckin.notes ?? '');
+    } else {
+      setFormMode('form');
+      setSleepQuality(3);
+      setFatigue(4);
+      setStress(4);
+      setSoreness(4);
+      setMood(5);
+      setNotes('');
     }
-  }, [isAuthenticated, loadTodayCheckin]);
+    setStep(0);
+  }, [hasCheckedInToday, todayCheckin]);
 
-  const handleSubmit = async (): Promise<void> => {
-    if (hasCheckedInToday) {
-      Alert.alert('Ops!', 'Você já fez o check-in hoje! 😊');
-      return;
-    }
-
-    const sleepHoursNum = parseFloat(sleepHours);
-    if (isNaN(sleepHoursNum) || sleepHoursNum < 0 || sleepHoursNum > 24) {
-      Alert.alert('Erro', 'Por favor, insira um número válido de horas de sono (0-24)');
-      return;
-    }
-
-    try {
-      const checkinData: CheckinData = {
-        date: new Date().toISOString().split('T')[0],
-        mood_score: moodScore,
-        energy_score: energyScore,
-        sleep_hours: sleepHoursNum,
-        sleep_quality: sleepQuality,
-        notes: notes.trim() || undefined,
-      };
-
-      await submitCheckin(checkinData);
-
-      Alert.alert(
-        '✅ Check-in realizado!', 
-        'Obrigado! Seus dados foram salvos e já estamos gerando insights personalizados.',
-        [
-          { 
-            text: 'Ver Insights', 
-            onPress: () => navigation.navigate('Insights')
-          }
-        ]
-      );
-    } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Erro ao fazer check-in');
-    }
+  // Submissão final
+  const handleSubmit = async () => {
+    await submitCheckin({
+      sleep_quality: sleepQuality,
+      fatigue_score: fatigue,
+      stress_score: stress,
+      soreness_score: soreness,
+      mood_score: mood,
+      notes,
+    });
+    await loadTodayCheckin();
+    setFormMode('view');
   };
 
-  if (hasCheckedInToday) {
+  if (isSubmitting) {
     return (
-      <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (formMode === 'view' && todayCheckin) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 16 }}>
         <Card>
-          <Card.Content style={{ alignItems: 'center', padding: 30 }}>
-            <Text variant="headlineMedium">✅ Check-in Completo!</Text>
-            <Text variant="bodyLarge" style={{ textAlign: 'center', marginVertical: 16 }}>
-              Você já fez seu check-in hoje. Volte amanhã para continuar acompanhando seu bem-estar!
-            </Text>
-            <Button 
-              mode="contained" 
-              onPress={() => navigation.navigate('Insights')}
-              style={{ marginTop: 16 }}
-            >
-              Ver Meus Insights
-            </Button>
+          <Card.Title title="Seu Check-in de Hoje" />
+          <Card.Content>
+            <Text style={{ marginBottom: 8 }}>Qualidade do Sono: {todayCheckin.sleep_quality} ⭐</Text>
+            <Text style={{ marginBottom: 8 }}>Fadiga: {todayCheckin.fatigue_score}/7</Text>
+            <Text style={{ marginBottom: 8 }}>Estresse: {todayCheckin.stress_score}/7</Text>
+            <Text style={{ marginBottom: 8 }}>Dores Musculares: {todayCheckin.soreness_score}/7</Text>
+            <Text style={{ marginBottom: 8 }}>Humor: {moodEmojis[(todayCheckin.mood_score ?? 5) - 1]} {todayCheckin.mood_score}/10</Text>
+            <Text style={{ marginBottom: 8 }}>Notas: {todayCheckin.notes || '-'}</Text>
           </Card.Content>
+          <Card.Actions>
+            <Button mode="contained" onPress={() => setFormMode('form')}>Editar Check-in</Button>
+          </Card.Actions>
         </Card>
       </View>
     );
   }
 
-  return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text variant="headlineMedium" style={{ marginBottom: 24, textAlign: 'center' }}>
-        🏃‍♂️ Check-in Diário
-      </Text>
-      
-      <Text variant="bodyLarge" style={{ marginBottom: 16, textAlign: 'center', opacity: 0.7 }}>
-        Como você está se sentindo hoje?
-      </Text>
-
-      {/* Mood Score */}
-      <Card style={{ marginBottom: 16 }}>
-        <Card.Content>
-          <Text variant="titleMedium" style={{ marginBottom: 8 }}>
-            😊 Humor Geral
-          </Text>
-          <View style={{ alignItems: 'center', marginVertical: 16 }}>
-            <Text variant="displaySmall">{moodEmojis[moodScore - 1]}</Text>
-            <Text variant="bodyLarge">{moodScore}/10</Text>
+  // Wizard de perguntas
+  const steps = [
+    {
+      label: 'Como você avalia a qualidade do seu sono?',
+      content: (
+        <>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>Arraste para avaliar de 1 a 5 estrelas.</Text>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 32 }}>{'⭐'.repeat(sleepQuality)}{'☆'.repeat(5 - sleepQuality)}</Text>
+            <Text style={{ fontSize: 16, color: '#888' }}>{sleepQuality}/5</Text>
           </View>
           <Slider
-            value={moodScore}
-            onValueChange={setMoodScore}
-            minimumValue={1}
-            maximumValue={10}
-            step={1}
-            style={{ width: '100%', height: 40 }}
-          />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-            <Text variant="bodySmall">Muito baixo</Text>
-            <Text variant="bodySmall">Excelente</Text>
-          </View>
-        </Card.Content>
-      </Card>
-
-      {/* Energy Score */}
-      <Card style={{ marginBottom: 16 }}>
-        <Card.Content>
-          <Text variant="titleMedium" style={{ marginBottom: 8 }}>
-            ⚡ Energia Física
-          </Text>
-          <View style={{ alignItems: 'center', marginVertical: 16 }}>
-            <Text variant="displaySmall">{energyEmojis[energyScore - 1]}</Text>
-            <Text variant="bodyLarge">{energyScore}/10</Text>
-          </View>
-          <Slider
-            value={energyScore}
-            onValueChange={setEnergyScore}
-            minimumValue={1}
-            maximumValue={10}
-            step={1}
-            style={{ width: '100%', height: 40 }}
-          />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-            <Text variant="bodySmall">Exausto</Text>
-            <Text variant="bodySmall">Energizado</Text>
-          </View>
-        </Card.Content>
-      </Card>
-
-      {/* Sleep */}
-      <Card style={{ marginBottom: 16 }}>
-        <Card.Content>
-          <Text variant="titleMedium" style={{ marginBottom: 16 }}>
-            💤 Sono
-          </Text>
-          
-          <TextInput
-            label="Horas de sono"
-            value={sleepHours}
-            onChangeText={setSleepHours}
-            keyboardType="numeric"
-            style={{ marginBottom: 16 }}
-            right={<TextInput.Affix text="h" />}
-          />
-
-          <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
-            Qualidade do sono:
-          </Text>
-          <View style={{ alignItems: 'center', marginVertical: 16 }}>
-            <Text variant="headlineSmall">
-              {'⭐'.repeat(sleepQuality)}{'☆'.repeat(5 - sleepQuality)}
-            </Text>
-            <Text variant="bodyLarge">{sleepQuality}/5</Text>
-          </View>
-          <Slider
-            value={sleepQuality}
-            onValueChange={setSleepQuality}
             minimumValue={1}
             maximumValue={5}
             step={1}
-            style={{ width: '100%', height: 40 }}
+            value={sleepQuality}
+            onValueChange={setSleepQuality}
+            style={{ width: '100%' }}
           />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-            <Text variant="bodySmall">Péssimo</Text>
-            <Text variant="bodySmall">Excelente</Text>
+        </>
+      ),
+    },
+    {
+      label: 'Qual seu nível de fadiga hoje?',
+      content: (
+        <>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>1 = Nenhuma Fadiga, 7 = Fadiga Extrema</Text>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 24 }}>{fatigue}/7</Text>
           </View>
-        </Card.Content>
-      </Card>
-
-      {/* Notes */}
-      <Card style={{ marginBottom: 24 }}>
-        <Card.Content>
-          <TextInput
-            label="Notas do dia (opcional)"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={3}
-            placeholder="Como foi seu dia? Algo específico aconteceu?"
-            mode="outlined"
+          <Slider
+            minimumValue={1}
+            maximumValue={7}
+            step={1}
+            value={fatigue}
+            onValueChange={setFatigue}
+            style={{ width: '100%' }}
           />
-        </Card.Content>
-      </Card>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 12 }}>Nenhuma Fadiga</Text>
+            <Text style={{ fontSize: 12 }}>Fadiga Extrema</Text>
+          </View>
+        </>
+      ),
+    },
+    {
+      label: 'Qual seu nível de estresse geral hoje?',
+      content: (
+        <>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>1 = Totalmente Relaxado, 7 = Extremamente Estressado</Text>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 24 }}>{stress}/7</Text>
+          </View>
+          <Slider
+            minimumValue={1}
+            maximumValue={7}
+            step={1}
+            value={stress}
+            onValueChange={setStress}
+            style={{ width: '100%' }}
+          />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 12 }}>Totalmente Relaxado</Text>
+            <Text style={{ fontSize: 12 }}>Extremamente Estressado</Text>
+          </View>
+        </>
+      ),
+    },
+    {
+      label: 'Qual seu nível de dores musculares?',
+      content: (
+        <>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>1 = Nenhuma Dor, 7 = Dores Fortes</Text>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 24 }}>{soreness}/7</Text>
+          </View>
+          <Slider
+            minimumValue={1}
+            maximumValue={7}
+            step={1}
+            value={soreness}
+            onValueChange={setSoreness}
+            style={{ width: '100%' }}
+          />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 12 }}>Nenhuma Dor</Text>
+            <Text style={{ fontSize: 12 }}>Dores Fortes</Text>
+          </View>
+        </>
+      ),
+    },
+    {
+      label: 'Como está seu humor hoje?',
+      content: (
+        <>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>Arraste para avaliar de 1 a 10</Text>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 32 }}>{moodEmojis[mood - 1]}</Text>
+            <Text style={{ fontSize: 16, color: '#888' }}>{mood}/10</Text>
+          </View>
+          <Slider
+            minimumValue={1}
+            maximumValue={10}
+            step={1}
+            value={mood}
+            onValueChange={setMood}
+            style={{ width: '100%' }}
+          />
+        </>
+      ),
+    },
+    {
+      label: 'Notas (opcional)',
+      content: (
+        <TextInput
+          label="Notas"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          numberOfLines={3}
+          style={{ marginBottom: 12 }}
+        />
+      ),
+    },
+  ];
 
-      {/* Submit Button */}
-      <Button
-        mode="contained"
-        onPress={handleSubmit}
-        loading={isSubmitting}
-        disabled={isSubmitting}
-        style={{ marginBottom: 32 }}
-        contentStyle={{ paddingVertical: 8 }}
-      >
-        {isSubmitting ? 'Enviando...' : 'Enviar Check-in'}
-      </Button>
-    </ScrollView>
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', padding: 16 }}>
+      <Card>
+        <Card.Title title={steps[step].label} />
+        <Card.Content>
+          {steps[step].content}
+        </Card.Content>
+        <Card.Actions style={{ justifyContent: 'flex-end' }}>
+          {step > 0 && (
+            <Button onPress={() => setStep(step - 1)} style={{ marginRight: 8 }}>
+              Voltar
+            </Button>
+          )}
+          {step < steps.length - 1 ? (
+            <Button mode="contained" onPress={() => setStep(step + 1)}>
+              Próximo
+            </Button>
+          ) : (
+            <Button mode="contained" onPress={handleSubmit} loading={isSubmitting}>
+              Finalizar Check-in
+            </Button>
+          )}
+        </Card.Actions>
+      </Card>
+    </View>
   );
 }
