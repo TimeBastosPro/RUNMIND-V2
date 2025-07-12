@@ -19,6 +19,7 @@ interface CheckinState {
   isSubmitting: boolean;
   insights: string[];
   trainingSessions: any[];
+  todayReadinessScore: number | null;
   // Actions
   loadTodayCheckin: () => Promise<void>;
   loadRecentCheckins: (days?: number) => Promise<void>;
@@ -58,6 +59,7 @@ interface CheckinState {
     distance_km?: number;
     duration_minutes?: number;
   }) => Promise<any>;
+  calculateReadinessScore: (checkin: any) => number;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -68,6 +70,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   isSubmitting: false,
   insights: [],
   trainingSessions: [], // Initialize trainingSessions
+  todayReadinessScore: null,
 
   loadTodayCheckin: async () => {
     set({ isLoading: true });
@@ -88,10 +91,16 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         throw error;
       }
 
+      // Calcular readiness score se houver checkin
+      let readiness = null;
+      if (data) {
+        readiness = get().calculateReadinessScore(data);
+      }
       set({ 
         todayCheckin: data,
         hasCheckedInToday: !!data,
-        isLoading: false 
+        isLoading: false,
+        todayReadinessScore: readiness
       });
     } catch (error) {
       console.error('Error loading today checkin:', error);
@@ -139,10 +148,13 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .select()
         .single();
       if (error) throw error;
+      // Calcular readiness score após submit
+      const readiness = get().calculateReadinessScore(data);
       set({ 
         todayCheckin: data,
         hasCheckedInToday: true,
-        isSubmitting: false 
+        isSubmitting: false,
+        todayReadinessScore: readiness
       });
       await get().loadRecentCheckins();
       try {
@@ -356,6 +368,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       sleepMoodCorr,
       bestWeekday,
     };
+  },
+
+  calculateReadinessScore: (checkin: any) => {
+    const sleep = Number(checkin.sleep_quality_score) || 0;
+    const fatigue = Number(checkin.fatigue_score) || 0;
+    const stress = Number(checkin.stress_score) || 0;
+    const soreness = Number(checkin.soreness_score) || 0;
+    return sleep + fatigue + stress + soreness;
   },
 
   markTrainingAsCompleted: async (id: number, completedData: {

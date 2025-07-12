@@ -41,6 +41,7 @@ export interface Profile {
     energy_score: number; // 1-10
     sleep_hours: number;
     sleep_quality: number; // 1-5
+    sleep_quality_score?: number; // 1-7 (Índice de Hooper)
     fatigue_score?: number; // 1-7
     stress_score?: number; // 1-7
     soreness_score?: number; // 1-7

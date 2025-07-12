@@ -48,22 +48,44 @@ function CustomDay({ day, displayMonth, onPressPlan, onPressDone, training }: an
   const isOtherMonth = day.getMonth() !== displayMonth;
   const today = new Date();
   const isToday = isSameDay(day, today);
-  const isCompleted = training && training.status === 'completed';
-  // Corrigir lógica de missed: comparar apenas ano, mês, dia
   const trainingDate = training ? new Date(training.training_date) : null;
-  const isMissed = training && training.status !== 'completed' && trainingDate &&
-    (trainingDate.getFullYear() < today.getFullYear() ||
-      (trainingDate.getFullYear() === today.getFullYear() && trainingDate.getMonth() < today.getMonth()) ||
-      (trainingDate.getFullYear() === today.getFullYear() && trainingDate.getMonth() === today.getMonth() && trainingDate.getDate() < today.getDate()));
-  const borderColor = training ? (isCompleted ? '#43a047' : isMissed ? '#e53935' : '#ffd600') : '#e0e0e0';
-  const shadowColor = isCompleted ? '#43a047' : isMissed ? '#e53935' : training ? '#ffd600' : '#e0e0e0';
+  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const trainingDay = trainingDate ? new Date(trainingDate.getFullYear(), trainingDate.getMonth(), trainingDate.getDate()) : null;
+
+  // Lógica de cor
+  let borderColor = '#e0e0e0';
+  let statusLabel = '';
+  let statusColor = '#ffd600';
+  if (training) {
+    if (training.status === 'completed') {
+      borderColor = '#43a047';
+      statusLabel = 'Realizado';
+      statusColor = '#43a047';
+    } else if (trainingDay) {
+      if (trainingDay > todayDate) {
+        borderColor = '#ffd600';
+        statusLabel = 'Planejado';
+        statusColor = '#ffd600';
+      } else if (isToday) {
+        borderColor = '#ffd600';
+        statusLabel = 'Planejado';
+        statusColor = '#ffd600';
+      } else if (trainingDay < todayDate) {
+        borderColor = '#e53935';
+        statusLabel = 'Perdido';
+        statusColor = '#e53935';
+      }
+    }
+  }
+  const shadowColor = borderColor;
+
   return (
     <Pressable
       onPress={() => !training && onPressPlan(day)}
       style={{
         flex: 1,
         aspectRatio: 1,
-        borderWidth: 1.5,
+        borderWidth: 2.5,
         borderColor: borderColor,
         alignItems: 'center',
         justifyContent: 'flex-start',
@@ -72,72 +94,119 @@ function CustomDay({ day, displayMonth, onPressPlan, onPressDone, training }: an
         padding: 2,
         position: 'relative',
         margin: 2,
-        borderRadius: 12,
-        shadowColor: shadowColor,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: training ? 0.25 : 0.1,
-        shadowRadius: 6,
-        elevation: training ? 4 : 1,
+        borderRadius: 16,
+        shadowColor: isToday ? '#1976d2' : shadowColor,
+        shadowOffset: isToday ? { width: 0, height: 8 } : { width: 0, height: 4 },
+        shadowOpacity: isToday ? 0.5 : 0.35,
+        shadowRadius: isToday ? 18 : 10,
+        elevation: isToday ? 16 : 8,
       }}
     >
       {/* Número do dia */}
       <View style={{ alignItems: 'center', marginTop: 4 }}>
-        {isToday ? (
-          <View style={{ backgroundColor: '#1976d2', borderRadius: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{day.getDate()}</Text>
-          </View>
-        ) : (
-          <Text style={{ color: isOtherMonth ? '#bbb' : '#222', fontWeight: 'bold', fontSize: 16, opacity: isOtherMonth ? 0.5 : 1 }}>{day.getDate()}</Text>
-        )}
+        <Text style={{
+          color: isOtherMonth ? '#bbb' : isToday ? '#1976d2' : '#222',
+          fontWeight: 'bold',
+          fontSize: 16,
+          opacity: isOtherMonth ? 0.5 : 1,
+          textShadowColor: isToday ? '#1976d2' : undefined,
+          textShadowOffset: isToday ? { width: 0, height: 2 } : undefined,
+          textShadowRadius: isToday ? 8 : undefined,
+        }}>{day.getDate()}</Text>
       </View>
       {/* Card de treino expandido */}
-      {training && (
-        <View style={{
-          flex: 1,
-          width: '98%',
-          marginTop: 6,
-          borderRadius: 10,
-          borderWidth: 1.5,
-          borderColor: borderColor,
-          backgroundColor: '#fff',
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingVertical: 6,
-          paddingHorizontal: 4,
-          shadowColor: shadowColor,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.18,
-          shadowRadius: 6,
-          elevation: 3,
-        }}>
-          <Text style={{ fontWeight: 'bold', fontSize: 13, color: '#222', textAlign: 'center' }} numberOfLines={2}>{training.title}</Text>
-          <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>{training.training_type} {training.distance_km ? `- ${training.distance_km}km` : training.duration_minutes ? `- ${training.duration_minutes}min` : ''}</Text>
-          {training.elevation_gain_meters ? <Text style={{ fontSize: 11, color: '#555', textAlign: 'center' }}>Altimetria: {training.elevation_gain_meters}m</Text> : null}
-          {training.avg_heart_rate ? <Text style={{ fontSize: 11, color: '#555', textAlign: 'center' }}>FC Média: {training.avg_heart_rate}</Text> : null}
-          <Text style={{ fontSize: 11, color: '#555', textAlign: 'center' }}>Esforço: {training.perceived_effort || '-'}</Text>
-          {training.notes ? <Text style={{ fontSize: 11, color: '#555', textAlign: 'center' }} numberOfLines={2}>Notas: {training.notes}</Text> : null}
-          <Text style={{ fontSize: 11, color: isCompleted ? '#43a047' : isMissed ? '#e53935' : '#ffd600', fontWeight: 'bold', marginTop: 2 }}>{isCompleted ? 'Realizado' : isMissed ? 'Perdido' : 'Planejado'}</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 6 }}>
-            <Button
-              mode="outlined"
-              compact
-              style={{ marginRight: 4, borderRadius: 8, borderColor: '#1976d2' }}
-              labelStyle={{ fontSize: 12, color: '#1976d2', fontWeight: 'bold' }}
-              onPress={e => { e.stopPropagation && e.stopPropagation(); onPressPlan(day, training); }}
-            >
-              Treino
-            </Button>
-            <Button
-              mode="contained"
-              compact
-              style={{ borderRadius: 8, backgroundColor: '#43a047' }}
-              labelStyle={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}
-              onPress={e => { e.stopPropagation && e.stopPropagation(); onPressDone(day, training); }}
-            >
-              Realizado
-            </Button>
+      {training ? (
+        training.status === 'completed' ? (
+          <>
+            <Text style={{ fontWeight: 'bold', fontSize: 13, color: '#222', textAlign: 'center', marginTop: 6 }} numberOfLines={2}>
+              {training.distance_km ? `${training.distance_km} km` : '—'}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+              {training.duration_minutes ? `${training.duration_minutes} min` : '—'}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+              {training.avg_heart_rate ? `FC Média: ${training.avg_heart_rate}` : '—'}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+              {training.elevation_gain_meters ? `Altimetria: ${training.elevation_gain_meters}m` : '—'}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+              {training.perceived_effort ? `Esforço: ${training.perceived_effort}` : '—'}
+            </Text>
+            <Text style={{ fontSize: 11, color: statusColor, fontWeight: 'bold', marginTop: 2 }}>{statusLabel}</Text>
+            <View style={{ flex: 1 }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 6, marginBottom: 2 }}>
+              <Button
+                mode="outlined"
+                compact
+                style={{ marginRight: 4, borderRadius: 8, borderColor: '#1976d2' }}
+                labelStyle={{ fontSize: 12, color: '#1976d2', fontWeight: 'bold' }}
+                onPress={e => { e.stopPropagation && e.stopPropagation(); onPressPlan(day, training); }}
+              >
+                Treino
+              </Button>
+              <Button
+                mode="contained"
+                compact
+                style={{ borderRadius: 8, backgroundColor: '#43a047' }}
+                labelStyle={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}
+                onPress={e => { e.stopPropagation && e.stopPropagation(); onPressDone(day, training); }}
+              >
+                Realizado
+              </Button>
+            </View>
+          </>
+        ) : (
+          (training.percurso || training.terreno || training.treino_tipo || training.duracao_minutos) ? (
+            <>
+              <Text style={{ fontWeight: 'bold', fontSize: 13, color: '#222', textAlign: 'center', marginTop: 6 }} numberOfLines={2}>
+                {training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '—'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+                {training.percurso ? `Percurso: ${training.percurso}` : '—'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+                {training.terreno ? `Terreno: ${training.terreno}` : '—'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+                {training.treino_tipo ? `Tipo: ${training.treino_tipo}` : '—'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#333', textAlign: 'center' }} numberOfLines={1}>
+                {training.duracao_minutos ? `Duração: ${training.duracao_minutos} min` : '—'}
+              </Text>
+              <Text style={{ fontSize: 11, color: statusColor, fontWeight: 'bold', marginTop: 2 }}>{statusLabel}</Text>
+              <View style={{ flex: 1 }} />
+              <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 6, marginBottom: 2 }}>
+                <Button
+                  mode="outlined"
+                  compact
+                  style={{ marginRight: 4, borderRadius: 8, borderColor: '#1976d2' }}
+                  labelStyle={{ fontSize: 12, color: '#1976d2', fontWeight: 'bold' }}
+                  onPress={e => { e.stopPropagation && e.stopPropagation(); onPressPlan(day, training); }}
+                >
+                  Treino
+                </Button>
+                <Button
+                  mode="contained"
+                  compact
+                  style={{ borderRadius: 8, backgroundColor: '#43a047' }}
+                  labelStyle={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}
+                  onPress={e => { e.stopPropagation && e.stopPropagation(); onPressDone(day, training); }}
+                >
+                  Realizado
+                </Button>
+              </View>
+            </>
+          ) : null
+        )
+      ) : (
+        // Card vazio: ícone de corredor, clicável para cadastrar treino
+        <>
+          <View style={{ flex: 1 }} />
+          <View style={{ position: 'absolute', bottom: 8, right: 8 }}>
+            <MaterialCommunityIcons name="run" size={28} color="#bbb" />
           </View>
-        </View>
+        </>
       )}
     </Pressable>
   );
@@ -314,14 +383,14 @@ export default function TrainingScreen() {
           alignSelf: 'center',
           maxHeight: 600,
         }}>
-          <Card>
+          <Card style={{ borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8 }}>
             <Card.Title
               title={editingPlan ? 'Editar Treino Planejado' : 'Cadastrar Treino Planejado'}
-              style={{ paddingBottom: 0, paddingTop: 8 }}
-              titleStyle={{ fontSize: 17 }}
+              style={{ paddingBottom: 0, paddingTop: 12 }}
+              titleStyle={{ fontSize: 18, fontWeight: 'bold' }}
             />
             <Card.Content style={{ paddingBottom: 0, paddingTop: 0 }}>
-              <ScrollView style={{ maxHeight: 500, paddingHorizontal: 4 }}>
+              <ScrollView style={{ maxHeight: 500, paddingHorizontal: 4 }} contentContainerStyle={{ paddingBottom: 16 }}>
                 <List.Section>
                   <List.Accordion
                     title="Modalidade"
@@ -553,6 +622,11 @@ export default function TrainingScreen() {
                   </List.Accordion>
                 </List.Section>
               </ScrollView>
+            </Card.Content>
+            <Card.Actions style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 0, paddingHorizontal: 8, paddingBottom: 12 }}>
+              <Button mode="text" onPress={() => setModalPlanVisible(false)} style={{ flex: 1, marginRight: 8, borderRadius: 8, height: 44 }} labelStyle={{ fontSize: 15 }}>
+                Cancelar
+              </Button>
               <Button
                 mode="contained"
                 onPress={async () => {
@@ -585,18 +659,12 @@ export default function TrainingScreen() {
                   setModalPlanVisible(false);
                   fetchTrainingSessions();
                 }}
-                style={{
-                  marginTop: 8,
-                  borderRadius: 8,
-                  height: 48,
-                  width: '100%',
-                  alignSelf: 'center',
-                }}
-                labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                style={{ flex: 2, borderRadius: 8, height: 44, backgroundColor: '#1976d2' }}
+                labelStyle={{ fontSize: 16, fontWeight: 'bold', color: '#fff' }}
               >
                 Salvar Treino Planejado
               </Button>
-            </Card.Content>
+            </Card.Actions>
           </Card>
         </Modal>
       </Portal>

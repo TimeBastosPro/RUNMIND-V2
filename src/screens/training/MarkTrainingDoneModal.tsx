@@ -91,7 +91,7 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
 
   return (
     <Portal>
-      <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={{ margin: 0, backgroundColor: '#f8f6fa' }}>
+      <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={{ margin: 0, backgroundColor: '#fff' }}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <Card style={{ width: '95%', maxWidth: 420, borderRadius: 16, elevation: 4, padding: 0, maxHeight: 620, backgroundColor: '#fff' }}>
             <Card.Title title="Marcar Treino Realizado" titleStyle={{ fontSize: 18, fontWeight: 'bold' }} style={{ paddingBottom: 0, paddingTop: 12 }} />
