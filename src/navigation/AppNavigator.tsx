@@ -16,6 +16,10 @@ import InsightsScreen from '../screens/insights';
 import ProfileScreen from '../screens/profile';
 import InitialLoadingScreen from '../screens/auth/InitialLoadingScreen';
 import TrainingScreen from '../screens/training/TrainingScreen';
+import AcademyScreen from '../screens/academy/AcademyScreen';
+import GlossaryScreen from '../screens/academy/GlossaryScreen';
+import GuidesScreen from '../screens/academy/GuidesScreen';
+import ChatScreen from '../screens/academy/ChatScreen';
 
 // Types
 type TabParamList = {
@@ -24,6 +28,7 @@ type TabParamList = {
   Insights: undefined;
   Treinos: undefined;
   Profile: undefined;
+  Academy: undefined;
 };
 
 type StackParamList = {
@@ -184,6 +189,18 @@ function AuthScreen() {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const Stack = createStackNavigator<StackParamList>();
+const AcademyStack = createStackNavigator();
+
+function AcademyNavigator() {
+  return (
+    <AcademyStack.Navigator>
+      <AcademyStack.Screen name="Academy" component={AcademyScreen} options={{ title: 'Academy' }} />
+      <AcademyStack.Screen name="Glossary" component={GlossaryScreen} options={{ title: 'Glossário' }} />
+      <AcademyStack.Screen name="Guides" component={GuidesScreen} options={{ title: 'Guias de Treino' }} />
+      <AcademyStack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat com IA' }} />
+    </AcademyStack.Navigator>
+  );
+}
 
 function MainTabs() {
   return (
@@ -202,6 +219,8 @@ function MainTabs() {
             iconName = 'run';
           } else if (route.name === 'Profile') {
             iconName = 'account';
+          } else if (route.name === 'Academy') {
+            iconName = 'school';
           }
 
           return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
@@ -216,6 +235,7 @@ function MainTabs() {
       <Tab.Screen name="Insights" component={InsightsScreen} />
       <Tab.Screen name="Treinos" component={TrainingScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
+      <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />
     </Tab.Navigator>
   );
 }

@@ -46,9 +46,18 @@ interface CheckinState {
     notes: string;
     source?: string;
   }) => Promise<any>;
-  fetchTrainingSessions: (startDate: string, endDate: string) => Promise<void>;
+  fetchTrainingSessions: (startDate?: string, endDate?: string) => Promise<void>;
   saveTrainingSession: (trainingData: any) => Promise<any>;
   deleteTrainingSession: (sessionId: number) => Promise<boolean>;
+  markTrainingAsCompleted: (id: number, completedData: {
+    perceived_effort?: number;
+    satisfaction?: number;
+    notes?: string;
+    avg_heart_rate?: number;
+    elevation_gain_meters?: number;
+    distance_km?: number;
+    duration_minutes?: number;
+  }) => Promise<any>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -246,16 +255,28 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     }
   },
 
-  fetchTrainingSessions: async (startDate: string, endDate: string) => {
+  fetchTrainingSessions: async (startDate?: string, endDate?: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
+      // Calcular intervalo amplo se não fornecido
+      let _startDate = startDate;
+      let _endDate = endDate;
+      if (!startDate || !endDate) {
+        const today = new Date();
+        const start = new Date(today);
+        start.setMonth(today.getMonth() - 3);
+        const end = new Date(today);
+        end.setMonth(today.getMonth() + 3);
+        _startDate = start.toISOString().split('T')[0];
+        _endDate = end.toISOString().split('T')[0];
+      }
       const { data, error } = await supabase
         .from('training_sessions')
-        .select('*')
+        .select('id, user_id, training_date, title, training_type, distance_km, duration_minutes, elevation_gain_meters, avg_heart_rate, perceived_effort, notes, status')
         .eq('user_id', user.id)
-        .gte('training_date', startDate)
-        .lte('training_date', endDate)
+        .gte('training_date', _startDate)
+        .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
       if (error) throw error;
       set({ trainingSessions: data || [] });
@@ -335,6 +356,41 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       sleepMoodCorr,
       bestWeekday,
     };
+  },
+
+  markTrainingAsCompleted: async (id: number, completedData: {
+    perceived_effort?: number;
+    satisfaction?: number;
+    notes?: string;
+    avg_heart_rate?: number;
+    elevation_gain_meters?: number;
+    distance_km?: number;
+    duration_minutes?: number;
+  }) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const updateData = {
+        ...completedData,
+        status: 'completed',
+      };
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .update(updateData)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      if (error) throw error;
+      // Atualiza o store local
+      set(state => ({
+        trainingSessions: state.trainingSessions.map(t => t.id === id ? { ...t, ...updateData } : t)
+      }));
+      return data;
+    } catch (error) {
+      console.error('Erro ao marcar treino como realizado:', error);
+      throw error;
+    }
   },
 }));
 

@@ -15,7 +15,7 @@ export default function DailyCheckinScreen() {
 
   // Estados do wizard
   const [step, setStep] = useState(0);
-  const [sleepQuality, setSleepQuality] = useState(3);
+  const [sleepQuality, setSleepQuality] = useState(4);
   const [fatigue, setFatigue] = useState(4);
   const [stress, setStress] = useState(4);
   const [soreness, setSoreness] = useState(4);
@@ -27,7 +27,7 @@ export default function DailyCheckinScreen() {
   useEffect(() => {
     if (hasCheckedInToday && todayCheckin) {
       setFormMode('view');
-      setSleepQuality(todayCheckin.sleep_quality ?? 3);
+      setSleepQuality(todayCheckin.sleep_quality ?? 4);
       setFatigue(todayCheckin.fatigue_score ?? 4);
       setStress(todayCheckin.stress_score ?? 4);
       setSoreness(todayCheckin.soreness_score ?? 4);
@@ -35,7 +35,7 @@ export default function DailyCheckinScreen() {
       setNotes(todayCheckin.notes ?? '');
     } else {
       setFormMode('form');
-      setSleepQuality(3);
+      setSleepQuality(4);
       setFatigue(4);
       setStress(4);
       setSoreness(4);
@@ -47,12 +47,16 @@ export default function DailyCheckinScreen() {
 
   // Submissão final
   const handleSubmit = async () => {
+    const today = new Date().toISOString().split('T')[0];
     await submitCheckin({
+      date: today,
       sleep_quality: sleepQuality,
       fatigue_score: fatigue,
       stress_score: stress,
       soreness_score: soreness,
       mood_score: mood,
+      energy_score: 5, // valor padrão
+      sleep_hours: 8, // valor padrão
       notes,
     });
     await loadTodayCheckin();
@@ -73,7 +77,7 @@ export default function DailyCheckinScreen() {
         <Card>
           <Card.Title title="Seu Check-in de Hoje" />
           <Card.Content>
-            <Text style={{ marginBottom: 8 }}>Qualidade do Sono: {todayCheckin.sleep_quality} ⭐</Text>
+            <Text style={{ marginBottom: 8 }}>Qualidade do Sono: {todayCheckin.sleep_quality}/7</Text>
             <Text style={{ marginBottom: 8 }}>Fadiga: {todayCheckin.fatigue_score}/7</Text>
             <Text style={{ marginBottom: 8 }}>Estresse: {todayCheckin.stress_score}/7</Text>
             <Text style={{ marginBottom: 8 }}>Dores Musculares: {todayCheckin.soreness_score}/7</Text>
@@ -88,30 +92,33 @@ export default function DailyCheckinScreen() {
     );
   }
 
-  // Wizard de perguntas
+  // Wizard de perguntas baseadas no Índice de Hooper
   const steps = [
     {
-      label: 'Como você avalia a qualidade do seu sono?',
+      label: 'Como foi sua noite de sono?',
       content: (
         <>
-          <Text style={{ marginBottom: 12, textAlign: 'center' }}>Arraste para avaliar de 1 a 5 estrelas.</Text>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>Avalie de 1 (Péssima) a 7 (Excelente)</Text>
           <View style={{ alignItems: 'center', marginBottom: 8 }}>
-            <Text style={{ fontSize: 32 }}>{'⭐'.repeat(sleepQuality)}{'☆'.repeat(5 - sleepQuality)}</Text>
-            <Text style={{ fontSize: 16, color: '#888' }}>{sleepQuality}/5</Text>
+            <Text style={{ fontSize: 24 }}>{sleepQuality}/7</Text>
           </View>
           <Slider
             minimumValue={1}
-            maximumValue={5}
+            maximumValue={7}
             step={1}
             value={sleepQuality}
             onValueChange={setSleepQuality}
             style={{ width: '100%' }}
           />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 12 }}>Péssima</Text>
+            <Text style={{ fontSize: 12 }}>Excelente</Text>
+          </View>
         </>
       ),
     },
     {
-      label: 'Qual seu nível de fadiga hoje?',
+      label: 'Qual seu nível de fadiga geral hoje?',
       content: (
         <>
           <Text style={{ marginBottom: 12, textAlign: 'center' }}>1 = Nenhuma Fadiga, 7 = Fadiga Extrema</Text>
@@ -134,7 +141,7 @@ export default function DailyCheckinScreen() {
       ),
     },
     {
-      label: 'Qual seu nível de estresse geral hoje?',
+      label: 'Qual seu nível de estresse (vida/trabalho) hoje?',
       content: (
         <>
           <Text style={{ marginBottom: 12, textAlign: 'center' }}>1 = Totalmente Relaxado, 7 = Extremamente Estressado</Text>
@@ -180,7 +187,7 @@ export default function DailyCheckinScreen() {
       ),
     },
     {
-      label: 'Como está seu humor hoje?',
+      label: 'Qual seu estado de humor hoje?',
       content: (
         <>
           <Text style={{ marginBottom: 12, textAlign: 'center' }}>Arraste para avaliar de 1 a 10</Text>

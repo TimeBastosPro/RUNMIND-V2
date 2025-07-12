@@ -11,6 +11,26 @@ export interface Profile {
     date_of_birth?: string;
     weight_kg?: number;
     height_cm?: number;
+    // Campos adicionais do perfil
+    parq_answers?: {
+      q1: boolean;
+      q2: boolean;
+      q3: boolean;
+      q4: boolean;
+      q5: boolean;
+      q6: boolean;
+      q7: boolean;
+      details?: string;
+    };
+    training_days?: string[];
+    preferred_training_period?: string;
+    terrain_preference?: string;
+    work_stress_level?: number;
+    sleep_consistency?: string;
+    wakeup_feeling?: string;
+    hydration_habit?: string;
+    recovery_habit?: string;
+    stress_management?: string[];
   }
   
   export interface DailyCheckin {
@@ -26,6 +46,35 @@ export interface Profile {
     soreness_score?: number; // 1-7
     notes?: string;
     created_at: string;
+  }
+
+  export interface TrainingSession {
+    id?: number;
+    user_id: string;
+    training_date: string;
+    title: string;
+    training_type: string;
+    distance_km?: number | null;
+    duration_minutes?: number | null;
+    elevation_gain_meters?: number | null;
+    avg_heart_rate?: number | null;
+    perceived_effort?: number;
+    session_satisfaction?: number;
+    notes?: string;
+    status: 'planned' | 'completed';
+    created_at?: string;
+    // Campos extras customizados
+    modalidade?: string;
+    effort_level?: number;
+    percurso?: string;
+    terreno?: string;
+    treino_tipo?: string;
+    duracao_tipo?: string;
+    duracao_horas?: string;
+    duracao_minutos?: string;
+    distancia_m?: string;
+    intensidade?: number;
+    observacoes?: string;
   }
   
   export interface Insight {

@@ -11,18 +11,12 @@ export const geminiModel = genAI.getGenerativeModel({
   }
 });
 
-export async function generateInsight(userData: any): Promise<string> {
-  try {
-    const prompt = `Analise os dados e gere insight personalizado em português:
-    
-    Dados: ${JSON.stringify(userData)}
-    
-    Máximo 80 palavras, tom científico mas acessível.`;
-    
-    const result = await geminiModel.generateContent(prompt);
-    return result.response.text();
-  } catch (error) {
-    console.error('Erro Gemini:', error);
-    return 'Não foi possível gerar insight no momento. Tente novamente.';
-  }
+export async function generateInsight(prompt: string): Promise<string> {
+  // const result = await geminiModel.generateContent(prompt);
+  return Promise.resolve("Modo de desenvolvimento: O insight da IA seria gerado aqui.");
+}
+
+export async function generateChatResponse(userQuestion: string): Promise<string> {
+  // const result = await geminiModel.generateContent(fullPrompt);
+  return Promise.resolve("Modo de desenvolvimento: O chat com IA está desativado para economizar custos.");
 }
