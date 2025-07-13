@@ -74,7 +74,8 @@ export interface Profile {
     duracao_horas?: string;
     duracao_minutos?: string;
     distancia_m?: string;
-    intensidade?: number;
+    intensidade?: string | number;
+    esforco?: string;
     observacoes?: string;
   }
   

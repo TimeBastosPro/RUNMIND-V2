@@ -49,7 +49,7 @@ interface CheckinState {
   }) => Promise<any>;
   fetchTrainingSessions: (startDate?: string, endDate?: string) => Promise<void>;
   saveTrainingSession: (trainingData: any) => Promise<any>;
-  deleteTrainingSession: (sessionId: number) => Promise<boolean>;
+  deleteTrainingSession: (sessionId: number | string) => Promise<boolean>;
   markTrainingAsCompleted: (id: number, completedData: {
     perceived_effort?: number;
     satisfaction?: number;
@@ -251,7 +251,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       throw error;
     }
   },
-  deleteTrainingSession: async (sessionId: number) => {
+  deleteTrainingSession: async (sessionId: number | string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
@@ -285,7 +285,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       }
       const { data, error } = await supabase
         .from('training_sessions')
-        .select('id, user_id, training_date, title, training_type, distance_km, duration_minutes, elevation_gain_meters, avg_heart_rate, perceived_effort, notes, status')
+        .select('*')
         .eq('user_id', user.id)
         .gte('training_date', _startDate)
         .lte('training_date', _endDate)
