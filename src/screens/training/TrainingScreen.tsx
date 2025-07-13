@@ -139,11 +139,18 @@ function CustomDay({ day, displayMonth, training, onPress, onLongPress, onOpenPl
         );
     }
 
-    // Dentro do CustomDay, ajustar exibição dos dados do card:
+    // Dentro do CustomDay, ajuste visual e conteúdo dos cards:
     if (training && training.status === 'completed') {
-        // Exibir apenas dados do realizado
+        // Card de treino realizado: sombra verde, altimetria +positivo / -negativo
         return (
-            <View style={[styles.dayContainer, dynamicStyle]}>
+            <View style={[styles.dayContainer, {
+                shadowColor: '#4CAF50',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.25,
+                shadowRadius: 12,
+                elevation: 8,
+                borderColor: '#4CAF50',
+            }]}> 
                 <Pressable
                     onPress={() => onOpenPlanModal(day, training)}
                     onLongPress={() => training && onLongPress(day, training)}
@@ -151,28 +158,67 @@ function CustomDay({ day, displayMonth, training, onPress, onLongPress, onOpenPl
                 >
                     <Text style={[styles.dayText, isToday && styles.todayHighlight, { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }]}>{day.getDate()}</Text>
                 </Pressable>
-                <View style={styles.trainingContent}>
-                    {/* Duração */}
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
-                      Duração: <Text style={{color:'#111'}}>
-                        {training.distance_km ? `${training.distance_km} km` : `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min`}
-                      </Text>
-                    </Text>
-                    {/* Altimetria */}
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
-                      Altimetria: <Text style={{color:'#111'}}>
-                        {training.elevation_gain_meters || '0'} m
-                      </Text>
-                    </Text>
-                    {/* FC Média */}
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
-                      FC Média: <Text style={{color:'#111'}}>{training.avg_heart_rate || '-'}</Text>
-                    </Text>
-                    {/* PSE */}
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
-                      PSE: <Text style={{color:'#111'}}>{training.perceived_effort || '-'}</Text>
-                    </Text>
-                    <View style={styles.buttonRow}>
+                <View style={[styles.trainingContent, {justifyContent:'center', alignItems:'flex-start', flex:1, width:'100%'}]}> 
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{training.distance_km ? `${training.distance_km} km` : `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min`}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Altimetria: </Text><Text style={styles.cardText}>+{training.elevation_gain_meters || '0'} / -{String(('elevation_loss_meters' in training && training.elevation_loss_meters != null) ? training.elevation_loss_meters : 0)}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>FC Média: </Text><Text style={styles.cardText}>{training.avg_heart_rate || '-'}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>PSE: </Text><Text style={styles.cardText}>{training.perceived_effort || '-'}</Text></View>
+                    <View style={styles.cardButtonRow}>
+                        <Button
+                          mode="outlined"
+                          style={styles.actionButton}
+                          labelStyle={styles.actionButtonLabelOutline}
+                          onPress={() => onOpenPlanModal(day, training)}
+                        >
+                          Treino
+                        </Button>
+                        <Button
+                          mode="contained"
+                          style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                          labelStyle={styles.actionButtonLabelContained}
+                          onPress={() => onOpenDoneModal(day, training)}
+                        >
+                          Realizado
+                        </Button>
+                  </View>
+                </View>
+            </View>
+        );
+    }
+
+    // Para treino planejado:
+    // Sombra amarela, sem percurso e esforço, fonte maior, botões alinhados embaixo
+    if (training && training.status === 'planned') {
+        // Verificar se o dia do card já passou
+        const now = new Date();
+        const cardDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+        // O card só fica vermelho se o dia do card já passou (data < agora) E não for o dia atual
+        const isPast = cardDate < now && !isSameDay(day, now);
+        const shadowColor = isPast ? '#D32F2F' : '#FFD600';
+        const borderColor = isPast ? '#D32F2F' : '#FFD600';
+        return (
+            <View style={[styles.dayContainer, {
+                shadowColor: shadowColor,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.25,
+                shadowRadius: 12,
+                elevation: 8,
+                borderColor: borderColor,
+            }]}> 
+                <Pressable
+                    onPress={() => onOpenPlanModal(day, training)}
+                    onLongPress={() => training && onLongPress(day, training)}
+                    style={{ width: '100%' }}
+                >
+                    <Text style={[styles.dayText, isToday && styles.todayHighlight, { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }]}>{day.getDate()}</Text>
+                </Pressable>
+                <View style={[styles.trainingContent, {justifyContent:'center', alignItems:'flex-start', flex:1, width:'100%'}]}> 
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Modalidade: </Text><Text style={styles.cardText}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></View>
+                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Intensidade: </Text><Text style={styles.cardText}>{training.intensidade || '-'}</Text></View>
+                    <View style={styles.cardButtonRow}>
                         <Button
                           mode="outlined"
                           style={styles.actionButton}
@@ -216,14 +262,14 @@ function CustomDay({ day, displayMonth, training, onPress, onLongPress, onOpenPl
             </Pressable>
             <View style={styles.trainingContent}>
                 {/* Informações principais do treino */}
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Modalidade: <Text style={{color:'#111'}}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></Text>
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Percurso: <Text style={{color:'#111'}}>{training.percurso ? training.percurso.charAt(0).toUpperCase() + training.percurso.slice(1) : '-'}</Text></Text>
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Terreno: <Text style={{color:'#111'}}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></Text>
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Tipo de treino: <Text style={{color:'#111'}}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></Text>
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Duração: <Text style={{color:'#111'}}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></Text>
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Intensidade: <Text style={{color:'#111'}}>{training.intensidade || '-'}</Text></Text>
-                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Esforço: <Text style={{color:'#111'}}>{training.esforco ? training.esforco.charAt(0).toUpperCase() + training.esforco.slice(1).replace('_',' ') : '-'}</Text></Text>
-                <View style={styles.buttonRow}>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Modalidade: </Text><Text style={styles.cardText}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></View>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Percurso: </Text><Text style={styles.cardText}>{training.percurso ? training.percurso.charAt(0).toUpperCase() + training.percurso.slice(1) : '-'}</Text></View>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></View>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></View>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></View>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Intensidade: </Text><Text style={styles.cardText}>{training.intensidade || '-'}</Text></View>
+                <View style={styles.cardRow}><Text style={styles.cardLabel}>Esforço: </Text><Text style={styles.cardText}>{training.esforco ? training.esforco.charAt(0).toUpperCase() + training.esforco.slice(1).replace('_',' ') : '-'}</Text></View>
+                <View style={styles.cardButtonRow}>
                     <Button
                       mode="outlined"
                       style={styles.actionButton}
@@ -698,18 +744,22 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     borderRadius: 10,
-    minHeight: 38,
-    marginHorizontal: 0,
+    minHeight: 24,
+    marginHorizontal: 2,
     elevation: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionButtonLabelOutline: {
-    fontSize: 16,
+    fontSize: 10,
     fontWeight: 'bold',
     color: '#1976d2',
     letterSpacing: 0.5,
   },
   actionButtonLabelContained: {
-    fontSize: 16,
+    fontSize: 10,
     fontWeight: 'bold',
     color: '#fff',
     letterSpacing: 0.5,
@@ -722,5 +772,33 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     marginTop: 2,
     letterSpacing: 0.5,
+  },
+  // Adicionar estilos padronizados para os textos dos cards
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+    paddingHorizontal: 2,
+  },
+  cardText: {
+    fontSize: 11,
+    color: '#222',
+    textAlign: 'left',
+    flexShrink: 1,
+  },
+  // Novo estilo para o título do campo
+  cardLabel: {
+    fontWeight: 'bold',
+    fontSize: 11,
+    color: '#222',
+  },
+  // Novo estilo para a linha dos botões
+  cardButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 6,
+    gap: 4,
   },
 }); 
