@@ -75,7 +75,7 @@ interface CustomDayProps {
   onLongPress: (day: Date, training: TrainingSession) => void;
 }
 
-function CustomDay({ day, displayMonth, training, onPress, onLongPress }: CustomDayProps) {
+function CustomDay({ day, displayMonth, training, onPress, onLongPress, onOpenPlanModal, onOpenDoneModal }: CustomDayProps & { onOpenPlanModal: (day: Date, training?: TrainingSession | null) => void, onOpenDoneModal: (day: Date, training?: TrainingSession | null) => void }) {
     const isOtherMonth = day.getMonth() !== displayMonth;
     const isToday = isSameDay(day, new Date());
 
@@ -101,61 +101,83 @@ function CustomDay({ day, displayMonth, training, onPress, onLongPress }: Custom
         dynamicStyle.backgroundColor = '#f5f5f5';
     }
 
-    // Detalhes do treino
-    const details = [];
-    if (training) {
-        if (training.distance_km) details.push(<Text key="dist" style={styles.detailLine}><Text style={styles.detailValue}>{training.distance_km} km</Text></Text>);
-        if (training.duration_minutes) details.push(<Text key="dur" style={styles.detailLine}><Text style={styles.detailValue}>{training.duration_minutes} min</Text></Text>);
-        if (training.avg_heart_rate) details.push(<Text key="fc" style={styles.detailLine}>FC Média: <Text style={styles.detailValue}>{training.avg_heart_rate}</Text></Text>);
-        if (training.elevation_gain_meters) details.push(<Text key="alt" style={styles.detailLine}>Altimetria: <Text style={styles.detailValue}>{training.elevation_gain_meters}m</Text></Text>);
-        if (training.intensidade) details.push(<Text key="esf" style={styles.detailLine}>Esforço: <Text style={styles.detailValue}>{training.intensidade}</Text></Text>);
-    }
-
     // Função para marcar como realizado
     const handleMarkCompleted = () => {
         if (training && training.status === 'planned') {
-            onPress(day, training); // já abre o modal de conclusão
+            onOpenDoneModal(day, training); // agora chama o modal de realizado
         }
     };
-    // Função para editar/visualizar treino
+    // Função para editar/visualizar treino planejado
     const handleEditTraining = () => {
-        onPress(day, training);
+        onOpenPlanModal(day, training);
+    };
+    // Função para editar/visualizar treino realizado
+    const handleEditRealizado = () => {
+        onOpenDoneModal(day, training);
     };
 
-    return (
-        <Pressable
-            onPress={() => onPress(day, training)}
-            onLongPress={() => training && onLongPress(day, training)}
-            style={[styles.dayContainer, dynamicStyle]}
-        >
-            <Text
-              style={[
-                styles.dayText,
-                isToday && styles.todayHighlight,
-                { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }
-              ]}
+    // Clique no card vazio: abre modal de planejamento
+    if (!training) {
+        return (
+            <Pressable
+                onPress={() => onOpenPlanModal(day, null)}
+                style={[styles.dayContainer, dynamicStyle]}
             >
-                {day.getDate()}
-            </Text>
-            {training ? (
+                <Text
+                  style={[
+                    styles.dayText,
+                    isToday && styles.todayHighlight,
+                    { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }
+                  ]}
+                >
+                    {day.getDate()}
+                </Text>
                 <View style={styles.trainingContent}>
-                    {/* Informações principais do treino */}
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Modalidade: <Text style={{color:'#111'}}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></Text>
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Percurso: <Text style={{color:'#111'}}>{training.percurso ? training.percurso.charAt(0).toUpperCase() + training.percurso.slice(1) : '-'}</Text></Text>
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Terreno: <Text style={{color:'#111'}}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></Text>
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Tipo de treino: <Text style={{color:'#111'}}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></Text>
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Duração: <Text style={{color:'#111'}}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></Text>
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Intensidade: <Text style={{color:'#111'}}>{training.intensidade || '-'}</Text></Text>
-                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Esforço: <Text style={{color:'#111'}}>{training.esforco ? training.esforco.charAt(0).toUpperCase() + training.esforco.slice(1).replace('_',' ') : '-'}</Text></Text>
-                    {training.status === 'planned' && (
-                        null
-                    )}
+                    <MaterialCommunityIcons name="run" size={28} color="#e0e0e0" style={{ marginTop: 16 }} />
+                </View>
+            </Pressable>
+        );
+    }
+
+    // Dentro do CustomDay, ajustar exibição dos dados do card:
+    if (training && training.status === 'completed') {
+        // Exibir apenas dados do realizado
+        return (
+            <View style={[styles.dayContainer, dynamicStyle]}>
+                <Pressable
+                    onPress={() => onOpenPlanModal(day, training)}
+                    onLongPress={() => training && onLongPress(day, training)}
+                    style={{ width: '100%' }}
+                >
+                    <Text style={[styles.dayText, isToday && styles.todayHighlight, { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }]}>{day.getDate()}</Text>
+                </Pressable>
+                <View style={styles.trainingContent}>
+                    {/* Duração */}
+                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
+                      Duração: <Text style={{color:'#111'}}>
+                        {training.distance_km ? `${training.distance_km} km` : `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min`}
+                      </Text>
+                    </Text>
+                    {/* Altimetria */}
+                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
+                      Altimetria: <Text style={{color:'#111'}}>
+                        {training.elevation_gain_meters || '0'} m
+                      </Text>
+                    </Text>
+                    {/* FC Média */}
+                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
+                      FC Média: <Text style={{color:'#111'}}>{training.avg_heart_rate || '-'}</Text>
+                    </Text>
+                    {/* PSE */}
+                    <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>
+                      PSE: <Text style={{color:'#111'}}>{training.perceived_effort || '-'}</Text>
+                    </Text>
                     <View style={styles.buttonRow}>
                         <Button
                           mode="outlined"
                           style={styles.actionButton}
                           labelStyle={styles.actionButtonLabelOutline}
-                          onPress={handleEditTraining}
+                          onPress={() => onOpenPlanModal(day, training)}
                         >
                           Treino
                         </Button>
@@ -163,20 +185,64 @@ function CustomDay({ day, displayMonth, training, onPress, onLongPress }: Custom
                           mode="contained"
                           style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
                           labelStyle={styles.actionButtonLabelContained}
-                          onPress={handleMarkCompleted}
-                          disabled={training.status === 'completed'}
+                          onPress={() => onOpenDoneModal(day, training)}
                         >
                           Realizado
                         </Button>
                   </View>
-                    {/* Removido Chip visual cinza */}
                 </View>
-            ) : (
-                <View style={styles.trainingContent}>
-                    <MaterialCommunityIcons name="run" size={28} color="#e0e0e0" style={{ marginTop: 16 }} />
+            </View>
+        );
+    }
+
+    // Card com treino planejado ou realizado
+    return (
+        <View style={[styles.dayContainer, dynamicStyle]}>
+            {/* Pressable apenas no topo do card */}
+            <Pressable
+                onPress={() => onOpenPlanModal(day, training)}
+                onLongPress={() => training && onLongPress(day, training)}
+                style={{ width: '100%' }}
+            >
+                <Text
+                  style={[
+                    styles.dayText,
+                    isToday && styles.todayHighlight,
+                    { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }
+                  ]}
+                >
+                    {day.getDate()}
+                </Text>
+            </Pressable>
+            <View style={styles.trainingContent}>
+                {/* Informações principais do treino */}
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Modalidade: <Text style={{color:'#111'}}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></Text>
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Percurso: <Text style={{color:'#111'}}>{training.percurso ? training.percurso.charAt(0).toUpperCase() + training.percurso.slice(1) : '-'}</Text></Text>
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Terreno: <Text style={{color:'#111'}}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></Text>
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Tipo de treino: <Text style={{color:'#111'}}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></Text>
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Duração: <Text style={{color:'#111'}}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></Text>
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Intensidade: <Text style={{color:'#111'}}>{training.intensidade || '-'}</Text></Text>
+                <Text style={{fontWeight:'bold', color:'#111', fontSize:16, marginBottom:2}}>Esforço: <Text style={{color:'#111'}}>{training.esforco ? training.esforco.charAt(0).toUpperCase() + training.esforco.slice(1).replace('_',' ') : '-'}</Text></Text>
+                <View style={styles.buttonRow}>
+                    <Button
+                      mode="outlined"
+                      style={styles.actionButton}
+                      labelStyle={styles.actionButtonLabelOutline}
+                      onPress={handleEditTraining}
+                    >
+                      Treino
+                    </Button>
+                    <Button
+                      mode="contained"
+                      style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                      labelStyle={styles.actionButtonLabelContained}
+                      onPress={() => onOpenDoneModal(day, training)}
+                    >
+                      Realizado
+                    </Button>
               </View>
-            )}
-        </Pressable>
+            </View>
+        </View>
     );
 }
 
@@ -225,60 +291,34 @@ export default function TrainingScreen() {
 
     const days = useMemo(() => generateCalendarDays(displayDate), [displayDate]);
     const weeks = useMemo(() => groupDaysByWeek(days), [days]);
+    // Agrupar treinos por data, priorizando o realizado
     const trainingByDate = useMemo(() => {
         const map: Record<string, TrainingSession> = {};
-        trainingSessions.forEach(t => {
+        // Primeiro, pegar todos os realizados
+        trainingSessions.filter(t => t.status === 'completed').forEach(t => {
             const dateKey = getDateKey(t.training_date);
             map[dateKey] = t;
+        });
+        // Depois, preencher os planejados só se não houver realizado
+        trainingSessions.filter(t => t.status === 'planned').forEach(t => {
+            const dateKey = getDateKey(t.training_date);
+            if (!map[dateKey]) map[dateKey] = t;
         });
         return map;
     }, [trainingSessions]);
 
-    const handleDayPress = (day: Date, training?: TrainingSession | null) => {
+    // Handler para abrir SEMPRE o modal de treino realizado (editável)
+    const handleOpenRealizadoModal = (day: Date, training?: TrainingSession | null) => {
+        console.log('Abrindo modal de treino realizado', { day, training });
         setSelectedDay(day);
         setEditingSession(training || null);
-        if (training) {
-            setPlanningState({
-                modalidade: training.modalidade || '',
-                esforco: training.esforco || '',
-                percurso: training.percurso || '',
-                terreno: training.terreno || '',
-                treino_tipo: training.treino_tipo || '',
-                intensidade: training.intensidade ? String(training.intensidade) : 'Z1',
-                duracao_horas: training.duracao_horas || '0',
-                duracao_minutos: training.duracao_minutos || '0',
-                distance_km: training.distance_km ? String(training.distance_km) : '',
-                distancia_m: training.distancia_m || '',
-                observacoes: training.observacoes || '',
-                elevation_gain_meters: training.elevation_gain_meters ? String(training.elevation_gain_meters) : '',
-                avg_heart_rate: training.avg_heart_rate ? String(training.avg_heart_rate) : '',
-                perceived_effort: training.perceived_effort ? String(training.perceived_effort) : '',
-                notes: training.notes || '',
-            });
-        } else {
-            setPlanningTitle('');
-            setPlanningType('rodagem');
-            // Reset planningState para valores iniciais
-            setPlanningState({
-              modalidade: 'corrida',
-              esforco: '',
-              percurso: '',
-              terreno: '',
-              treino_tipo: '',
-              intensidade: 'Z1',
-              duracao_horas: '0',
-              duracao_minutos: '0',
-              distance_km: '',
-              distancia_m: '',
-              observacoes: '',
-              elevation_gain_meters: '',
-              avg_heart_rate: '',
-              perceived_effort: '',
-              notes: '',
-            });
-        }
-        setModalPlanVisible(true);
+        setModalDoneVisible(true);
     };
+
+    // Handler do card e dos botões
+    const handleDayPress = handleOpenRealizadoModal;
+    const handleEditTraining = handleOpenRealizadoModal;
+    const handleMarkCompleted = handleOpenRealizadoModal;
 
     const handleDayLongPress = async (day: Date, training: TrainingSession) => {
       return new Promise<void>((resolve) => {
@@ -347,6 +387,17 @@ export default function TrainingScreen() {
     const goPrevMonth = () => setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1));
     const goNextMonth = () => setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 1));
 
+    const handleOpenPlanModal = (day: Date, training?: TrainingSession | null) => {
+      setSelectedDay(day);
+      setEditingSession(training || null);
+      setModalPlanVisible(true);
+    };
+    const handleOpenDoneModal = (day: Date, training?: TrainingSession | null) => {
+      setSelectedDay(day);
+      setEditingSession(training || null);
+      setModalDoneVisible(true);
+    };
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -365,7 +416,6 @@ export default function TrainingScreen() {
                         <View key={weekIdx} style={styles.weekRow}>
                             {week.map((day, dayIdx) => {
                                 const training = trainingByDate[formatDate(day)] || null;
-                                const isOtherMonth = day.getMonth() !== displayDate.getMonth();
                                 return (
                                     <CustomDay
                                         key={day.toISOString()}
@@ -374,6 +424,8 @@ export default function TrainingScreen() {
                                         training={training}
                                         onPress={handleDayPress}
                                         onLongPress={handleDayLongPress}
+                                        onOpenPlanModal={handleOpenPlanModal}
+                                        onOpenDoneModal={handleOpenDoneModal}
                                     />
                                 );
                             })}
