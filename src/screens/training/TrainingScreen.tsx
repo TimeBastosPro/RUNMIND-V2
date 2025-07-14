@@ -513,65 +513,120 @@ export default function TrainingScreen() {
 
             {/* Modais permanecem iguais */}
             <Portal>
-                <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 12, maxHeight: '80%' }}>
+                <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ width: '90%', alignSelf: 'center', marginVertical: 20, borderRadius: 12, padding: 20, backgroundColor: 'white' }}>
                     <ScrollView>
                         <Text variant="titleLarge" style={{ marginBottom: 10 }}>
                           {editingSession ? 'Editar Treino Planejado' : 'Planejar Novo Treino'}
                         </Text>
                         {/* Modalidade */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Modalidade</Text>
-                            <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, modalidade: val}))} value={planningState.modalidade}>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
-                                <RadioButton.Item label="Corrida" value="corrida" style={{flex:1}}/>
-                                <RadioButton.Item label="Força" value="forca" style={{flex:1}}/>
-                                <RadioButton.Item label="Educativo" value="educativo" style={{flex:1}}/>
-                                <RadioButton.Item label="Flexibilidade" value="flexibilidade" style={{flex:1}}/>
-                                <RadioButton.Item label="Bike" value="bike" style={{flex:1}}/>
-                            </View>
-                        </RadioButton.Group>
+                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
+                          {['Corrida', 'Força', 'Educativo', 'Flexibilidade', 'Bike'][
+                            ['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'].indexOf(planningState.modalidade)
+                          ]}
+                        </Text>
+                        <Slider
+                          minimumValue={1}
+                          maximumValue={5}
+                          step={1}
+                          value={['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'].indexOf(planningState.modalidade) + 1}
+                          onValueChange={val => setPlanningState(p => ({...p, modalidade: ['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'][val-1]}))}
+                          style={{ marginBottom: 8 }}
+                        />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12 }}>Corrida</Text>
+                          <Text style={{ fontSize: 12 }}>Força</Text>
+                          <Text style={{ fontSize: 12 }}>Educativo</Text>
+                          <Text style={{ fontSize: 12 }}>Flexibilidade</Text>
+                          <Text style={{ fontSize: 12 }}>Bike</Text>
+                        </View>
                         {/* Esforço */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Esforço</Text>
-                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, esforco: val}))} value={planningState.esforco}>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
-                                <RadioButton.Item label="Muito Leve" value="muito_leve" style={{flex:1}}/>
-                                <RadioButton.Item label="Leve" value="leve" style={{flex:1}}/>
-                                <RadioButton.Item label="Moderado" value="moderado" style={{flex:1}}/>
-                                <RadioButton.Item label="Forte" value="forte" style={{flex:1}}/>
-                                <RadioButton.Item label="Muito Forte" value="muito_forte" style={{flex:1}}/>
-                            </View>
-                        </RadioButton.Group>
+                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
+                          {['Muito Leve', 'Leve', 'Moderado', 'Forte', 'Muito Forte'][
+                            (Number(planningState.esforco) - 1) || 2
+                          ]}
+                        </Text>
+                        <Slider
+                          minimumValue={1}
+                          maximumValue={5}
+                          step={1}
+                          value={planningState.esforco ? Number(planningState.esforco) : 3}
+                          onValueChange={val => setPlanningState(p => ({...p, esforco: String(val)}))}
+                          style={{ marginBottom: 8 }}
+                        />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12 }}>Muito Leve</Text>
+                          <Text style={{ fontSize: 12 }}>Leve</Text>
+                          <Text style={{ fontSize: 12 }}>Moderado</Text>
+                          <Text style={{ fontSize: 12 }}>Forte</Text>
+                          <Text style={{ fontSize: 12 }}>Muito Forte</Text>
+                        </View>
                         {/* Percurso */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Percurso</Text>
-                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, percurso: val}))} value={planningState.percurso}>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
-                                <RadioButton.Item label="Plano" value="plano" style={{flex:1}}/>
-                                <RadioButton.Item label="Ligeira Inclinação" value="ligeira_inclinacao" style={{flex:1}}/>
-                                <RadioButton.Item label="Muita Inclinação" value="muita_inclinacao" style={{flex:1}}/>
-                            </View>
-                        </RadioButton.Group>
+                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
+                          {['Plano', 'Ligeira Inclinação', 'Muita Inclinação'][
+                            ['plano', 'ligeira_inclinacao', 'muita_inclinacao'].indexOf(planningState.percurso)
+                          ]}
+                        </Text>
+                        <Slider
+                          minimumValue={1}
+                          maximumValue={3}
+                          step={1}
+                          value={planningState.percurso ? ['plano', 'ligeira_inclinacao', 'muita_inclinacao'].indexOf(planningState.percurso) + 1 : 1}
+                          onValueChange={val => setPlanningState(p => ({...p, percurso: ['plano', 'ligeira_inclinacao', 'muita_inclinacao'][val-1]}))}
+                          style={{ marginBottom: 8 }}
+                        />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12 }}>Plano</Text>
+                          <Text style={{ fontSize: 12 }}>Ligeira Inclinação</Text>
+                          <Text style={{ fontSize: 12 }}>Muita Inclinação</Text>
+                        </View>
                         {/* Terreno */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Terreno</Text>
-                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, terreno: val}))} value={planningState.terreno}>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
-                                <RadioButton.Item label="Asfalto" value="asfalto" style={{flex:1}}/>
-                                <RadioButton.Item label="Esteira" value="esteira" style={{flex:1}}/>
-                                <RadioButton.Item label="Trilha/Montanha" value="trilha" style={{flex:1}}/>
-                                <RadioButton.Item label="Pista" value="pista" style={{flex:1}}/>
-                            </View>
-                        </RadioButton.Group>
+                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
+                          {['Asfalto', 'Esteira', 'Trilha/Montanha', 'Pista'][
+                            ['asfalto', 'esteira', 'trilha', 'pista'].indexOf(planningState.terreno)
+                          ]}
+                        </Text>
+                        <Slider
+                          minimumValue={1}
+                          maximumValue={4}
+                          step={1}
+                          value={planningState.terreno ? ['asfalto', 'esteira', 'trilha', 'pista'].indexOf(planningState.terreno) + 1 : 1}
+                          onValueChange={val => setPlanningState(p => ({...p, terreno: ['asfalto', 'esteira', 'trilha', 'pista'][val-1]}))}
+                          style={{ marginBottom: 8 }}
+                        />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12 }}>Asfalto</Text>
+                          <Text style={{ fontSize: 12 }}>Esteira</Text>
+                          <Text style={{ fontSize: 12 }}>Trilha/Montanha</Text>
+                          <Text style={{ fontSize: 12 }}>Pista</Text>
+                        </View>
                         {/* Tipo de Treino */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Tipo de Treino</Text>
-                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, treino_tipo: val}))} value={planningState.treino_tipo}>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
-                                <RadioButton.Item label="Contínuo" value="continuo" style={{flex:1}}/>
-                                <RadioButton.Item label="Intervalado" value="intervalado" style={{flex:1}}/>
-                                <RadioButton.Item label="Longo" value="longo" style={{flex:1}}/>
-                                <RadioButton.Item label="Fartlek" value="fartlek" style={{flex:1}}/>
-                                <RadioButton.Item label="Tiro" value="tiro" style={{flex:1}}/>
-                                <RadioButton.Item label="Ritmo" value="ritmo" style={{flex:1}}/>
-                                <RadioButton.Item label="Regenerativo" value="regenerativo" style={{flex:1}}/>
-                            </View>
-                            </RadioButton.Group>
+                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
+                          {['Contínuo', 'Intervalado', 'Longo', 'Fartlek', 'Tiro', 'Ritmo', 'Regenerativo'][
+                            ['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'].indexOf(planningState.treino_tipo)
+                          ]}
+                        </Text>
+                        <Slider
+                          minimumValue={1}
+                          maximumValue={7}
+                          step={1}
+                          value={planningState.treino_tipo ? ['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'].indexOf(planningState.treino_tipo) + 1 : 1}
+                          onValueChange={val => setPlanningState(p => ({...p, treino_tipo: ['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'][val-1]}))}
+                          style={{ marginBottom: 8 }}
+                        />
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12 }}>Contínuo</Text>
+                          <Text style={{ fontSize: 12 }}>Intervalado</Text>
+                          <Text style={{ fontSize: 12 }}>Longo</Text>
+                          <Text style={{ fontSize: 12 }}>Fartlek</Text>
+                          <Text style={{ fontSize: 12 }}>Tiro</Text>
+                          <Text style={{ fontSize: 12 }}>Ritmo</Text>
+                          <Text style={{ fontSize: 12 }}>Regenerativo</Text>
+                        </View>
                         {/* Duração/Distância */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Duração / Distância</Text>
                         <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
