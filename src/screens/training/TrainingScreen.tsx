@@ -299,7 +299,8 @@ export default function TrainingScreen() {
       fetchTrainingSessions,
       saveTrainingSession,
       markTrainingAsCompleted,
-      deleteTrainingSession
+      deleteTrainingSession,
+      submitWeeklyReflection
     } = useCheckinStore(s => s);
 
     const [displayDate, setDisplayDate] = useState(new Date());
@@ -310,6 +311,7 @@ export default function TrainingScreen() {
     const [editingSession, setEditingSession] = useState<TrainingSession | null>(null);
     const [planningTitle, setPlanningTitle] = useState('');
     const [planningType, setPlanningType] = useState('rodagem');
+    const [weeklyReflectionVisible, setWeeklyReflectionVisible] = useState(false);
 
     // Atualize o useState planningState:
     const [planningState, setPlanningState] = useState({
@@ -334,6 +336,35 @@ export default function TrainingScreen() {
         setLoading(true);
         fetchTrainingSessions().finally(() => setLoading(false));
     }, [fetchTrainingSessions]);
+
+    // Função para obter o início da semana (domingo)
+    function getWeekStart(date: Date) {
+      const d = new Date(date);
+      d.setHours(0,0,0,0);
+      d.setDate(d.getDate() - d.getDay());
+      return d.toISOString().split('T')[0];
+    }
+
+    // useEffect para sugerir a reflexão semanal ao abrir o app no domingo
+    useEffect(() => {
+      const today = new Date();
+      const weekStart = getWeekStart(today);
+      // Aqui você pode buscar na base se já respondeu essa semana (exemplo simplificado: sempre mostra no domingo)
+      if (today.getDay() === 0) {
+        setWeeklyReflectionVisible(true);
+      }
+    }, []);
+
+    const handleSaveWeeklyReflection = async (answers: any) => {
+      const weekStart = getWeekStart(new Date());
+      await submitWeeklyReflection({
+        enjoyment: answers.enjoyment,
+        progress: answers.progress,
+        confidence: answers.confidence,
+        week_start: weekStart,
+      });
+      setWeeklyReflectionVisible(false);
+    };
 
     const days = useMemo(() => generateCalendarDays(displayDate), [displayDate]);
     const weeks = useMemo(() => groupDaysByWeek(days), [days]);

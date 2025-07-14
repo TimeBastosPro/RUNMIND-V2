@@ -60,6 +60,12 @@ interface CheckinState {
     duration_minutes?: number;
   }) => Promise<any>;
   calculateReadinessScore: (checkin: any) => number;
+  submitWeeklyReflection: (reflection: {
+    enjoyment: number;
+    progress: string;
+    confidence: string;
+    week_start: string;
+  }) => Promise<void>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -411,6 +417,23 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       console.error('Erro ao marcar treino como realizado:', error);
       throw error;
     }
+  },
+
+  submitWeeklyReflection: async (reflection) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuário não autenticado');
+    const upsertData = {
+      user_id: user.id,
+      week_start: reflection.week_start,
+      enjoyment: reflection.enjoyment,
+      progress: reflection.progress,
+      confidence: reflection.confidence,
+      created_at: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('weekly_reflections')
+      .upsert(upsertData, { onConflict: 'user_id,week_start' });
+    if (error) throw error;
   },
 }));
 
