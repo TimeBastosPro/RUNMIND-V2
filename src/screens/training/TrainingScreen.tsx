@@ -513,127 +513,78 @@ export default function TrainingScreen() {
 
             {/* Modais permanecem iguais */}
             <Portal>
-                <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ width: '90%', alignSelf: 'center', marginVertical: 20, borderRadius: 12, padding: 20, backgroundColor: 'white' }}>
-                    <ScrollView>
-                        <Text variant="titleLarge" style={{ marginBottom: 10 }}>
+                <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ width: '90%', alignSelf: 'center', marginVertical: 20, borderRadius: 12, padding: 20, backgroundColor: 'white', maxWidth: 600, maxHeight: '90%' }}>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        <Text variant="titleLarge" style={{ marginBottom: 10, textAlign: 'left', fontWeight: 'bold' }}>
                           {editingSession ? 'Editar Treino Planejado' : 'Planejar Novo Treino'}
                         </Text>
                         {/* Modalidade */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Modalidade</Text>
-                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
-                          {['Corrida', 'Força', 'Educativo', 'Flexibilidade', 'Bike'][
-                            ['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'].indexOf(planningState.modalidade)
-                          ]}
-                        </Text>
-                        <Slider
-                          minimumValue={1}
-                          maximumValue={5}
-                          step={1}
-                          value={['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'].indexOf(planningState.modalidade) + 1}
-                          onValueChange={val => setPlanningState(p => ({...p, modalidade: ['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'][val-1]}))}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <Text style={{ fontSize: 12 }}>Corrida</Text>
-                          <Text style={{ fontSize: 12 }}>Força</Text>
-                          <Text style={{ fontSize: 12 }}>Educativo</Text>
-                          <Text style={{ fontSize: 12 }}>Flexibilidade</Text>
-                          <Text style={{ fontSize: 12 }}>Bike</Text>
-                        </View>
+                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, modalidade: val}))} value={planningState.modalidade}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+                            {['corrida', 'forca', 'educativo', 'flexibilidade', 'bike'].map((opt, idx) => (
+                              <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 16}}>
+                                <RadioButton value={opt} />
+                                <Text style={{marginRight: 8}}>{['Corrida', 'Força', 'Educativo', 'Flexibilidade', 'Bike'][idx]}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </RadioButton.Group>
                         {/* Esforço */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Esforço</Text>
-                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
-                          {['Muito Leve', 'Leve', 'Moderado', 'Forte', 'Muito Forte'][
-                            (Number(planningState.esforco) - 1) || 2
-                          ]}
-                        </Text>
-                        <Slider
-                          minimumValue={1}
-                          maximumValue={5}
-                          step={1}
-                          value={planningState.esforco ? Number(planningState.esforco) : 3}
-                          onValueChange={val => setPlanningState(p => ({...p, esforco: String(val)}))}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <Text style={{ fontSize: 12 }}>Muito Leve</Text>
-                          <Text style={{ fontSize: 12 }}>Leve</Text>
-                          <Text style={{ fontSize: 12 }}>Moderado</Text>
-                          <Text style={{ fontSize: 12 }}>Forte</Text>
-                          <Text style={{ fontSize: 12 }}>Muito Forte</Text>
-                        </View>
+                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, esforco: val}))} value={planningState.esforco}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+                            {[1,2,3,4,5].map(opt => (
+                              <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 16}}>
+                                <RadioButton value={String(opt)} />
+                                <Text style={{marginRight: 8}}>{['Muito Leve', 'Leve', 'Moderado', 'Forte', 'Muito Forte'][opt-1]}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </RadioButton.Group>
                         {/* Percurso */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Percurso</Text>
-                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
-                          {['Plano', 'Ligeira Inclinação', 'Muita Inclinação'][
-                            ['plano', 'ligeira_inclinacao', 'muita_inclinacao'].indexOf(planningState.percurso)
-                          ]}
-                        </Text>
-                        <Slider
-                          minimumValue={1}
-                          maximumValue={3}
-                          step={1}
-                          value={planningState.percurso ? ['plano', 'ligeira_inclinacao', 'muita_inclinacao'].indexOf(planningState.percurso) + 1 : 1}
-                          onValueChange={val => setPlanningState(p => ({...p, percurso: ['plano', 'ligeira_inclinacao', 'muita_inclinacao'][val-1]}))}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <Text style={{ fontSize: 12 }}>Plano</Text>
-                          <Text style={{ fontSize: 12 }}>Ligeira Inclinação</Text>
-                          <Text style={{ fontSize: 12 }}>Muita Inclinação</Text>
-                        </View>
+                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, percurso: val}))} value={planningState.percurso}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+                            {[1,2,3,4,5].map(opt => (
+                              <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 16}}>
+                                <RadioButton value={String(opt)} />
+                                <Text style={{marginRight: 8}}>{['Plano', 'Ligeira Inclinação', 'Moderada', 'Forte', 'Muita Inclinação'][opt-1]}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </RadioButton.Group>
                         {/* Terreno */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Terreno</Text>
-                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
-                          {['Asfalto', 'Esteira', 'Trilha/Montanha', 'Pista'][
-                            ['asfalto', 'esteira', 'trilha', 'pista'].indexOf(planningState.terreno)
-                          ]}
-                        </Text>
-                        <Slider
-                          minimumValue={1}
-                          maximumValue={4}
-                          step={1}
-                          value={planningState.terreno ? ['asfalto', 'esteira', 'trilha', 'pista'].indexOf(planningState.terreno) + 1 : 1}
-                          onValueChange={val => setPlanningState(p => ({...p, terreno: ['asfalto', 'esteira', 'trilha', 'pista'][val-1]}))}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <Text style={{ fontSize: 12 }}>Asfalto</Text>
-                          <Text style={{ fontSize: 12 }}>Esteira</Text>
-                          <Text style={{ fontSize: 12 }}>Trilha/Montanha</Text>
-                          <Text style={{ fontSize: 12 }}>Pista</Text>
-                        </View>
+                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, terreno: val}))} value={planningState.terreno}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+                            {[1,2,3,4,5].map(opt => (
+                              <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 16}}>
+                                <RadioButton value={String(opt)} />
+                                <Text style={{marginRight: 8}}>{['Asfalto', 'Esteira', 'Trilha/Montanha', 'Pista', 'Outro'][opt-1]}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </RadioButton.Group>
                         {/* Tipo de Treino */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Tipo de Treino</Text>
-                        <Text style={{ fontWeight: 'bold', color: '#1976d2', textAlign: 'center', marginBottom: 8 }}>
-                          {['Contínuo', 'Intervalado', 'Longo', 'Fartlek', 'Tiro', 'Ritmo', 'Regenerativo'][
-                            ['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'].indexOf(planningState.treino_tipo)
-                          ]}
-                        </Text>
-                        <Slider
-                          minimumValue={1}
-                          maximumValue={7}
-                          step={1}
-                          value={planningState.treino_tipo ? ['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'].indexOf(planningState.treino_tipo) + 1 : 1}
-                          onValueChange={val => setPlanningState(p => ({...p, treino_tipo: ['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'][val-1]}))}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <Text style={{ fontSize: 12 }}>Contínuo</Text>
-                          <Text style={{ fontSize: 12 }}>Intervalado</Text>
-                          <Text style={{ fontSize: 12 }}>Longo</Text>
-                          <Text style={{ fontSize: 12 }}>Fartlek</Text>
-                          <Text style={{ fontSize: 12 }}>Tiro</Text>
-                          <Text style={{ fontSize: 12 }}>Ritmo</Text>
-                          <Text style={{ fontSize: 12 }}>Regenerativo</Text>
-                        </View>
+                        <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, treino_tipo: val}))} value={planningState.treino_tipo}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+                            {['continuo', 'intervalado', 'longo', 'fartlek', 'tiro', 'ritmo', 'regenerativo'].map((opt, idx) => (
+                              <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 16}}>
+                                <RadioButton value={opt} />
+                                <Text style={{marginRight: 8}}>{['Contínuo', 'Intervalado', 'Longo', 'Fartlek', 'Tiro', 'Ritmo', 'Regenerativo'][idx]}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </RadioButton.Group>
                         {/* Duração/Distância */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Duração / Distância</Text>
                         <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
-                            <TextInput label="Distância (km)" value={planningState.distance_km} onChangeText={val => setPlanningState(p => ({ ...p, distance_km: val }))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
-                            <TextInput label="Metros" value={planningState.distancia_m} onChangeText={val => setPlanningState(p => ({ ...p, distancia_m: val }))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
-                              <TextInput label="Horas" value={planningState.duracao_horas} onChangeText={val => setPlanningState(p => ({...p, duracao_horas: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense/>
-                              <TextInput label="Minutos" value={planningState.duracao_minutos} onChangeText={val => setPlanningState(p => ({...p, duracao_minutos: val}))} keyboardType="numeric" style={{flex: 1}} mode="outlined" dense/>
+                          <TextInput label="Distância (km)" value={planningState.distance_km} onChangeText={val => setPlanningState(p => ({...p, distance_km: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
+                          <TextInput label="Metros" value={planningState.distancia_m} onChangeText={val => setPlanningState(p => ({...p, distancia_m: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
+                          <TextInput label="Horas" value={planningState.duracao_horas} onChangeText={val => setPlanningState(p => ({...p, duracao_horas: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
+                          <TextInput label="Minutos" value={planningState.duracao_minutos} onChangeText={val => setPlanningState(p => ({...p, duracao_minutos: val}))} keyboardType="numeric" style={{flex: 1}} mode="outlined" dense />
                         </View>
                         {/* Intensidade */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Intensidade</Text>
@@ -648,25 +599,22 @@ export default function TrainingScreen() {
                         </RadioButton.Group>
                         {/* Observações */}
                         <TextInput label="Observações" value={planningState.observacoes} onChangeText={val => setPlanningState(p => ({...p, observacoes: val}))} multiline numberOfLines={3} mode="outlined" style={{marginBottom: 12}}/>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 }}>
                              <Button onPress={() => setModalPlanVisible(false)}>Cancelar</Button>
-                             <Button mode="contained" onPress={handleSavePlan}>
+                             <Button mode="contained" onPress={handleSavePlan} style={{ marginLeft: 8 }}>
                                {editingSession ? 'Salvar Alterações' : 'Salvar Treino'}
                              </Button>
                         </View>
-                        {editingSession && editingSession.id && (
+                        {editingSession && (
                           <Button 
                             textColor='red' 
                             onPress={async () => {
-                              console.log('Tentando excluir treino', editingSession.id);
                               if (editingSession.id) {
                                 await deleteTrainingSession(editingSession.id);
                                 await fetchTrainingSessions();
                                 setEditingSession(null);
                                 setSelectedDay(null);
                                 setModalPlanVisible(false);
-                              } else {
-                                console.log('ID do treino inválido:', editingSession.id);
                               }
                             }} 
                             style={{marginTop: 10}}

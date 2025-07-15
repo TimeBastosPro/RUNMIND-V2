@@ -69,20 +69,24 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
     onSave(dataToSave);
   };
 
+  // Padronização visual: mesmo container do modal planejado
   const containerStyle = {
-    backgroundColor: 'white',
-    padding: 20,
-    margin: 20,
+    width: '90%',
+    alignSelf: 'center',
+    marginVertical: 20,
     borderRadius: 12,
-    maxHeight: 600,
-    maxWidth: 700
+    padding: 20,
+    backgroundColor: 'white',
+    maxWidth: 600,
+    maxHeight: '90%',
   };
 
+  // Padronização de título, espaçamento e botões
   return (
     <Portal>
       <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={containerStyle}>
-        <ScrollView>
-          <Text variant="titleLarge" style={{ marginBottom: 10 }}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text variant="titleLarge" style={{ marginBottom: 10, textAlign: 'left', fontWeight: 'bold' }}>
             Editar Treino Realizado
           </Text>
 
@@ -110,8 +114,9 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
           <RadioButton.Group onValueChange={setEffort} value={effort}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
               {[1,2,3,4,5,6,7,8,9,10].map(opt => (
-                <View key={opt} style={{flex:1}}>
-                  <RadioButton.Item label={String(opt)} value={String(opt)} style={{margin:0, padding:0}} />
+                <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 8, marginBottom: 4}}>
+                  <RadioButton value={String(opt)} />
+                  <Text style={{marginRight: 4}}>{opt}</Text>
                 </View>
               ))}
             </View>
@@ -122,8 +127,9 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
           <RadioButton.Group onValueChange={setSatisfaction} value={satisfaction}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
               {[1,2,3,4,5].map(opt => (
-                <View key={opt} style={{flex:1}}>
-                  <RadioButton.Item label={String(opt)} value={String(opt)} style={{margin:0, padding:0}} />
+                <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 8, marginBottom: 4}}>
+                  <RadioButton value={String(opt)} />
+                  <Text style={{marginRight: 4}}>{opt}</Text>
                 </View>
               ))}
             </View>
@@ -168,6 +174,7 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
           {/* Observações */}
           <TextInput label="Observações" value={notes} onChangeText={setNotes} multiline numberOfLines={3} mode="outlined" style={{marginBottom: 12}}/>
 
+          {/* Botões padronizados */}
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 }}>
             <Button onPress={onCancel}>Cancelar</Button>
             <Button mode="contained" onPress={handleSave} style={{ marginLeft: 8 }}>
