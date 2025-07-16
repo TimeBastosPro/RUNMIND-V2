@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
-import { Card, Text, Button, SegmentedButtons, TextInput, RadioButton, Checkbox } from 'react-native-paper';
+import { Card, Text, Button, SegmentedButtons, TextInput, RadioButton, Checkbox, List } from 'react-native-paper';
 import Slider from '@react-native-community/slider';
 import { useAuthStore } from '../../stores/auth';
+import { useNavigation } from '@react-navigation/native';
 
 const experienceOptions = [
   { label: 'Iniciante', value: 'beginner' },
@@ -23,6 +24,7 @@ const contextOptions = [
 
 export default function ProfileScreen() {
   const { signOut, profile, updateProfile } = useAuthStore();
+  const navigation = useNavigation();
   const [tab, setTab] = useState('dados');
   // 2. Estado do formulário para todos os campos
   const [fullName, setFullName] = useState(profile?.full_name || '');
@@ -43,13 +45,13 @@ export default function ProfileScreen() {
     q6: string | null;
     q7: string | null;
   }>({
-    q1: profile?.parq_answers?.q1 ?? null,
-    q2: profile?.parq_answers?.q2 ?? null,
-    q3: profile?.parq_answers?.q3 ?? null,
-    q4: profile?.parq_answers?.q4 ?? null,
-    q5: profile?.parq_answers?.q5 ?? null,
-    q6: profile?.parq_answers?.q6 ?? null,
-    q7: profile?.parq_answers?.q7 ?? null,
+    q1: typeof profile?.parq_answers?.q1 === 'boolean' ? (profile.parq_answers.q1 ? 'sim' : 'nao') : null,
+    q2: typeof profile?.parq_answers?.q2 === 'boolean' ? (profile.parq_answers.q2 ? 'sim' : 'nao') : null,
+    q3: typeof profile?.parq_answers?.q3 === 'boolean' ? (profile.parq_answers.q3 ? 'sim' : 'nao') : null,
+    q4: typeof profile?.parq_answers?.q4 === 'boolean' ? (profile.parq_answers.q4 ? 'sim' : 'nao') : null,
+    q5: typeof profile?.parq_answers?.q5 === 'boolean' ? (profile.parq_answers.q5 ? 'sim' : 'nao') : null,
+    q6: typeof profile?.parq_answers?.q6 === 'boolean' ? (profile.parq_answers.q6 ? 'sim' : 'nao') : null,
+    q7: typeof profile?.parq_answers?.q7 === 'boolean' ? (profile.parq_answers.q7 ? 'sim' : 'nao') : null,
   });
   const [preferences, setPreferences] = useState({
     trainingDays: profile?.training_days || [],
@@ -109,13 +111,13 @@ export default function ProfileScreen() {
     setMainGoal(profile?.main_goal || 'health');
     setContextType(profile?.context_type || 'solo');
     setParqAnswers({
-      q1: profile?.parq_answers?.q1 ?? null,
-      q2: profile?.parq_answers?.q2 ?? null,
-      q3: profile?.parq_answers?.q3 ?? null,
-      q4: profile?.parq_answers?.q4 ?? null,
-      q5: profile?.parq_answers?.q5 ?? null,
-      q6: profile?.parq_answers?.q6 ?? null,
-      q7: profile?.parq_answers?.q7 ?? null,
+      q1: typeof profile?.parq_answers?.q1 === 'boolean' ? (profile.parq_answers.q1 ? 'sim' : 'nao') : null,
+      q2: typeof profile?.parq_answers?.q2 === 'boolean' ? (profile.parq_answers.q2 ? 'sim' : 'nao') : null,
+      q3: typeof profile?.parq_answers?.q3 === 'boolean' ? (profile.parq_answers.q3 ? 'sim' : 'nao') : null,
+      q4: typeof profile?.parq_answers?.q4 === 'boolean' ? (profile.parq_answers.q4 ? 'sim' : 'nao') : null,
+      q5: typeof profile?.parq_answers?.q5 === 'boolean' ? (profile.parq_answers.q5 ? 'sim' : 'nao') : null,
+      q6: typeof profile?.parq_answers?.q6 === 'boolean' ? (profile.parq_answers.q6 ? 'sim' : 'nao') : null,
+      q7: typeof profile?.parq_answers?.q7 === 'boolean' ? (profile.parq_answers.q7 ? 'sim' : 'nao') : null,
     });
     setPreferences({
       trainingDays: profile?.training_days || [],

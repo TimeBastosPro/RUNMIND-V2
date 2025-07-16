@@ -604,24 +604,24 @@ export default function TrainingScreen() {
                              <Button mode="contained" onPress={handleSavePlan} style={{ marginLeft: 8 }}>
                                {editingSession ? 'Salvar Alterações' : 'Salvar Treino'}
                              </Button>
+                             {editingSession && (
+                               <Button 
+                                 textColor='red' 
+                                 onPress={async () => {
+                                   if (editingSession.id) {
+                                     await deleteTrainingSession(editingSession.id);
+                                     await fetchTrainingSessions();
+                                     setEditingSession(null);
+                                     setSelectedDay(null);
+                                     setModalPlanVisible(false);
+                                   }
+                                 }} 
+                                 style={{ marginLeft: 8 }}
+                               >
+                                 Excluir Treino
+                               </Button>
+                             )}
                         </View>
-                        {editingSession && (
-                          <Button 
-                            textColor='red' 
-                            onPress={async () => {
-                              if (editingSession.id) {
-                                await deleteTrainingSession(editingSession.id);
-                                await fetchTrainingSessions();
-                                setEditingSession(null);
-                                setSelectedDay(null);
-                                setModalPlanVisible(false);
-                              }
-                            }} 
-                            style={{marginTop: 10}}
-                          >
-                            Excluir Treino
-                          </Button>
-                        )}
                     </ScrollView>
                 </Modal>
             </Portal>

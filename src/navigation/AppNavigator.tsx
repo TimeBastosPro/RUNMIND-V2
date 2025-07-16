@@ -20,6 +20,7 @@ import AcademyScreen from '../screens/academy/AcademyScreen';
 import GlossaryScreen from '../screens/academy/GlossaryScreen';
 import GuidesScreen from '../screens/academy/GuidesScreen';
 import ChatScreen from '../screens/academy/ChatScreen';
+import ComparativeChartsScreen from '../screens/analysis/ComparativeChartsScreen';
 
 // Types
 type TabParamList = {
@@ -27,6 +28,7 @@ type TabParamList = {
   'Check-in': undefined;
   Insights: undefined;
   Treinos: undefined;
+  Análise: undefined;
   Profile: undefined;
   Academy: undefined;
 };
@@ -35,6 +37,7 @@ type StackParamList = {
   Main: undefined;
   Auth: undefined;
   InitialLoading: undefined;
+  ComparativeCharts: undefined;
 };
 
 type NavigationProps = {
@@ -217,6 +220,8 @@ function MainTabs() {
             iconName = 'lightbulb';
           } else if (route.name === 'Treinos') {
             iconName = 'run';
+          } else if (route.name === 'Análise') { 
+            iconName = 'chart-line'; 
           } else if (route.name === 'Profile') {
             iconName = 'account';
           } else if (route.name === 'Academy') {
@@ -234,6 +239,15 @@ function MainTabs() {
       <Tab.Screen name="Check-in" component={DailyCheckinScreen} />
       <Tab.Screen name="Insights" component={InsightsScreen} />
       <Tab.Screen name="Treinos" component={TrainingScreen} />
+      <Tab.Screen 
+        name="Análise" 
+        component={ComparativeChartsScreen}
+        options={{ 
+          title: 'Análise',
+          headerShown: true,
+          headerTitle: 'Análise Comparativa'
+        }} 
+      />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
       <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />
     </Tab.Navigator>
@@ -310,6 +324,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
             <Stack.Screen name="Main" component={MainTabs} />
+            {/* <Stack.Screen name="ComparativeCharts" component={ComparativeChartsScreen} /> */}
           </>
         )}
       </Stack.Navigator>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, ScrollView } from 'react-native';
 import { Modal, Portal, Text, Button, TextInput, Divider, RadioButton, Checkbox } from 'react-native-paper';
 import type { TrainingSession } from '../../types/database'; // Importação do tipo correto
+import { useCheckinStore } from '../../stores/checkin';
 
 // --- Opções do formulário ---
 const sensacoesOpcoes = [
@@ -40,6 +41,7 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
   const [sensacoes, setSensacoes] = useState<string[]>([]);
   const [clima, setClima] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+  const { deleteTrainingSession, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
     if (plannedData) {
@@ -67,6 +69,14 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
       observacoes: notes,
     };
     onSave(dataToSave);
+  };
+
+  const handleDelete = async () => {
+    if (plannedData && plannedData.id) {
+      await deleteTrainingSession(plannedData.id);
+      await fetchTrainingSessions();
+      onCancel();
+    }
   };
 
   // Padronização visual: mesmo container do modal planejado
@@ -112,11 +122,11 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
           {/* PSE */}
           <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Percepção de Esforço (PSE)</Text>
           <RadioButton.Group onValueChange={setEffort} value={effort}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'nowrap', marginBottom: 12, justifyContent: 'space-between', alignItems: 'center' }}>
               {[1,2,3,4,5,6,7,8,9,10].map(opt => (
-                <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 8, marginBottom: 4}}>
+                <View key={opt} style={{flexDirection: 'row', alignItems: 'center', marginRight: 2}}>
                   <RadioButton value={String(opt)} />
-                  <Text style={{marginRight: 4}}>{opt}</Text>
+                  <Text style={{fontSize: 12, marginRight: 2}}>{opt}</Text>
                 </View>
               ))}
             </View>
@@ -178,8 +188,13 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 }}>
             <Button onPress={onCancel}>Cancelar</Button>
             <Button mode="contained" onPress={handleSave} style={{ marginLeft: 8 }}>
-              Salvar Treino
+              Salvar Alterações
             </Button>
+            {plannedData && plannedData.id && (
+              <Button onPress={handleDelete} textColor="red" style={{ marginLeft: 8 }}>
+                Excluir Treino
+              </Button>
+            )}
           </View>
         </ScrollView>
       </Modal>
