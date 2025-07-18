@@ -15,6 +15,14 @@ interface RecentCheckin {
   date: string;
 }
 
+interface WeeklyReflection {
+  enjoyment: number;
+  progress: string;
+  confidence: string;
+  week_start: string;
+  created_at?: string;
+}
+
 interface CheckinState {
   todayCheckin: DailyCheckin | null;
   recentCheckins: RecentCheckin[];
@@ -25,11 +33,17 @@ interface CheckinState {
   insights: string[];
   trainingSessions: any[];
   todayReadinessScore: number | null;
+  weeklyReflections: WeeklyReflection[];
   // Actions
   loadTodayCheckin: () => Promise<void>;
   loadRecentCheckins: (days?: number) => Promise<void>;
   submitCheckin: (checkinData: Omit<DailyCheckin, 'id' | 'user_id' | 'created_at'>) => Promise<void>;
-  calculateAnalytics: () => UserAnalytics | null;
+  calculateAnalytics: () => {
+    trainingLoad: { id: string | number; date: string; duration: number; perceivedEffort: number; load: number }[];
+    acuteLoad: { date: string; value: number }[];
+    chronicLoad: { date: string; value: number }[];
+    runningEfficiency: { pace: number; pse: number; date: string }[];
+  } | null;
   submitParqAnswers: (answers: {
     q1: boolean;
     q2: boolean;
@@ -67,6 +81,7 @@ interface CheckinState {
     confidence: number;
   }) => Promise<any>;
   updateCheckinWithInsight: (checkinId: string, insightText: string) => Promise<any>;
+  loadWeeklyReflections: () => Promise<void>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -79,6 +94,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   insights: [],
   trainingSessions: [], // Initialize trainingSessions
   todayReadinessScore: null,
+  weeklyReflections: [],
 
   loadTodayCheckin: async () => {
     set({ isLoading: true, error: null });
@@ -129,8 +145,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       startDate.setDate(startDate.getDate() - days);
 
       const { data, error } = await supabase
-        .from('checkin_sessions')
-        .select('mood_score, energy_score, sleep_hours, sleep_quality_score, fatigue_score, stress_score, soreness_score, notes, date')
+        .from('daily_checkins')
+        .select('mood_score, energy_score, sleep_hours, sleep_quality, soreness, motivation, confidence, focus, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
@@ -286,106 +302,58 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     }
   },
 
-  calculateAnalytics: (): UserAnalytics & {
-    weeklyWellbeing?: Array<{ week: string, sono: number, fadiga: number, stress: number, dores: number }>,
-    trainingVolumeByWeek?: Array<{ week: string, volume: number }>,
-    // Adicione outros agregados conforme necessário
-  } | null => {
-    const { recentCheckins, trainingSessions } = get();
-    if (recentCheckins.length < 3) {
-      return null;
-    }
+  calculateAnalytics: () => {
+    const { trainingSessions } = get();
+    if (!trainingSessions || trainingSessions.length === 0) return null;
 
-    // --- Agregação de bem-estar semanal ---
-    const weekMap: Record<string, { sono: number[], fadiga: number[], stress: number[], dores: number[] }> = {};
-    recentCheckins.forEach(c => {
-      const date = new Date(c.date);
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay()); // Domingo
-      const weekKey = weekStart.toISOString().split('T')[0];
-      if (!weekMap[weekKey]) weekMap[weekKey] = { sono: [], fadiga: [], stress: [], dores: [] };
-      weekMap[weekKey].sono.push(c.sleep_quality_score || 0);
-      weekMap[weekKey].fadiga.push(c.fatigue_score || 0);
-      weekMap[weekKey].stress.push(c.stress_score || 0);
-      weekMap[weekKey].dores.push(c.soreness_score || 0);
-    });
-    const weeklyWellbeing = Object.entries(weekMap).map(([week, vals]) => ({
-      week,
-      sono: vals.sono.length ? vals.sono.reduce((a, b) => a + b, 0) / vals.sono.length : 0,
-      fadiga: vals.fadiga.length ? vals.fadiga.reduce((a, b) => a + b, 0) / vals.fadiga.length : 0,
-      stress: vals.stress.length ? vals.stress.reduce((a, b) => a + b, 0) / vals.stress.length : 0,
-      dores: vals.dores.length ? vals.dores.reduce((a, b) => a + b, 0) / vals.dores.length : 0,
+    // 1. Carga de Treino (trainingLoad)
+    const trainingLoad = trainingSessions.map((t: any) => ({
+      id: t.id,
+      date: t.training_date,
+      duration: t.duration_minutes || 0,
+      perceivedEffort: t.perceived_effort || 0,
+      load: (t.duration_minutes || 0) * (t.perceived_effort || 0),
     }));
 
-    // --- Agregação de volume de treino semanal ---
-    const trainingWeekMap: Record<string, number[]> = {};
-    trainingSessions.forEach((t: any) => {
-      if (!t.training_date) return;
-      const date = new Date(t.training_date);
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay());
-      const weekKey = weekStart.toISOString().split('T')[0];
-      if (!trainingWeekMap[weekKey]) trainingWeekMap[weekKey] = [];
-      // Exemplo: volume = distância * PSE (perceived_effort)
-      const volume = (t.distance_km || 0) * (t.perceived_effort || 1);
-      trainingWeekMap[weekKey].push(volume);
+    // 2. Carga Aguda (acuteLoad) - média dos últimos 7 dias para cada dia
+    const acuteLoad: { date: string; value: number }[] = [];
+    const allDates = trainingSessions.map((t: any) => t.training_date).sort();
+    allDates.forEach((date: string) => {
+      const dateObj = new Date(date);
+      const past7 = trainingLoad.filter((tl) => {
+        const d = new Date(tl.date);
+        return d <= dateObj && d >= new Date(dateObj.getTime() - 6 * 24 * 60 * 60 * 1000);
+      });
+      const avg = past7.length ? past7.reduce((a, b) => a + b.load, 0) / past7.length : 0;
+      acuteLoad.push({ date, value: avg });
     });
-    const trainingVolumeByWeek = Object.entries(trainingWeekMap).map(([week, vols]) => ({
-      week,
-      volume: vols.length ? vols.reduce((a, b) => a + b, 0) : 0,
-    }));
 
-    // --- Dados já existentes ---
-    const avgMood = recentCheckins.reduce((sum, c) => sum + c.mood_score, 0) / recentCheckins.length;
-    const avgEnergy = recentCheckins.reduce((sum, c) => sum + c.energy_score, 0) / recentCheckins.length;
-    const avgSleep = recentCheckins.reduce((sum, c) => sum + c.sleep_hours, 0) / recentCheckins.length;
-    const avgSleepQuality = recentCheckins.reduce((sum, c) => sum + (c.sleep_quality_score || 0), 0) / recentCheckins.length;
-    const mid = Math.floor(recentCheckins.length / 2);
-    const firstHalf = recentCheckins.slice(mid);
-    const secondHalf = recentCheckins.slice(0, mid);
-    const firstMood = firstHalf.reduce((sum, c) => sum + c.mood_score, 0) / firstHalf.length;
-    const secondMood = secondHalf.reduce((sum, c) => sum + c.mood_score, 0) / secondHalf.length;
-    const moodTrend = secondMood > firstMood + 0.5 ? 'increasing' : 
-                     secondMood < firstMood - 0.5 ? 'decreasing' : 'stable';
-    const firstEnergy = firstHalf.reduce((sum, c) => sum + c.energy_score, 0) / firstHalf.length;
-    const secondEnergy = secondHalf.reduce((sum, c) => sum + c.energy_score, 0) / secondHalf.length;
-    const energyTrend = secondEnergy > firstEnergy + 0.5 ? 'increasing' : 
-                       secondEnergy < firstEnergy - 0.5 ? 'decreasing' : 'stable';
-    const sleepEnergyCorr = calculateCorrelation(
-      recentCheckins.map(c => c.sleep_hours),
-      recentCheckins.map(c => c.energy_score)
-    );
-    const sleepMoodCorr = calculateCorrelation(
-      recentCheckins.map(c => c.sleep_hours),
-      recentCheckins.map(c => c.mood_score)
-    );
-    const dayScores: { [key: string]: number[] } = {};
-    recentCheckins.forEach(checkin => {
-      const day = new Date(checkin.date).toLocaleDateString('pt-BR', { weekday: 'long' });
-      if (!dayScores[day]) dayScores[day] = [];
-      dayScores[day].push(checkin.mood_score);
+    // 3. Carga Crônica (chronicLoad) - média dos últimos 28 dias para cada dia
+    const chronicLoad: { date: string; value: number }[] = [];
+    allDates.forEach((date: string) => {
+      const dateObj = new Date(date);
+      const past28 = trainingLoad.filter((tl) => {
+        const d = new Date(tl.date);
+        return d <= dateObj && d >= new Date(dateObj.getTime() - 27 * 24 * 60 * 60 * 1000);
+      });
+      const avg = past28.length ? past28.reduce((a, b) => a + b.load, 0) / past28.length : 0;
+      chronicLoad.push({ date, value: avg });
     });
-    let bestWeekday = 'Segunda-feira';
-    let bestScore = 0;
-    Object.entries(dayScores).forEach(([day, scores]) => {
-      const avg = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-      if (avg > bestScore) {
-        bestScore = avg;
-        bestWeekday = day;
-      }
-    });
+
+    // 4. Eficiência de Corrida (runningEfficiency): para treinos do tipo 'Rodagem'
+    const runningEfficiency = trainingSessions
+      .filter((t: any) => t.training_type && t.training_type.toLowerCase().includes('rodagem'))
+      .map((t: any) => ({
+        pace: t.duration_minutes && t.distance_km ? t.duration_minutes / t.distance_km : 0,
+        pse: t.perceived_effort || 0,
+        date: t.training_date,
+      }));
+
     return {
-      avgMood,
-      avgEnergy,
-      avgSleep,
-      avgSleepQuality,
-      moodTrend,
-      energyTrend,
-      sleepEnergyCorr,
-      sleepMoodCorr,
-      bestWeekday,
-      weeklyWellbeing,
-      trainingVolumeByWeek,
+      trainingLoad,
+      acuteLoad,
+      chronicLoad,
+      runningEfficiency,
     };
   },
 
@@ -482,6 +450,23 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       .update({ readiness_insight_text: insightText })
       .eq('id', checkinId);
     if (error) throw error;
+  },
+  loadWeeklyReflections: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('weekly_reflections')
+        .select('enjoyment, progress, confidence, week_start, created_at')
+        .eq('user_id', user.id)
+        .order('week_start', { ascending: false });
+      if (error) throw error;
+      set({ weeklyReflections: (data as WeeklyReflection[]) || [], isLoading: false, error: null });
+    } catch (error: any) {
+      console.error('Error loading weekly reflections:', error);
+      set({ isLoading: false, error: error.message || 'Erro ao carregar reflexões semanais.' });
+    }
   },
 }));
 

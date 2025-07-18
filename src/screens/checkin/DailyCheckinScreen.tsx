@@ -121,38 +121,14 @@ export default function DailyCheckinScreen() {
   const [focus, setFocus] = useState(3);
   const [confidence, setConfidence] = useState(3);
   const [notes, setNotes] = useState('');
-  const [formMode, setFormMode] = useState<'form' | 'view'>('form');
+  // Remover formMode e estados duplicados
 
   // Estado para modal semanal
   const [weeklyReflectionVisible, setWeeklyReflectionVisible] = useState(false);
-  // Novo estado para o modal de check-in diário
+  // Estado para o modal de check-in diário (wizard)
   const [dailyCheckinVisible, setDailyCheckinVisible] = useState(false);
 
-  // Preencher dados ao editar
-  useEffect(() => {
-    if (hasCheckedInToday && todayCheckin) {
-      setFormMode('view');
-      setSleepQuality(todayCheckin.sleep_quality_score ?? 4);
-      setSoreness(todayCheckin.soreness_score ?? 4);
-      setEmotion(todayCheckin.mood_score ?? null);
-      setMotivation(todayCheckin.energy_score ?? 4);
-      setFocus(todayCheckin.focus_score ?? 3);
-      setConfidence(todayCheckin.confidence_score ?? 3);
-      setNotes(todayCheckin.notes || '');
-    } else {
-      setFormMode('form');
-      setSleepQuality(4);
-      setSoreness(4);
-      setEmotion(null);
-      setMotivation(4);
-      setFocus(3);
-      setConfidence(3);
-      setNotes('');
-    }
-    setStep(0);
-  }, [hasCheckedInToday, todayCheckin]);
-
-  // Submissão final
+  // Submissão final do check-in diário
   const handleSubmit = async () => {
     const checkinData = {
       sleep_quality: sleepQuality,      // 1-7
@@ -162,80 +138,48 @@ export default function DailyCheckinScreen() {
       motivation,                      // 1-5
       focus,                           // 1-5
       confidence,                      // 1-5
-      // NÃO envie fatigue, stress, enjoyment, progress, etc.
+      energy_score: motivation,        // Usando motivation como energia
+      sleep_hours: 8,                  // Valor padrão (pode ser ajustado)
     };
     try {
       console.log('Enviando check-in:', checkinData);
       const saved = await saveDailyCheckin(checkinData);
-      // 2. Chamar IA
+      // Insight opcional
       const athleteData = {
-        context_type: 'solo', // ajuste conforme seu fluxo
+        context_type: 'solo',
         last_checkin: checkinData,
         planned_training: null,
       };
       const insight = await generateInsight(athleteData);
-      // 3. Exibir insight
       Alert.alert('Insight de Prontidão', insight);
-      // 4. Salvar insight no banco
       await updateCheckinWithInsight(saved.id, insight);
-      setFormMode('view');
+      setDailyCheckinVisible(false);
+      await loadTodayCheckin();
     } catch (err) {
       Alert.alert('Erro', err instanceof Error ? err.message : 'Erro desconhecido');
       console.error('Erro ao salvar check-in:', err);
     }
   };
 
-  // Função para obter o início da semana (domingo)
-  function getWeekStart(date: Date) {
-    const d = new Date(date);
-    d.setHours(0,0,0,0);
-    d.setDate(d.getDate() - d.getDay());
-    return d.toISOString().split('T')[0];
-  }
-  // Só permite reflexão semanal aos domingos
-  const isSunday = new Date().getDay() === 0;
+  // Submissão da reflexão semanal
   const handleSaveWeeklyReflection = async (answers: WeeklyReflectionAnswers) => {
     const weekStart = getWeekStart(new Date());
-    await submitWeeklyReflection({
-      enjoyment: answers.enjoyment,
-      progress: answers.progress,
-      confidence: answers.confidence,
-      week_start: weekStart,
-    });
-    setWeeklyReflectionVisible(false);
+    try {
+      await submitWeeklyReflection({
+        enjoyment: answers.enjoyment,
+        progress: answers.progress,
+        confidence: answers.confidence,
+        week_start: weekStart,
+      });
+      setWeeklyReflectionVisible(false);
+      Alert.alert('Reflexão salva com sucesso!');
+    } catch (err) {
+      Alert.alert('Erro ao salvar reflexão semanal', err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Erro ao salvar reflexão semanal:', err);
+    }
   };
 
-  if (isSubmitting) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
-  if (formMode === 'view' && todayCheckin) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 16 }}>
-        <Card>
-          <Card.Title title="Seu Check-in de Hoje" />
-          <Card.Content>
-            <Text style={{ marginBottom: 8 }}>Qualidade do Sono: {todayCheckin.sleep_quality_score}/7</Text>
-            <Text style={{ marginBottom: 8 }}>Dores/Cansaço Muscular: {todayCheckin.soreness_score}/7</Text>
-            <Text style={{ marginBottom: 8 }}>Estado Emocional: {todayCheckin.mood_score ? ['😢','😕','😐','🙂','😄'][todayCheckin.mood_score-1] : '-'}</Text>
-            <Text style={{ marginBottom: 8 }}>Motivação: {todayCheckin.energy_score}/7</Text>
-            <Text style={{ marginBottom: 8 }}>Foco: {todayCheckin.focus_score ?? '-'}/5</Text>
-            <Text style={{ marginBottom: 8 }}>Confiança: {todayCheckin.confidence_score ?? '-'}/5</Text>
-            <Text style={{ marginBottom: 8 }}>Notas: {todayCheckin.notes || '-'}</Text>
-          </Card.Content>
-          <Card.Actions>
-            <Button mode="contained" onPress={() => setFormMode('form')}>Editar Check-in</Button>
-          </Card.Actions>
-        </Card>
-      </View>
-    );
-  }
-
-  // Wizard steps
+  // Wizard steps para o modal de check-in diário
   const steps = [
     {
       label: 'Como foi sua noite de sono?',
@@ -261,7 +205,7 @@ export default function DailyCheckinScreen() {
       ),
     },
     {
-      label: 'Qual seu nível de dores/cansaço muscular?',
+      label: 'Dores Musculares (1 = Nenhuma, 7 = Fortes)',
       content: (
         <>
           <Text style={{ marginBottom: 12, textAlign: 'center' }}>1 = Nenhuma Dor, 7 = Dores Fortes</Text>
@@ -370,40 +314,27 @@ export default function DailyCheckinScreen() {
     },
   ];
 
-  // Renderização do wizard
-  if (formMode === 'form') {
+  // Função para obter o início da semana (domingo)
+  function getWeekStart(date: Date) {
+    const d = new Date(date);
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() - d.getDay());
+    return d.toISOString().split('T')[0];
+  }
+  // Só permite reflexão semanal aos domingos
+  const isSunday = new Date().getDay() === 0;
+
+  if (isSubmitting) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 16 }}>
-        <Card>
-          <Card.Title title="Check-in Diário" />
-          <Card.Content>
-            <Text style={{ marginBottom: 8 }}>{steps[step].label}</Text>
-            <Text style={{ marginBottom: 8, color: 'gray', textAlign: 'center' }}>Passo {step+1} de {steps.length}</Text>
-            {steps[step].content}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 24 }}>
-              {step > 0 ? (
-                <Button onPress={() => setStep(step-1)} mode="outlined">Voltar</Button>
-              ) : <View />}
-              {step < steps.length-1 ? (
-                <Button onPress={() => setStep(step+1)} mode="contained">Próximo</Button>
-              ) : (
-                <Button
-                  mode="contained"
-                  onPress={handleSubmit}
-                >
-                  Finalizar
-                </Button>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', padding: 16 }}>
-      {/* Card da Reflexão Semanal - AGORA NO TOPO */}
+      {/* Card da Reflexão Semanal - TOPO */}
       <Card style={{ marginBottom: 24 }}>
         <Card.Title title="Reflexão Semanal" />
         <Card.Content>
@@ -433,26 +364,29 @@ export default function DailyCheckinScreen() {
           </Button>
         </Card.Content>
       </Card>
-      <DailyCheckinModal
-        visible={dailyCheckinVisible}
-        onSave={async ({ sleepQuality, fatigue, stress, soreness, notes }) => {
-          const today = new Date().toISOString().split('T')[0];
-          await submitCheckin({
-            date: today,
-            mood_score: 0,
-            energy_score: 0,
-            sleep_hours: 0,
-            sleep_quality_score: sleepQuality,
-            fatigue_score: fatigue,
-            stress_score: stress,
-            soreness_score: soreness,
-            notes,
-          });
-          await loadTodayCheckin();
-          setDailyCheckinVisible(false);
-        }}
-        onCancel={() => setDailyCheckinVisible(false)}
-      />
+      {/* Modal do wizard de check-in diário */}
+      <Modal visible={dailyCheckinVisible} onDismiss={() => setDailyCheckinVisible(false)} contentContainerStyle={{ backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 12, maxHeight: '90%' }}>
+        <Text variant="titleLarge" style={{ marginBottom: 16 }}>Check-in Diário</Text>
+        <Text style={{ marginBottom: 8, color: 'gray', textAlign: 'center' }}>Passo {step+1} de {steps.length}</Text>
+        <Text style={{ marginBottom: 8 }}>{steps[step].label}</Text>
+        {steps[step].content}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 24 }}>
+          {step > 0 ? (
+            <Button onPress={() => setStep(step-1)} mode="outlined">Voltar</Button>
+          ) : <View />}
+          {step < steps.length-1 ? (
+            <Button onPress={() => setStep(step+1)} mode="contained">Próximo</Button>
+          ) : (
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+            >
+              Salvar
+            </Button>
+          )}
+        </View>
+      </Modal>
+      {/* Modal da Reflexão Semanal */}
       <WeeklyReflectionModal
         visible={weeklyReflectionVisible}
         onSave={handleSaveWeeklyReflection}
