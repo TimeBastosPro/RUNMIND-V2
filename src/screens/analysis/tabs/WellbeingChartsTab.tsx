@@ -1,65 +1,65 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ScrollView, View, Dimensions } from 'react-native';
 import { Card, Text } from 'react-native-paper';
-// import { useAnalyticsStore } from '../../../stores/analytics'; // Supondo que será usado futuramente
 import { LineChart } from 'react-native-gifted-charts';
+import { useCheckinStore } from '../../../stores/checkin';
+import type { UserAnalytics } from '../../../types/database';
 
 const screenWidth = Dimensions.get('window').width;
 
-// Mock data para o gráfico de área empilhada
-const wellbeingData = [
-  { dia: 'Seg', sono: 7, fadiga: 2, stress: 3, dores: 1 },
-  { dia: 'Ter', sono: 6, fadiga: 3, stress: 2, dores: 2 },
-  { dia: 'Qua', sono: 8, fadiga: 1, stress: 2, dores: 1 },
-  { dia: 'Qui', sono: 7, fadiga: 2, stress: 4, dores: 2 },
-  { dia: 'Sex', sono: 6, fadiga: 3, stress: 3, dores: 3 },
-  { dia: 'Sáb', sono: 7, fadiga: 2, stress: 2, dores: 1 },
-  { dia: 'Dom', sono: 8, fadiga: 1, stress: 1, dores: 1 },
-];
+// Adicione o tipo para weeklyWellbeing
+interface WeeklyWellbeing {
+  week: string;
+  sono: number;
+  fadiga: number;
+  stress: number;
+  dores: number;
+}
 
-const areaChartData = [
-  {
-    data: wellbeingData.map((d, i) => ({ value: d.sono, label: wellbeingData[i].dia })),
-    color: '#1976d2',
-    label: 'Qualidade do Sono',
-  },
-  {
-    data: wellbeingData.map((d, i) => ({ value: d.fadiga, label: wellbeingData[i].dia })),
-    color: '#FFD600',
-    label: 'Fadiga',
-  },
-  {
-    data: wellbeingData.map((d, i) => ({ value: d.stress, label: wellbeingData[i].dia })),
-    color: '#FF7043',
-    label: 'Stress',
-  },
-  {
-    data: wellbeingData.map((d, i) => ({ value: d.dores, label: wellbeingData[i].dia })),
-    color: '#8BC34A',
-    label: 'Dores Musculares',
-  },
-];
+export default function WellbeingChartsTab() {
+  const analytics = useMemo(() => useCheckinStore.getState().calculateAnalytics() as (UserAnalytics & { weeklyWellbeing?: WeeklyWellbeing[] }), []);
+  const weekly: WeeklyWellbeing[] = analytics?.weeklyWellbeing || [];
 
-// Mock data para o gráfico de linha
-const readinessData = [
-  { value: 80, label: 'Seg' },
-  { value: 72, label: 'Ter' },
-  { value: 65, label: 'Qua' },
-  { value: 90, label: 'Qui' },
-  { value: 60, label: 'Sex' },
-  { value: 55, label: 'Sáb' },
-  { value: 40, label: 'Dom' },
-];
+  useEffect(() => {
+    // fetchTrainingSessions(); // This line was removed from the original file, so it's removed here.
+  }, []);
 
-function WellbeingChartsTab() {
-  // const analytics = useAnalyticsStore(); // Para uso futuro
+  // Dados reais agregados
+  // const weekly = analytics?.weeklyWellbeing || []; // This line is now redundant as weekly is declared above.
+
+  // Montar dados para os gráficos
+  const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const lastWeek = weekly.length ? weekly[weekly.length - 1] : null;
+  const chartSeries = [
+    {
+      data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.sono, label: `Sem ${i + 1}` })),
+      color: '#1976d2',
+      label: 'Qualidade do Sono',
+    },
+    {
+      data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.fadiga, label: `Sem ${i + 1}` })),
+      color: '#FFD600',
+      label: 'Fadiga',
+    },
+    {
+      data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.stress, label: `Sem ${i + 1}` })),
+      color: '#FF7043',
+      label: 'Stress',
+    },
+    {
+      data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.dores, label: `Sem ${i + 1}` })),
+      color: '#8BC34A',
+      label: 'Dores Musculares',
+    },
+  ];
+
   return (
     <ScrollView contentContainerStyle={{ padding: 16 }}>
       <Card style={{ marginBottom: 24 }}>
         <Card.Title title="Componentes do Bem-Estar" />
         <Card.Content>
           <View>
-            {areaChartData.map((serie, idx) => (
+            {chartSeries.map((serie, idx) => (
               <View key={serie.label} style={{ marginBottom: 16 }}>
                 <Text style={{ color: serie.color, fontWeight: 'bold', marginBottom: 4 }}>{serie.label}</Text>
                 <LineChart
@@ -69,7 +69,7 @@ function WellbeingChartsTab() {
                   color={serie.color}
                   yAxisLabelWidth={24}
                   yAxisTextStyle={{ fontSize: 10 }}
-                  xAxisLabelTexts={wellbeingData.map((d) => d.dia)}
+                  xAxisLabelTexts={serie.data.map((d) => d.label)}
                   hideDataPoints={false}
                   areaChart
                   startFillColor={serie.color}
@@ -82,37 +82,31 @@ function WellbeingChartsTab() {
           </View>
         </Card.Content>
       </Card>
-      <Card>
-        <Card.Title title="Índice de Prontidão RunMind" />
-        <Card.Content>
-          <View style={{ position: 'relative', width: screenWidth - 48, height: 220 }}>
-            {/* Zonas coloridas de fundo */}
-            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} pointerEvents="none">
-              <View style={{ flex: 1, backgroundColor: '#E8F5E9', opacity: 0.7 }} /> {/* Verde >75 */}
-              <View style={{ position: 'absolute', left: 0, right: 0, top: '33%', bottom: '33%', backgroundColor: '#FFF9C4', opacity: 0.7 }} /> {/* Amarelo 50-75 */}
-              <View style={{ position: 'absolute', left: 0, right: 0, top: '66%', bottom: 0, backgroundColor: '#FFEBEE', opacity: 0.7 }} /> {/* Vermelho <50 */}
-            </View>
-            <LineChart
-              data={readinessData}
-              width={screenWidth - 48}
-              height={220}
-              color="#1976d2"
-              thickness={3}
-              hideDataPoints={false}
-              xAxisLabelTexts={readinessData.map((d) => d.label)}
-              yAxisLabelWidth={24}
-              yAxisTextStyle={{ fontSize: 10 }}
-              areaChart
-              startFillColor="#1976d2"
-              endFillColor="#fff"
-              startOpacity={0.1}
-              endOpacity={0.01}
-            />
-          </View>
-        </Card.Content>
-      </Card>
+      {/* Exemplo de gráfico de prontidão pode ser adaptado para usar outros dados reais se necessário */}
+      {/* O bloco abaixo foi removido pois 'data' não é uma propriedade válida para LineChart */}
+      {/*
+      <LineChart
+        data={[
+          {
+            label: 'Sono',
+            data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.sono, label: `Sem ${i + 1}` })),
+          },
+          {
+            label: 'Fadiga',
+            data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.fadiga, label: `Sem ${i + 1}` })),
+          },
+          {
+            label: 'Estresse',
+            data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.stress, label: `Sem ${i + 1}` })),
+          },
+          {
+            label: 'Dores',
+            data: weekly.map((w: WeeklyWellbeing, i: number) => ({ value: w.dores, label: `Sem ${i + 1}` })),
+          },
+        ]}
+        xAxisLabelTexts={weekly.map((w: WeeklyWellbeing, i: number) => `Sem ${i + 1}`)}
+      />
+      */}
     </ScrollView>
   );
-}
-
-export default WellbeingChartsTab; 
+} 

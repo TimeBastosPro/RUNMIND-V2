@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Alert } from 'react-native';
+import { View, ScrollView, Alert, Platform } from 'react-native';
 import { Card, Text, TextInput, RadioButton, Button } from 'react-native-paper';
 import Slider from '@react-native-community/slider';
 import { useCheckinStore } from '../../stores/checkin';
@@ -13,6 +13,23 @@ const trainingTypes = [
   { label: 'Trail', value: 'trail' },
 ];
 
+function SliderUniversal(props: any) {
+  if (Platform.OS === 'web') {
+    return (
+      <input
+        type="range"
+        min={props.minimumValue}
+        max={props.maximumValue}
+        step={props.step}
+        value={props.value}
+        onChange={e => props.onValueChange(Number(e.target.value))}
+        style={{ width: '100%', ...props.style }}
+      />
+    );
+  }
+  return <Slider {...props} />;
+}
+
 export default function LogTrainingScreen() {
   const [trainingDate, setTrainingDate] = useState('');
   const [title, setTitle] = useState('');
@@ -24,7 +41,7 @@ export default function LogTrainingScreen() {
   const [effort, setEffort] = useState(5);
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const submitTrainingSession = useCheckinStore(s => s.submitTrainingSession);
+  const saveTrainingSession = useCheckinStore(s => s.saveTrainingSession);
 
   const handleSaveTraining = async () => {
     setIsSaving(true);
@@ -41,7 +58,7 @@ export default function LogTrainingScreen() {
         notes,
         source: 'manual',
       };
-      await submitTrainingSession(trainingData);
+      await saveTrainingSession(trainingData);
       Alert.alert('Treino salvo com sucesso!');
       // Opcional: resetar campos ou navegar
     } catch (error: any) {
@@ -127,7 +144,7 @@ export default function LogTrainingScreen() {
         <Card.Title title="Feedback e Sensações" />
         <Card.Content>
           <Text style={{ marginBottom: 8 }}>Percepção de Esforço</Text>
-          <Slider
+          <SliderUniversal
             minimumValue={1}
             maximumValue={10}
             step={1}

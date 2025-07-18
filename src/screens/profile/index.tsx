@@ -1,9 +1,26 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Alert } from 'react-native';
+import { View, ScrollView, Alert, Platform } from 'react-native';
 import { Card, Text, Button, SegmentedButtons, TextInput, RadioButton, Checkbox, List } from 'react-native-paper';
 import Slider from '@react-native-community/slider';
 import { useAuthStore } from '../../stores/auth';
 import { useNavigation } from '@react-navigation/native';
+
+function SliderUniversal(props: any) {
+  if (Platform.OS === 'web') {
+    return (
+      <input
+        type="range"
+        min={props.minimumValue}
+        max={props.maximumValue}
+        step={props.step}
+        value={props.value}
+        onChange={e => props.onValueChange(Number(e.target.value))}
+        style={{ width: '100%', ...props.style }}
+      />
+    );
+  }
+  return <Slider {...props} />;
+}
 
 const experienceOptions = [
   { label: 'Iniciante', value: 'beginner' },
@@ -182,7 +199,7 @@ export default function ProfileScreen() {
                 value={experienceLevel}
               >
                 {experienceOptions.map(opt => (
-                  <RadioButton.Item key={opt.value} label={opt.label} value={opt.value} disabled={!isEditing} />
+                  <RadioButton.Item key={opt.value} label={opt.label} value={opt.value} />
                 ))}
               </RadioButton.Group>
               <Text style={{ marginTop: 8, marginBottom: 4 }}>Principal Objetivo</Text>
@@ -191,7 +208,7 @@ export default function ProfileScreen() {
                 value={mainGoal}
               >
                 {goalOptions.map(opt => (
-                  <RadioButton.Item key={opt.value} label={opt.label} value={opt.value} disabled={!isEditing} />
+                  <RadioButton.Item key={opt.value} label={opt.label} value={opt.value} />
                 ))}
               </RadioButton.Group>
               <Text style={{ marginTop: 8, marginBottom: 4 }}>Contexto de Treino</Text>
@@ -200,7 +217,7 @@ export default function ProfileScreen() {
                 value={contextType}
               >
                 {contextOptions.map(opt => (
-                  <RadioButton.Item key={opt.value} label={opt.label} value={opt.value} disabled={!isEditing} />
+                  <RadioButton.Item key={opt.value} label={opt.label} value={opt.value} />
                 ))}
               </RadioButton.Group>
             </Card.Content>
@@ -224,8 +241,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q1 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
                 {/* Pergunta 2 */}
@@ -237,8 +254,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q2 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
                 {/* Pergunta 3 */}
@@ -250,8 +267,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q3 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
                 {/* Pergunta 4 */}
@@ -263,8 +280,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q4 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
                 {/* Pergunta 5 */}
@@ -276,8 +293,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q5 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
                 {/* Pergunta 6 */}
@@ -289,8 +306,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q6 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
                 {/* Pergunta 7 */}
@@ -302,8 +319,8 @@ export default function ProfileScreen() {
                   value={parqAnswers.q7 ?? ''}
                 >
                   <View style={{ flexDirection: 'row', marginBottom: 24 }}>
-                    <RadioButton.Item label="Sim" value="sim" style={{ flex: 1 }} />
-                    <RadioButton.Item label="Não" value="nao" style={{ flex: 1 }} />
+                    <RadioButton.Item label="Sim" value="sim" />
+                    <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
               </Card.Content>
@@ -331,14 +348,12 @@ export default function ProfileScreen() {
                           : [...p.trainingDays, day],
                       }));
                     }}
-                    disabled={!isEditing}
                   />
                 ))}
                 <Text style={{ marginTop: 16, marginBottom: 4 }}>Qual seu período preferido para treinar?</Text>
                 <RadioButton.Group
                   onValueChange={value => setPreferences(p => ({ ...p, trainingPeriod: value }))}
                   value={preferences.trainingPeriod}
-                  disabled={!isEditing}
                 >
                   <RadioButton.Item label="Manhã" value="manha" />
                   <RadioButton.Item label="Tarde" value="tarde" />
@@ -348,7 +363,6 @@ export default function ProfileScreen() {
                 <RadioButton.Group
                   onValueChange={value => setPreferences(p => ({ ...p, terrainType: value }))}
                   value={preferences.terrainType}
-                  disabled={!isEditing}
                 >
                   <RadioButton.Item label="Asfalto/Rua" value="asfalto" />
                   <RadioButton.Item label="Trilha/Montanha" value="trilha" />
@@ -362,14 +376,13 @@ export default function ProfileScreen() {
               <Card.Title title="Sua Rotina e Bem-Estar" />
               <Card.Content>
                 <Text style={{ marginBottom: 8 }}>Como você descreveria a intensidade do seu trabalho/estudos?</Text>
-                <Slider
+                <SliderUniversal
                   minimumValue={1}
                   maximumValue={5}
                   step={1}
                   value={preferences.workIntensity}
                   onValueChange={value => setPreferences(p => ({ ...p, workIntensity: value }))}
                   style={{ width: '100%', marginBottom: 8 }}
-                  disabled={!isEditing}
                 />
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
                   <Text>Leve</Text>
@@ -379,7 +392,6 @@ export default function ProfileScreen() {
                 <RadioButton.Group
                   onValueChange={value => setPreferences(p => ({ ...p, sleepQuality: value }))}
                   value={preferences.sleepQuality}
-                  disabled={!isEditing}
                 >
                   <RadioButton.Item label="Regular e consistente" value="regular" />
                   <RadioButton.Item label="Varia um pouco" value="varia" />
@@ -389,7 +401,6 @@ export default function ProfileScreen() {
                 <RadioButton.Group
                   onValueChange={value => setPreferences(p => ({ ...p, wakeFeeling: value }))}
                   value={preferences.wakeFeeling}
-                  disabled={!isEditing}
                 >
                   <RadioButton.Item label="Descansado e com energia" value="descansado" />
                   <RadioButton.Item label="Um pouco cansado" value="pouco_cansado" />
@@ -405,7 +416,6 @@ export default function ProfileScreen() {
                 <RadioButton.Group
                   onValueChange={value => setPreferences(p => ({ ...p, hydration: value }))}
                   value={preferences.hydration}
-                  disabled={!isEditing}
                 >
                   <RadioButton.Item label="Bebo água constantemente" value="constante" />
                   <RadioButton.Item label="Bebo quando sinto sede" value="sede" />
@@ -415,7 +425,6 @@ export default function ProfileScreen() {
                 <RadioButton.Group
                   onValueChange={value => setPreferences(p => ({ ...p, recoveryTechniques: value }))}
                   value={preferences.recoveryTechniques}
-                  disabled={!isEditing}
                 >
                   <RadioButton.Item label="Sim, regularmente" value="regular" />
                   <RadioButton.Item label="Às vezes" value="as_vezes" />
@@ -435,7 +444,6 @@ export default function ProfileScreen() {
                           : [...p.stressManagement, option],
                       }));
                     }}
-                    disabled={!isEditing}
                   />
                 ))}
               </Card.Content>

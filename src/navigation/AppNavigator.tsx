@@ -21,6 +21,7 @@ import GlossaryScreen from '../screens/academy/GlossaryScreen';
 import GuidesScreen from '../screens/academy/GuidesScreen';
 import ChatScreen from '../screens/academy/ChatScreen';
 import ComparativeChartsScreen from '../screens/analysis/ComparativeChartsScreen';
+// Remover: import CalendarScreen from '../screens/training/CalendarScreen';
 
 // Types
 type TabParamList = {
@@ -38,6 +39,7 @@ type StackParamList = {
   Auth: undefined;
   InitialLoading: undefined;
   ComparativeCharts: undefined;
+  Calendar: undefined;
 };
 
 type NavigationProps = {

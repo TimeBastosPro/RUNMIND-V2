@@ -26,7 +26,6 @@ export default function CrossAnalysisTab() {
             barBorderRadius={8}
             frontColor="#1976d2"
             yAxisTextStyle={{ color: 'gray', fontSize: 12 }}
-            xAxisTextStyle={{ color: 'gray', fontSize: 12 }}
             height={220}
             noOfSections={5}
             spacing={24}

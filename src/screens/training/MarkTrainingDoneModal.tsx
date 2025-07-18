@@ -81,14 +81,14 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
 
   // Padronização visual: mesmo container do modal planejado
   const containerStyle = {
-    width: '90%',
-    alignSelf: 'center',
+    width: '90%' as `${number}%`,
+    alignSelf: 'center' as 'center',
     marginVertical: 20,
     borderRadius: 12,
     padding: 20,
     backgroundColor: 'white',
     maxWidth: 600,
-    maxHeight: '90%',
+    maxHeight: '90%' as `${number}%`,
   };
 
   // Padronização de título, espaçamento e botões

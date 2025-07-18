@@ -8,6 +8,9 @@ import type { TrainingSession } from '../../types/database';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MarkTrainingDoneModal from './MarkTrainingDoneModal';
 import Slider from '@react-native-community/slider';
+import { UniversalDocumentPicker } from '../../components/ui/UniversalDocumentPicker';
+import Papa from 'papaparse';
+import { useAuthStore } from '../../stores/auth';
 
 // --- Constantes e Funções de Data ---
 const WEEKDAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
@@ -75,218 +78,92 @@ interface CustomDayProps {
   onLongPress: (day: Date, training: TrainingSession) => void;
 }
 
-function CustomDay({ day, displayMonth, training, onPress, onLongPress, onOpenPlanModal, onOpenDoneModal }: CustomDayProps & { onOpenPlanModal: (day: Date, training?: TrainingSession | null) => void, onOpenDoneModal: (day: Date, training?: TrainingSession | null) => void }) {
+function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealizadoModal }: CustomDayProps & { onOpenPlanModal: (day: Date, training?: TrainingSession | null) => void, onOpenRealizadoModal: (day: Date, training?: TrainingSession | null) => void }) {
     const isOtherMonth = day.getMonth() !== displayMonth;
     const isToday = isSameDay(day, new Date());
 
-    let chipStyle = {};
-    let chipText = '';
-    let dynamicStyle: any = {};
-
+    // Lógica de cor/status
+    let dynamicStyle: any = { backgroundColor: '#fff', borderColor: '#e0e0e0' };
+    let status = '';
     if (training) {
         if (training.status === 'completed') {
-            chipStyle = {};
-            chipText = '';
-            dynamicStyle = { borderColor: '#e0e0e0', backgroundColor: '#fff' };
+            dynamicStyle = { ...dynamicStyle, borderColor: '#4CAF50', boxShadow: '0 0 8px #4CAF50' };
+            status = 'realizado';
         } else if (training.status === 'planned') {
-            chipStyle = {};
-            chipText = '';
-            dynamicStyle = { borderColor: '#e0e0e0', backgroundColor: '#fff' };
+            // Verificar se o dia já passou
+            const now = new Date();
+            const cardDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+            const isPast = cardDate < now && !isSameDay(day, now);
+            if (isPast) {
+                dynamicStyle = { ...dynamicStyle, borderColor: '#D32F2F', boxShadow: '0 0 8px #D32F2F' };
+                status = 'perdido';
+            } else {
+                dynamicStyle = { ...dynamicStyle, borderColor: '#FFD600', boxShadow: '0 0 8px #FFD600' };
+                status = 'planejado';
+            }
         }
-    } else {
-        dynamicStyle = { backgroundColor: '#fff' };
     }
     if (isOtherMonth) {
         dynamicStyle.opacity = 0.5;
         dynamicStyle.backgroundColor = '#f5f5f5';
     }
 
-    // Função para marcar como realizado
-    const handleMarkCompleted = () => {
-        if (training && training.status === 'planned') {
-            onOpenDoneModal(day, training); // agora chama o modal de realizado
-        }
-    };
-    // Função para editar/visualizar treino planejado
-    const handleEditTraining = () => {
-        onOpenPlanModal(day, training);
-    };
-    // Função para editar/visualizar treino realizado
-    const handleEditRealizado = () => {
-        onOpenDoneModal(day, training);
-    };
+    // Determinar se existe treino planejado
+    const hasPlanned = training && training.status === 'planned';
+    const treinoButtonTitle = hasPlanned ? 'Editar' : 'Criar';
 
-    // Clique no card vazio: abre modal de planejamento
-    if (!training) {
-        return (
-            <Pressable
-                onPress={() => onOpenPlanModal(day, null)}
-                style={[styles.dayContainer, dynamicStyle]}
-            >
-                <Text
-                  style={[
-                    styles.dayText,
-                    isToday && styles.todayHighlight,
-                    { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }
-                  ]}
-                >
-                    {day.getDate()}
-                </Text>
-                <View style={styles.trainingContent}>
-                    <MaterialCommunityIcons name="run" size={28} color="#e0e0e0" style={{ marginTop: 16 }} />
-                </View>
-            </Pressable>
-        );
-    }
-
-    // Dentro do CustomDay, ajuste visual e conteúdo dos cards:
-    if (training && training.status === 'completed') {
-        // Card de treino realizado: sombra verde, altimetria +positivo / -negativo
-        return (
-            <View style={[styles.dayContainer, {
-                shadowColor: '#4CAF50',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.25,
-                shadowRadius: 12,
-                elevation: 8,
-                borderColor: '#4CAF50',
-            }]}> 
-                <Pressable
-                    onPress={() => onOpenPlanModal(day, training)}
-                    onLongPress={() => training && onLongPress(day, training)}
-                    style={{ width: '100%' }}
-                >
-                    <Text style={[styles.dayText, isToday && styles.todayHighlight, { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }]}>{day.getDate()}</Text>
-                </Pressable>
-                <View style={[styles.trainingContent, {justifyContent:'center', alignItems:'flex-start', flex:1, width:'100%'}]}> 
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{training.distance_km ? `${training.distance_km} km` : `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min`}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Altimetria: </Text><Text style={styles.cardText}>+{training.elevation_gain_meters || '0'} / -{String(('elevation_loss_meters' in training && training.elevation_loss_meters != null) ? training.elevation_loss_meters : 0)}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>FC Média: </Text><Text style={styles.cardText}>{training.avg_heart_rate || '-'}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>PSE: </Text><Text style={styles.cardText}>{training.perceived_effort || '-'}</Text></View>
-                    <View style={styles.cardButtonRow}>
-                        <Button
-                          mode="outlined"
-                          style={styles.actionButton}
-                          labelStyle={styles.actionButtonLabelOutline}
-                          onPress={() => onOpenPlanModal(day, training)}
-                        >
-                          Treino
-                        </Button>
-                        <Button
-                          mode="contained"
-                          style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
-                          labelStyle={styles.actionButtonLabelContained}
-                          onPress={() => onOpenDoneModal(day, training)}
-                        >
-                          Realizado
-                        </Button>
-                  </View>
-                </View>
-            </View>
-        );
-    }
-
-    // Para treino planejado:
-    // Sombra amarela, sem percurso e esforço, fonte maior, botões alinhados embaixo
-    if (training && training.status === 'planned') {
-        // Verificar se o dia do card já passou
-        const now = new Date();
-        const cardDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
-        // O card só fica vermelho se o dia do card já passou (data < agora) E não for o dia atual
-        const isPast = cardDate < now && !isSameDay(day, now);
-        const shadowColor = isPast ? '#D32F2F' : '#FFD600';
-        const borderColor = isPast ? '#D32F2F' : '#FFD600';
-        return (
-            <View style={[styles.dayContainer, {
-                shadowColor: shadowColor,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.25,
-                shadowRadius: 12,
-                elevation: 8,
-                borderColor: borderColor,
-            }]}> 
-                <Pressable
-                    onPress={() => onOpenPlanModal(day, training)}
-                    onLongPress={() => training && onLongPress(day, training)}
-                    style={{ width: '100%' }}
-                >
-                    <Text style={[styles.dayText, isToday && styles.todayHighlight, { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }]}>{day.getDate()}</Text>
-                </Pressable>
-                <View style={[styles.trainingContent, {justifyContent:'center', alignItems:'flex-start', flex:1, width:'100%'}]}> 
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Modalidade: </Text><Text style={styles.cardText}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></View>
-                    <View style={styles.cardRow}><Text style={styles.cardLabel}>Intensidade: </Text><Text style={styles.cardText}>{training.intensidade || '-'}</Text></View>
-                    <View style={styles.cardButtonRow}>
-                        <Button
-                          mode="outlined"
-                          style={styles.actionButton}
-                          labelStyle={styles.actionButtonLabelOutline}
-                          onPress={() => onOpenPlanModal(day, training)}
-                        >
-                          Treino
-                        </Button>
-                        <Button
-                          mode="contained"
-                          style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
-                          labelStyle={styles.actionButtonLabelContained}
-                          onPress={() => onOpenDoneModal(day, training)}
-                        >
-                          Realizado
-                        </Button>
-                  </View>
-                </View>
-            </View>
-        );
-    }
-
-    // Card com treino planejado ou realizado
     return (
         <View style={[styles.dayContainer, dynamicStyle]}>
-            {/* Pressable apenas no topo do card */}
-            <Pressable
-                onPress={() => onOpenPlanModal(day, training)}
-                onLongPress={() => training && onLongPress(day, training)}
-                style={{ width: '100%' }}
-            >
-                <Text
-                  style={[
+            <Text
+                style={[
                     styles.dayText,
                     isToday && styles.todayHighlight,
                     { color: isToday ? '#1976d2' : isOtherMonth ? '#ccc' : '#222' }
-                  ]}
-                >
-                    {day.getDate()}
-                </Text>
-            </Pressable>
+                ]}
+            >
+                {day.getDate()}
+            </Text>
             <View style={styles.trainingContent}>
-                {/* Informações principais do treino */}
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Modalidade: </Text><Text style={styles.cardText}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></View>
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Percurso: </Text><Text style={styles.cardText}>{training.percurso ? training.percurso.charAt(0).toUpperCase() + training.percurso.slice(1) : '-'}</Text></View>
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></View>
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></View>
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></View>
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Intensidade: </Text><Text style={styles.cardText}>{training.intensidade || '-'}</Text></View>
-                <View style={styles.cardRow}><Text style={styles.cardLabel}>Esforço: </Text><Text style={styles.cardText}>{training.esforco ? training.esforco.charAt(0).toUpperCase() + training.esforco.slice(1).replace('_',' ') : '-'}</Text></View>
-                <View style={styles.cardButtonRow}>
-                    <Button
-                      mode="outlined"
-                      style={styles.actionButton}
-                      labelStyle={styles.actionButtonLabelOutline}
-                      onPress={handleEditTraining}
-                    >
-                      Treino
-                    </Button>
-                    <Button
-                      mode="contained"
-                      style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
-                      labelStyle={styles.actionButtonLabelContained}
-                      onPress={() => onOpenDoneModal(day, training)}
-                    >
-                      Realizado
-                    </Button>
-              </View>
+                {training ? (
+                    <>
+                        {training.status === 'completed' ? (
+                            <>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{training.distance_km ? `${training.distance_km} km` : `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min`}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Altimetria: </Text><Text style={styles.cardText}>+{training.elevation_gain_meters || '0'} / -{('elevation_loss_meters' in training && training.elevation_loss_meters != null) ? training.elevation_loss_meters : 0}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>FC Média: </Text><Text style={styles.cardText}>{training.avg_heart_rate || '-'}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>PSE: </Text><Text style={styles.cardText}>{training.perceived_effort || '-'}</Text></View>
+                            </>
+                        ) : (
+                            <>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Modalidade: </Text><Text style={styles.cardText}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Intensidade: </Text><Text style={styles.cardText}>{training.intensidade || '-'}</Text></View>
+                            </>
+                        )}
+                    </>
+                ) : (
+                    <MaterialCommunityIcons name="run" size={28} color="#e0e0e0" style={{ marginTop: 16 }} />
+                )}
+            </View>
+            <View style={styles.cardButtonRow}>
+                <Button
+                    mode="outlined"
+                    style={styles.actionButton}
+                    labelStyle={styles.actionButtonLabelOutline}
+                    onPress={() => onOpenPlanModal(day, hasPlanned ? training : null)}
+                >
+                    {treinoButtonTitle}
+                </Button>
+                <Button
+                    mode="contained"
+                    style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                    labelStyle={styles.actionButtonLabelContained}
+                    onPress={() => onOpenRealizadoModal(day, training || null)}
+                >
+                    Realizado
+                </Button>
             </View>
         </View>
     );
@@ -312,6 +189,8 @@ export default function TrainingScreen() {
     const [planningTitle, setPlanningTitle] = useState('');
     const [planningType, setPlanningType] = useState('rodagem');
     const [weeklyReflectionVisible, setWeeklyReflectionVisible] = useState(false);
+    const [importModalVisible, setImportModalVisible] = useState(false);
+    const [importing, setImporting] = useState(false);
 
     // Atualize o useState planningState:
     const [planningState, setPlanningState] = useState({
@@ -331,6 +210,8 @@ export default function TrainingScreen() {
       perceived_effort: '',
       notes: '',
     });
+
+    const userId = useAuthStore(s => s.user?.id);
 
     useEffect(() => {
         setLoading(true);
@@ -387,8 +268,25 @@ export default function TrainingScreen() {
     // Handler para abrir SEMPRE o modal de treino realizado (editável)
     const handleOpenRealizadoModal = (day: Date, training?: TrainingSession | null) => {
         console.log('Abrindo modal de treino realizado', { day, training });
+        let session = training;
+        if (!session) {
+            session = {
+                user_id: userId || '', // Preencher com o user_id correto se disponível
+                training_date: formatDate(day),
+                title: '',
+                training_type: '',
+                status: 'completed',
+                modalidade: '',
+                treino_tipo: '',
+                terreno: '',
+                duracao_horas: '',
+                duracao_minutos: '',
+                distance_km: undefined,
+                observacoes: '',
+            } as TrainingSession;
+        }
         setSelectedDay(day);
-        setEditingSession(training || null);
+        setEditingSession(session);
         setModalDoneVisible(true);
     };
 
@@ -449,15 +347,36 @@ export default function TrainingScreen() {
     };
 
     const handleSaveDone = async (completedData: Partial<TrainingSession>) => {
-        if (!editingSession || !editingSession.id) return;
-        // Corrigir tipos para garantir que não haja null
-        const safeCompletedData: any = { ...completedData };
-        if ('avg_heart_rate' in safeCompletedData && (safeCompletedData.avg_heart_rate == null)) delete safeCompletedData.avg_heart_rate;
-        if ('elevation_gain_meters' in safeCompletedData && (safeCompletedData.elevation_gain_meters == null)) delete safeCompletedData.elevation_gain_meters;
-        if ('distance_km' in safeCompletedData && (safeCompletedData.distance_km == null)) delete safeCompletedData.distance_km;
-        if ('duration_minutes' in safeCompletedData && (safeCompletedData.duration_minutes == null)) delete safeCompletedData.duration_minutes;
-        await markTrainingAsCompleted(editingSession.id, safeCompletedData);
+        if (!editingSession) return;
+        if (editingSession.id) {
+            // Atualiza treino existente
+            const safeCompletedData: any = { ...completedData };
+            if ('avg_heart_rate' in safeCompletedData && (safeCompletedData.avg_heart_rate == null)) delete safeCompletedData.avg_heart_rate;
+            if ('elevation_gain_meters' in safeCompletedData && (safeCompletedData.elevation_gain_meters == null)) delete safeCompletedData.elevation_gain_meters;
+            if ('distance_km' in safeCompletedData && (safeCompletedData.distance_km == null)) delete safeCompletedData.distance_km;
+            if ('duration_minutes' in safeCompletedData && (safeCompletedData.duration_minutes == null)) delete safeCompletedData.duration_minutes;
+            await markTrainingAsCompleted(editingSession.id, safeCompletedData);
+        } else {
+            try {
+                // Garante todos os campos obrigatórios para criar treino realizado do zero
+                const treinoParaSalvar: Partial<TrainingSession> = {
+                    ...completedData,
+                    user_id: userId,
+                    training_date: editingSession.training_date,
+                    status: 'completed',
+                    title: completedData.title || 'Treino Realizado',
+                    training_type: completedData.training_type || 'manual',
+                };
+                console.log('Tentando criar treino realizado:', treinoParaSalvar);
+                await saveTrainingSession(treinoParaSalvar);
+                Alert.alert('Sucesso', 'Treino realizado cadastrado!');
+            } catch (err: any) {
+                Alert.alert('Erro ao salvar treino', err.message || String(err));
+                console.error('Erro ao salvar treino realizado:', err);
+            }
+        }
         setModalDoneVisible(false);
+        await fetchTrainingSessions();
     };
 
     const monthLabel = `${MONTHS_PT[displayDate.getMonth()]} / ${displayDate.getFullYear()}`;
@@ -475,12 +394,54 @@ export default function TrainingScreen() {
       setModalDoneVisible(true);
     };
 
+    // Função para importar CSV
+    const handleImportCSV = async (file: File | Blob) => {
+        setImporting(true);
+        try {
+            Papa.parse(file, {
+                header: true,
+                complete: async (results: any) => {
+                    // results.data é um array de objetos
+                    // Adapte para o formato de treino necessário
+                    const treinos = results.data;
+                    for (const treino of treinos) {
+                        // Exemplo: ajuste os campos conforme seu modelo
+                        await saveTrainingSession({
+                            training_date: treino.data,
+                            status: 'planned',
+                            modalidade: treino.modalidade,
+                            treino_tipo: treino.treino_tipo,
+                            terreno: treino.terreno,
+                            duracao_horas: treino.duracao_horas,
+                            duracao_minutos: treino.duracao_minutos,
+                            distance_km: treino.distance_km,
+                            observacoes: treino.observacoes,
+                        });
+                    }
+                    await fetchTrainingSessions();
+                    Alert.alert('Sucesso', 'Treinos importados com sucesso!');
+                    setImportModalVisible(false);
+                },
+                error: (err: any) => {
+                    Alert.alert('Erro', 'Falha ao importar CSV: ' + err.message);
+                },
+            });
+        } catch (err: any) {
+            Alert.alert('Erro', 'Falha ao importar CSV: ' + err.message);
+        } finally {
+            setImporting(false);
+        }
+    };
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
                 <Button onPress={goPrevMonth}>Anterior</Button>
                 <Text style={styles.headerText}>{monthLabel}</Text>
                 <Button onPress={goNextMonth}>Próximo</Button>
+                <Button mode="outlined" onPress={() => setImportModalVisible(true)} style={{ marginLeft: 8 }}>
+                    Importar Planilha (.csv)
+                </Button>
             </View>
             <View style={styles.weekdaysContainer}>
                 {WEEKDAYS.map((day, index) => <Text key={`${day}-${index}`} style={styles.weekdayText}>{day}</Text>)}
@@ -502,7 +463,7 @@ export default function TrainingScreen() {
                                         onPress={handleDayPress}
                                         onLongPress={handleDayLongPress}
                                         onOpenPlanModal={handleOpenPlanModal}
-                                        onOpenDoneModal={handleOpenDoneModal}
+                                        onOpenRealizadoModal={handleOpenRealizadoModal}
                                     />
                                 );
                             })}
@@ -623,6 +584,13 @@ export default function TrainingScreen() {
                              )}
                         </View>
                     </ScrollView>
+                </Modal>
+            </Portal>
+            <Portal>
+                <Modal visible={importModalVisible} onDismiss={() => setImportModalVisible(false)} contentContainerStyle={{ width: '90%', alignSelf: 'center', marginVertical: 20, borderRadius: 12, padding: 20, backgroundColor: 'white', maxWidth: 600 }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 16 }}>Importar Treinos via CSV</Text>
+                    <UniversalDocumentPicker onPick={handleImportCSV} loading={importing} />
+                    <Button onPress={() => setImportModalVisible(false)} style={{ marginTop: 8 }}>Cancelar</Button>
                 </Modal>
             </Portal>
             {editingSession && (

@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-native",
+    "jsx": "preserve",
     "allowJs": true,
     "esModuleInterop": true,
     "strict": true,
@@ -10,21 +10,19 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["react-native", "jest"]
+    "types": ["node", "jest"]
   },
   "include": [
-    "src/screens/**/*",
+    "app/**/*",
     "src/components/ui/**/*",
-    "src/services/**/*",
-    "src/stores/**/*",
+    "src/components/web/**/*",
     "src/types/**/*",
     "index.ts",
-    "App.tsx",
-    "assets/**/*"
+    "App.tsx"
   ],
   "exclude": [
-    "app/",
+    "src/screens/",
     "supabase/functions/",
-    "src/components/web/"
+    "src/components/mobile/"
   ]
-}
+} 

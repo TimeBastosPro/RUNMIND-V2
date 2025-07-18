@@ -40,11 +40,13 @@ export interface Profile {
     mood_score: number; // 1-10
     energy_score: number; // 1-10
     sleep_hours: number;
-    sleep_quality: number; // 1-5
+    sleep_quality?: number; // 1-5 (opcional, não existe no banco)
     sleep_quality_score?: number; // 1-7 (Índice de Hooper)
     fatigue_score?: number; // 1-7
     stress_score?: number; // 1-7
     soreness_score?: number; // 1-7
+    focus_score?: number; // 1-5
+    confidence_score?: number; // 1-5
     notes?: string;
     created_at: string;
   }
