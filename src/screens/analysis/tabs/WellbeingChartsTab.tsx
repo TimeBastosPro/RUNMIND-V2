@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { Card, SegmentedButtons, Button } from 'react-native-paper';
 import { LineChart } from 'react-native-gifted-charts';
@@ -12,8 +12,9 @@ const METRICS = [
   { label: 'Confiança', value: 'confidence' },
   { label: 'Foco', value: 'focus' },
   { label: 'Emocional', value: 'emocional' },
-  { label: 'Prazer/Diversão', value: 'enjoyment' },
-  { label: 'Progresso Percebido', value: 'progress' },
+  // Reflexão semanal:
+  { label: 'Prazer/Diversão (Semanal)', value: 'enjoyment' },
+  { label: 'Progresso Percebido (Semanal)', value: 'progress' },
   { label: 'Confiança Semanal', value: 'confidence_weekly' },
 ] as const;
 
@@ -29,11 +30,6 @@ type RecentCheckin = {
   emocional?: number;
   [key: string]: any;
 };
-type TrainingSession = {
-  training_date: string;
-  perceived_effort?: number;
-  [key: string]: any;
-};
 function formatDateLabel(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
@@ -46,31 +42,20 @@ function getPeriodRange(center: Date, days: number) {
 }
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sleep_quality');
-  const [chartData, setChartData] = useState<ChartDatum[]>([]);
-  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('daily');
   const [currentDate, setCurrentDate] = useState(new Date());
   const {
     recentCheckins,
     loadRecentCheckins,
-    trainingSessions,
-    fetchTrainingSessions,
     weeklyReflections,
     loadWeeklyReflections,
     calculateWeeklyAverages,
+    isLoading,
   } = useCheckinStore();
 
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      await Promise.all([
-        loadRecentCheckins(90),
-        fetchTrainingSessions(),
-        loadWeeklyReflections(),
-      ]);
-      setLoading(false);
-    }
-    fetchData();
+    loadRecentCheckins(90);
+    loadWeeklyReflections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,19 +64,19 @@ export default function WellbeingChartsTab() {
   const { start, end } = getPeriodRange(currentDate, daysRange);
   const periodLabel = `${formatDateLabel(start.toISOString())} a ${formatDateLabel(end.toISOString())}`;
 
-  // Lógica do gráfico dinâmico
-  useEffect(() => {
-    if (loading) return;
+  // Lógica do gráfico dinâmico (memoizada)
+  const chartData = useMemo(() => {
+    if (isLoading) return [];
     let data: ChartDatum[] = [];
+    // Reflexão semanal
     if (selectedMetric === 'enjoyment' || selectedMetric === 'progress' || selectedMetric === 'confidence_weekly') {
-      // Reflexão semanal
       data = (weeklyReflections || [])
         .filter((r) => {
           if (selectedMetric === 'confidence_weekly') return r.confidence !== undefined && r.confidence !== null;
           return r[selectedMetric] !== undefined && r[selectedMetric] !== null;
         })
         .map((r) => ({
-          value: selectedMetric === 'progress' ? 0 : Number(selectedMetric === 'confidence_weekly' ? r.confidence : r[selectedMetric]),
+          value: selectedMetric === 'confidence_weekly' ? Number(r.confidence) : Number(r[selectedMetric]),
           label: r.week_start ? formatDateLabel(r.week_start) : '',
           date: r.week_start,
         }));
@@ -100,7 +85,7 @@ export default function WellbeingChartsTab() {
         data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
       } else {
         // Diário: mostrar cada reflexão semanal como um ponto
-        data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value) && d.date >= start.toISOString() && d.date <= end.toISOString());
+        data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value) && d.date && d.date >= start.toISOString() && d.date <= end.toISOString());
       }
     } else {
       // Demais métricas vêm dos check-ins
@@ -122,8 +107,8 @@ export default function WellbeingChartsTab() {
       }
       data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
     }
-    setChartData(data);
-  }, [selectedMetric, loading, recentCheckins, trainingSessions, weeklyReflections, viewMode, currentDate]);
+    return data;
+  }, [selectedMetric, isLoading, recentCheckins, weeklyReflections, viewMode, currentDate, calculateWeeklyAverages, start, end]);
 
   const selectedLabel = METRICS.find((m) => m.value === selectedMetric)?.label || '';
 
@@ -162,7 +147,7 @@ export default function WellbeingChartsTab() {
         <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
           Evolução da {selectedLabel}
         </Text>
-        {loading ? (
+        {isLoading ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 }}>
             <Text>Carregando dados...</Text>
           </View>
