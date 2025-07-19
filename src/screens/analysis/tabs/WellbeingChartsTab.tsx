@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text } from 'react-native';
-import { Card } from 'react-native-paper';
+import { Card, SegmentedButtons, Button } from 'react-native-paper';
 import { LineChart } from 'react-native-gifted-charts';
 import { Picker } from '@react-native-picker/picker';
 import { useCheckinStore } from '../../../stores/checkin';
@@ -11,16 +11,14 @@ const METRICS = [
   { label: 'Motivação', value: 'motivation' },
   { label: 'Confiança', value: 'confidence' },
   { label: 'Foco', value: 'focus' },
-  { label: 'Percepção de Esforço (PSE)', value: 'perceived_effort' },
+  { label: 'Emocional', value: 'emocional' },
   { label: 'Prazer/Diversão', value: 'enjoyment' },
   { label: 'Progresso Percebido', value: 'progress' },
   { label: 'Confiança Semanal', value: 'confidence_weekly' },
 ] as const;
 
 type MetricKey = typeof METRICS[number]['value'];
-
-type ChartDatum = { value: number; label: string };
-
+type ChartDatum = { value: number; label: string; date?: string };
 type RecentCheckin = {
   date: string;
   sleep_quality?: number;
@@ -28,23 +26,30 @@ type RecentCheckin = {
   motivation?: number;
   confidence?: number;
   focus?: number;
+  emocional?: number;
   [key: string]: any;
 };
-
 type TrainingSession = {
   training_date: string;
   perceived_effort?: number;
   [key: string]: any;
 };
-
 function formatDateLabel(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
-
+function getPeriodRange(center: Date, days: number) {
+  const start = new Date(center);
+  start.setDate(center.getDate() - days);
+  const end = new Date(center);
+  end.setDate(center.getDate() + days);
+  return { start, end };
+}
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sleep_quality');
   const [chartData, setChartData] = useState<ChartDatum[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('daily');
+  const [currentDate, setCurrentDate] = useState(new Date());
   const {
     recentCheckins,
     loadRecentCheckins,
@@ -52,13 +57,14 @@ export default function WellbeingChartsTab() {
     fetchTrainingSessions,
     weeklyReflections,
     loadWeeklyReflections,
+    calculateWeeklyAverages,
   } = useCheckinStore();
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       await Promise.all([
-        loadRecentCheckins(30),
+        loadRecentCheckins(90),
         fetchTrainingSessions(),
         loadWeeklyReflections(),
       ]);
@@ -68,18 +74,16 @@ export default function WellbeingChartsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Navegação de período
+  const daysRange = 6; // 6 dias antes e 6 depois (13 dias)
+  const { start, end } = getPeriodRange(currentDate, daysRange);
+  const periodLabel = `${formatDateLabel(start.toISOString())} a ${formatDateLabel(end.toISOString())}`;
+
+  // Lógica do gráfico dinâmico
   useEffect(() => {
     if (loading) return;
     let data: ChartDatum[] = [];
-    if (selectedMetric === 'perceived_effort') {
-      // PSE vem dos treinos
-      data = (trainingSessions as TrainingSession[])
-        .filter((t) => t.training_date && t.perceived_effort !== undefined && t.perceived_effort !== null)
-        .map((t) => ({
-          value: Number(t.perceived_effort),
-          label: formatDateLabel(t.training_date),
-        }));
-    } else if (selectedMetric === 'enjoyment' || selectedMetric === 'progress' || selectedMetric === 'confidence_weekly') {
+    if (selectedMetric === 'enjoyment' || selectedMetric === 'progress' || selectedMetric === 'confidence_weekly') {
       // Reflexão semanal
       data = (weeklyReflections || [])
         .filter((r) => {
@@ -89,24 +93,57 @@ export default function WellbeingChartsTab() {
         .map((r) => ({
           value: selectedMetric === 'progress' ? 0 : Number(selectedMetric === 'confidence_weekly' ? r.confidence : r[selectedMetric]),
           label: r.week_start ? formatDateLabel(r.week_start) : '',
+          date: r.week_start,
         }));
+      if (viewMode === 'weekly') {
+        // Já está agrupado por semana
+        data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
+      } else {
+        // Diário: mostrar cada reflexão semanal como um ponto
+        data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value) && d.date >= start.toISOString() && d.date <= end.toISOString());
+      }
     } else {
       // Demais métricas vêm dos check-ins
-      data = (recentCheckins as RecentCheckin[])
+      const filtered = (recentCheckins as RecentCheckin[])
         .filter((c) => c.date && c[selectedMetric] !== undefined && c[selectedMetric] !== null)
         .map((c) => ({
           value: Number(c[selectedMetric]),
           label: formatDateLabel(c.date),
+          date: c.date,
         }));
+      if (viewMode === 'weekly') {
+        data = calculateWeeklyAverages(filtered);
+      } else {
+        data = filtered.filter((d) => {
+          if (!d.date) return false;
+          const dDate = new Date(d.date!);
+          return dDate >= start && dDate <= end;
+        });
+      }
+      data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
     }
-    data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
     setChartData(data);
-  }, [selectedMetric, loading, recentCheckins, trainingSessions, weeklyReflections]);
+  }, [selectedMetric, loading, recentCheckins, trainingSessions, weeklyReflections, viewMode, currentDate]);
 
   const selectedLabel = METRICS.find((m) => m.value === selectedMetric)?.label || '';
 
   return (
     <View style={{ flex: 1, padding: 16, backgroundColor: '#F5F5F5' }}>
+      {/* Navegação de período e visualização */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+        <Button mode="outlined" onPress={() => setCurrentDate(new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000))}>{'< Anterior'}</Button>
+        <Text style={{ fontWeight: 'bold', fontSize: 16, marginHorizontal: 8 }}>{periodLabel}</Text>
+        <Button mode="outlined" onPress={() => setCurrentDate(new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000))}>{'Próximo >'}</Button>
+        <SegmentedButtons
+          value={viewMode}
+          onValueChange={setViewMode}
+          buttons={[
+            { value: 'daily', label: 'Diário' },
+            { value: 'weekly', label: 'Semanal' },
+          ]}
+          style={{ marginLeft: 'auto' }}
+        />
+      </View>
       {/* Card do seletor de métrica */}
       <Card style={{ marginBottom: 24, padding: 8 }}>
         <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Selecione a Métrica</Text>
@@ -120,7 +157,6 @@ export default function WellbeingChartsTab() {
           ))}
         </Picker>
       </Card>
-
       {/* Card do gráfico */}
       <Card style={{ flex: 1, padding: 8 }}>
         <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
@@ -140,7 +176,7 @@ export default function WellbeingChartsTab() {
             color1="#1976d2"
             yAxisLabelWidth={24}
             yAxisTextStyle={{ fontSize: 10 }}
-            xAxisLabelTexts={chartData.map((d) => d.label)}
+            xAxisLabelTexts={chartData.map((d) => viewMode === 'weekly' ? d.label : d.label)}
             hideDataPoints={false}
             areaChart
             startFillColor="#1976d2"

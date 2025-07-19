@@ -128,13 +128,18 @@ export default function DailyCheckinScreen() {
   // Estado para o modal de check-in diário (wizard)
   const [dailyCheckinVisible, setDailyCheckinVisible] = useState(false);
 
+  // Resetar o passo do wizard ao abrir o modal
+  useEffect(() => {
+    if (dailyCheckinVisible) setStep(0);
+  }, [dailyCheckinVisible]);
+
   // Submissão final do check-in diário
   const handleSubmit = async () => {
     const checkinData = {
       sleep_quality: sleepQuality,      // 1-7
       soreness,                        // 1-7
       notes,                           // texto
-      mood_score: emotion ?? 3,        // 1-5
+      emocional: emotion ?? 3,         // 1-5 (corrigido para 'emocional')
       motivation,                      // 1-5
       focus,                           // 1-5
       confidence,                      // 1-5
@@ -230,22 +235,24 @@ export default function DailyCheckinScreen() {
     {
       label: 'Como está seu estado emocional hoje?',
       content: (
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ marginBottom: 12, textAlign: 'center' }}>Escolha o emoji que melhor representa seu estado emocional:</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 16 }}>
-            {[1,2,3,4,5].map(val => (
-              <Button
-                key={val}
-                mode={emotion === val ? 'contained' : 'outlined'}
-                onPress={() => setEmotion(val)}
-                style={{ marginHorizontal: 4 }}
-                labelStyle={{ fontSize: 28 }}
-              >
-                {['😢','😕','😐','🙂','😄'][val-1]}
-              </Button>
-            ))}
+        <>
+          <Text style={{ marginBottom: 12, textAlign: 'center' }}>Avalie seu estado emocional de 1 (Ruim) a 5 (Ótimo)</Text>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 24 }}>{emotion ?? 3}/5</Text>
           </View>
-        </View>
+          <SliderUniversal
+            minimumValue={1}
+            maximumValue={5}
+            step={1}
+            value={emotion ?? 3}
+            onValueChange={setEmotion}
+            style={{ width: '100%' }}
+          />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 12 }}>Ruim</Text>
+            <Text style={{ fontSize: 12 }}>Ótimo</Text>
+          </View>
+        </>
       ),
     },
     {

@@ -82,6 +82,7 @@ interface CheckinState {
   }) => Promise<any>;
   updateCheckinWithInsight: (checkinId: string, insightText: string) => Promise<any>;
   loadWeeklyReflections: () => Promise<void>;
+  calculateWeeklyAverages: (data: Array<{ date: string; value: number }>) => Array<{ label: string; value: number; weekStart: string }>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -146,7 +147,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('daily_checkins')
-        .select('mood_score, energy_score, sleep_hours, sleep_quality, soreness, motivation, confidence, focus, date')
+        .select('mood_score, energy_score, sleep_hours, sleep_quality, soreness, motivation, confidence, focus, emocional, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
@@ -467,6 +468,28 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       console.error('Error loading weekly reflections:', error);
       set({ isLoading: false, error: error.message || 'Erro ao carregar reflexões semanais.' });
     }
+  },
+  calculateWeeklyAverages: (data) => {
+    if (!data || data.length === 0) return [];
+    // Agrupar por semana (segunda a domingo)
+    const weekMap: Record<string, number[]> = {};
+    data.forEach((item) => {
+      const d = new Date(item.date);
+      // Ajustar para segunda-feira como início da semana
+      const weekStart = new Date(d);
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1) - day; // segunda = 1, domingo = 0
+      weekStart.setDate(d.getDate() + diff);
+      const weekKey = weekStart.toISOString().split('T')[0];
+      if (!weekMap[weekKey]) weekMap[weekKey] = [];
+      weekMap[weekKey].push(item.value);
+    });
+    // Calcular média de cada semana
+    return Object.entries(weekMap).map(([week, values], i) => ({
+      label: `Semana ${i + 1}`,
+      value: values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0,
+      weekStart: week,
+    }));
   },
 }));
 

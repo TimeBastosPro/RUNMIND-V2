@@ -25,7 +25,8 @@ export default function ComparativeChartsScreen() {
           }}
         >
           <Tab.Screen name="Bem-Estar" component={WellbeingChartsTab} />
-          <Tab.Screen name="Psicológico" component={PsychologicalChartsTab} />
+          <Tab.Screen name="Evolução" component={WellbeingChartsTab} />
+          <Tab.Screen name="Treino" component={PsychologicalChartsTab} />
           <Tab.Screen name="Análise Cruzada" component={CrossAnalysisTab} />
         </Tab.Navigator>
       </View>
