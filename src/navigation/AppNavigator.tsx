@@ -21,6 +21,7 @@ import GlossaryScreen from '../screens/academy/GlossaryScreen';
 import GuidesScreen from '../screens/academy/GuidesScreen';
 import ChatScreen from '../screens/academy/ChatScreen';
 import ComparativeChartsScreen from '../screens/analysis/ComparativeChartsScreen';
+import SportsProfileScreen from '../screens/SportsProfileScreen';
 // Remover: import CalendarScreen from '../screens/training/CalendarScreen';
 
 // Types
@@ -32,6 +33,7 @@ type TabParamList = {
   Análise: undefined;
   Profile: undefined;
   Academy: undefined;
+  'Perfil Esportivo': undefined;
 };
 
 type StackParamList = {
@@ -228,6 +230,8 @@ function MainTabs() {
             iconName = 'account';
           } else if (route.name === 'Academy') {
             iconName = 'school';
+          } else if (route.name === 'Perfil Esportivo') {
+            iconName = 'run-fast';
           }
 
           return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
@@ -251,6 +255,7 @@ function MainTabs() {
         }} 
       />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
+      <Tab.Screen name="Perfil Esportivo" component={SportsProfileScreen} options={{ title: 'Perfil Esportivo' }} />
       <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />
     </Tab.Navigator>
   );

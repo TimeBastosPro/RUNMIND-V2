@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import type { User } from '@supabase/supabase-js';
-import type { Profile } from '../types/database';
+import { Profile, FitnessTest } from '../types/database';
 
 interface AuthState {
   user: User | null;
@@ -9,6 +9,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   isInitializing: boolean;
+  fitnessTests: FitnessTest[];
   
   // Actions
   signIn: (email: string, password: string) => Promise<void>;
@@ -28,6 +29,9 @@ interface AuthState {
     recoveryTechniques: string;
     stressManagement: string[];
   }) => Promise<void>;
+  fetchProfile: () => Promise<void>;
+  fetchFitnessTests: () => Promise<void>;
+  saveFitnessTest: (testData: Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<FitnessTest>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -36,6 +40,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isAuthenticated: false,
   isInitializing: true,
+  fitnessTests: [],
 
   signIn: async (email: string, password: string) => {
     set({ isLoading: true });
@@ -175,4 +180,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setInitializing: (value: boolean) => set({ isInitializing: value }),
+  fetchProfile: async function() { return await get().loadProfile(); },
+
+  fetchFitnessTests: async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('fitness_tests')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('test_date', { ascending: false });
+
+      if (error) throw error;
+      set({ fitnessTests: data || [] });
+    } catch (error) {
+      console.error('Erro ao buscar testes de fitness:', error);
+    }
+  },
+
+  saveFitnessTest: async (testData: Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const { data, error } = await supabase
+        .from('fitness_tests')
+        .insert([{
+          ...testData,
+          user_id: user.id
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Atualizar a lista de testes
+      const currentTests = get().fitnessTests;
+      set({ fitnessTests: [data, ...currentTests] });
+
+      return data;
+    } catch (error) {
+      console.error('Erro ao salvar teste de fitness:', error);
+      throw error;
+    }
+  },
 }));

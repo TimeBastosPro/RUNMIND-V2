@@ -11,6 +11,12 @@ export interface Profile {
     date_of_birth?: string;
     weight_kg?: number;
     height_cm?: number;
+    max_heart_rate?: number;
+    resting_heart_rate?: number;
+    best_5k_time_seconds?: number;
+    best_10k_time_seconds?: number;
+    best_21k_time_seconds?: number;
+    best_42k_time_seconds?: number;
     // Campos adicionais do perfil
     parq_answers?: {
       q1: boolean;
@@ -31,6 +37,7 @@ export interface Profile {
     hydration_habit?: string;
     recovery_habit?: string;
     stress_management?: string[];
+    gender?: string;
   }
   
   export interface DailyCheckin {
@@ -102,5 +109,19 @@ export interface Profile {
     sleepEnergyCorr: number;
     sleepMoodCorr: number;
     bestWeekday: string;
+  }
+
+  export interface FitnessTest {
+    id: string;
+    user_id: string;
+    protocol_name: string;
+    test_date: string;
+    distance_meters?: number;
+    time_seconds?: number;
+    final_heart_rate?: number;
+    calculated_vo2max: number;
+    calculated_vam: number;
+    created_at: string;
+    updated_at: string;
   }
   
