@@ -168,6 +168,49 @@ export default function WellbeingChartsTab() {
             endFillColor="#fff"
             startOpacity={0.5}
             endOpacity={0.1}
+            dataPointsColor="#1976d2"
+            dataPointsRadius={6}
+            dataPointsShape="circle"
+            pointerConfig={{
+              pointerStripHeight: 160,
+              pointerStripColor: '#1976d2',
+              pointerStripWidth: 2,
+              pointerColor: '#1976d2',
+              radius: 6,
+              pointerLabelWidth: 100,
+              pointerLabelHeight: 90,
+              activatePointersOnLongPress: false,
+              autoAdjustPointerLabelPosition: false,
+              pointerLabelComponent: (items: any) => {
+                return (
+                  <View
+                    style={{
+                      height: 90,
+                      width: 100,
+                      justifyContent: 'center',
+                      marginTop: -30,
+                      marginLeft: -40,
+                    }}>
+                    <Text style={{ color: '#1976d2', fontSize: 14, marginBottom: 6, textAlign: 'center' }}>
+                      {items[0].label}
+                    </Text>
+                    <View
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 6,
+                        borderRadius: 16,
+                        backgroundColor: '#1976d2',
+                        borderWidth: 1,
+                        borderColor: '#1976d2',
+                      }}>
+                      <Text style={{ fontWeight: 'bold', textAlign: 'center', color: '#fff' }}>
+                        {items[0].value}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              },
+            }}
           />
         )}
       </Card>

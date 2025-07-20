@@ -175,6 +175,56 @@ export default function CrossAnalysisTab() {
                 endFillColor="#fff"
                 startOpacity={0.2}
                 endOpacity={0.05}
+                dataPointsColor={color1}
+                dataPointsRadius={4}
+                dataPointsShape="circle"
+                pointerConfig={{
+                  pointerStripHeight: 180,
+                  pointerStripColor: '#666',
+                  pointerStripWidth: 1,
+                  pointerColor: '#666',
+                  radius: 4,
+                  pointerLabelWidth: 120,
+                  pointerLabelHeight: 100,
+                  activatePointersOnLongPress: false,
+                  autoAdjustPointerLabelPosition: false,
+                  pointerLabelComponent: (items: any) => {
+                    return (
+                      <View
+                        style={{
+                          height: 100,
+                          width: 120,
+                          justifyContent: 'center',
+                          marginTop: -40,
+                          marginLeft: -50,
+                        }}>
+                        <Text style={{ color: '#666', fontSize: 12, marginBottom: 4, textAlign: 'center' }}>
+                          {items[0]?.label || ''}
+                        </Text>
+                        <View style={{ gap: 2 }}>
+                          {items.map((item: any, index: number) => (
+                            <View
+                              key={index}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                borderRadius: 8,
+                                backgroundColor: item.color || '#666',
+                                marginBottom: 2,
+                              }}>
+                              <View style={{ width: 8, height: 8, backgroundColor: '#fff', borderRadius: 4, marginRight: 6 }} />
+                              <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>
+                                {item.value?.toFixed(1) || '0'}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  },
+                }}
               />
             </>
           )}
