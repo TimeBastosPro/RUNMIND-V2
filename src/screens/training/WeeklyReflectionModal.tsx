@@ -10,8 +10,8 @@ interface WeeklyReflectionModalProps {
 
 export interface WeeklyReflectionAnswers {
   enjoyment: number;
-  progress: 'Sim, claramente' | 'Mais ou menos' | 'Não, senti-me estagnado(a)';
-  confidence: 'Baixa' | 'Média' | 'Alta';
+  progress: number;
+  confidence: number;
 }
 
 export default function WeeklyReflectionModal({ visible, onSave, onCancel }: WeeklyReflectionModalProps) {
@@ -20,7 +20,21 @@ export default function WeeklyReflectionModal({ visible, onSave, onCancel }: Wee
   const [confidence, setConfidence] = useState<WeeklyReflectionAnswers['confidence']>('Média');
 
   const handleSave = () => {
-    onSave({ enjoyment, progress, confidence });
+    const progressMap = {
+      'Sim, claramente': 3,
+      'Mais ou menos': 2,
+      'Não, senti-me estagnado(a)': 1,
+    };
+    const confidenceMap = {
+      'Alta': 3,
+      'Média': 2,
+      'Baixa': 1,
+    };
+    onSave({
+      enjoyment,
+      progress: progressMap[progress],
+      confidence: confidenceMap[confidence],
+    });
   };
 
   return (

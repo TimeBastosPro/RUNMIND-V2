@@ -154,64 +154,54 @@ export default function WellbeingChartsTab() {
         ) : chartData.length === 0 ? (
           <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
         ) : (
-          <LineChart
-            data={chartData}
-            width={undefined}
-            height={200}
-            color1="#1976d2"
-            yAxisLabelWidth={24}
-            yAxisTextStyle={{ fontSize: 10 }}
-            xAxisLabelTexts={chartData.map((d) => viewMode === 'weekly' ? d.label : d.label)}
-            hideDataPoints={false}
-            areaChart
-            startFillColor="#1976d2"
-            endFillColor="#fff"
-            startOpacity={0.5}
-            endOpacity={0.1}
-            dataPointsColor="#1976d2"
-            dataPointsRadius={6}
-            dataPointsShape="circle"
-            pointerConfig={{
-              pointerStripHeight: 160,
-              pointerStripColor: '#1976d2',
-              pointerStripWidth: 2,
-              pointerColor: '#1976d2',
-              radius: 6,
-              pointerLabelWidth: 100,
-              pointerLabelHeight: 90,
-              activatePointersOnLongPress: false,
-              autoAdjustPointerLabelPosition: false,
-              pointerLabelComponent: (items: any) => {
-                return (
-                  <View
-                    style={{
-                      height: 90,
-                      width: 100,
-                      justifyContent: 'center',
-                      marginTop: -30,
-                      marginLeft: -40,
-                    }}>
-                    <Text style={{ color: '#1976d2', fontSize: 14, marginBottom: 6, textAlign: 'center' }}>
-                      {items[0].label}
-                    </Text>
-                    <View
-                      style={{
-                        paddingHorizontal: 14,
-                        paddingVertical: 6,
-                        borderRadius: 16,
-                        backgroundColor: '#1976d2',
-                        borderWidth: 1,
-                        borderColor: '#1976d2',
-                      }}>
-                      <Text style={{ fontWeight: 'bold', textAlign: 'center', color: '#fff' }}>
-                        {items[0].value}
-                      </Text>
-                    </View>
+          <View style={{ flex: 1, alignItems: 'stretch', justifyContent: 'center' }}>
+            <LineChart
+              width={undefined}
+              height={220}
+              color1="#1976d2"
+              yAxisLabelWidth={32}
+              yAxisTextStyle={{ fontSize: 12, color: '#333' }}
+              xAxisLabelTexts={chartData.map((d) => d.label)}
+              xAxisLabelTextStyle={{ fontSize: 12, color: '#333', marginTop: 8 }}
+              yAxisColor="#ccc"
+              xAxisColor="#ccc"
+              data={chartData}
+              hideDataPoints={false}
+              areaChart
+              startFillColor="#1976d2"
+              endFillColor="#fff"
+              startOpacity={0.3}
+              endOpacity={0.05}
+              dataPointsColor="#1976d2"
+              dataPointsRadius={5}
+              dataPointsShape="circle"
+              yAxisTextNumberOfLines={1}
+              xAxisTextNumberOfLines={1}
+              yAxisLabelTexts={chartData.map((d) => d.value.toFixed(1))}
+              pointerConfig={{
+                pointerStripHeight: 180,
+                pointerStripColor: '#1976d2',
+                pointerStripWidth: 2,
+                pointerColor: '#1976d2',
+                radius: 6,
+                pointerLabelWidth: 100,
+                pointerLabelHeight: 90,
+                activatePointersOnLongPress: false,
+                autoAdjustPointerLabelPosition: false,
+                pointerLabelComponent: (items: any) => (
+                  <View style={{ padding: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#1976d2' }}>
+                    <Text style={{ fontWeight: 'bold', color: '#1976d2' }}>{items[0]?.label}</Text>
+                    <Text style={{ color: '#333' }}>Valor: {items[0]?.value?.toFixed(1)}</Text>
                   </View>
-                );
-              },
-            }}
-          />
+                ),
+              }}
+            />
+            {/* Eixos visuais */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              <Text style={{ fontSize: 12, color: '#333' }}>Data</Text>
+              <Text style={{ fontSize: 12, color: '#333' }}>Valor</Text>
+            </View>
+          </View>
         )}
       </Card>
     </View>

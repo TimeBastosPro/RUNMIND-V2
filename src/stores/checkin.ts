@@ -4,13 +4,12 @@ import { generateInsight } from '../services/gemini';
 import type { DailyCheckin, UserAnalytics } from '../types/database';
 
 interface RecentCheckin {
-  mood_score: number;
-  energy_score: number;
-  sleep_hours: number;
-  sleep_quality_score?: number;
-  fatigue_score?: number;
-  stress_score?: number;
-  soreness_score?: number;
+  sleep_quality: number;
+  soreness: number;
+  motivation: number;
+  confidence: number;
+  focus: number;
+  emocional: number;
   notes?: string;
   date: string;
 }
@@ -147,7 +146,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('daily_checkins')
-        .select('mood_score, energy_score, sleep_hours, sleep_quality, soreness, motivation, confidence, focus, emocional, date')
+        .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
@@ -431,11 +430,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     if (!user) throw new Error('Usuário não autenticado');
     const insertData = {
       user_id: user.id,
-      sleep_hours: checkinData.sleep_hours,
+      sleep_quality: checkinData.sleep_hours,
       soreness: checkinData.soreness,
+      emocional: checkinData.motivation,
       motivation: checkinData.motivation,
       focus: checkinData.focus,
       confidence: checkinData.confidence,
+      notes: '', // Assuming notes is not part of the new checkinData object
+      date: new Date().toISOString().split('T')[0],
     };
     const { data, error } = await supabase
       .from('daily_checkins')
