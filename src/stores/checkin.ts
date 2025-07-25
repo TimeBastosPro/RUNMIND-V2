@@ -139,20 +139,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
+      if (!user) { console.log('Nenhum usuário autenticado em loadRecentCheckins'); return; }
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
-
       const { data, error } = await supabase
         .from('daily_checkins')
         .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
-
       if (error) throw error;
-
+      console.log('Dados recebidos em loadRecentCheckins:', data);
       set({ recentCheckins: (data as RecentCheckin[]) || [], isLoading: false, error: null });
     } catch (error: any) {
       console.error('Error loading recent checkins:', error);
@@ -274,7 +271,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      if (!user) { console.log('Nenhum usuário autenticado em fetchTrainingSessions'); throw new Error('Usuário não autenticado'); }
       // Calcular intervalo amplo se não fornecido
       let _startDate = startDate;
       let _endDate = endDate;
@@ -295,6 +292,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
       if (error) throw error;
+      console.log('Dados recebidos em fetchTrainingSessions:', data);
       set({ trainingSessions: data || [], isLoading: false, error: null });
     } catch (error: any) {
       console.error('Erro ao buscar treinos:', error);
@@ -458,13 +456,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { console.log('Nenhum usuário autenticado em loadWeeklyReflections'); return; }
       const { data, error } = await supabase
         .from('weekly_reflections')
         .select('enjoyment, progress, confidence, week_start, created_at')
         .eq('user_id', user.id)
         .order('week_start', { ascending: false });
       if (error) throw error;
+      console.log('Dados recebidos em loadWeeklyReflections:', data);
       set({ weeklyReflections: (data as WeeklyReflection[]) || [], isLoading: false, error: null });
     } catch (error: any) {
       console.error('Error loading weekly reflections:', error);

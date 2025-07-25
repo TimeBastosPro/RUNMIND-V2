@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { Card, SegmentedButtons, Button } from 'react-native-paper';
 import { LineChart } from 'react-native-gifted-charts';
 import { Picker } from '@react-native-picker/picker';
 import { useCheckinStore } from '../../../stores/checkin';
+import { VictoryChart, VictoryLine, VictoryAxis, VictoryTheme } from 'victory';
 
 const METRICS = [
   { label: 'Qualidade do Sono', value: 'sleep_quality' },
@@ -40,6 +41,11 @@ function getPeriodRange(center: Date, days: number) {
   end.setDate(center.getDate() + days);
   return { start, end };
 }
+function safeData(dataArray: any[]) {
+  return (dataArray || []).filter(
+    d => d && typeof d.value === 'number' && typeof d.label === 'string'
+  );
+}
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sleep_quality');
   const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('daily');
@@ -68,7 +74,6 @@ export default function WellbeingChartsTab() {
   const chartData = useMemo(() => {
     if (isLoading) return [];
     let data: ChartDatum[] = [];
-    // Reflexão semanal
     if (selectedMetric === 'enjoyment' || selectedMetric === 'progress' || selectedMetric === 'confidence_weekly') {
       data = (weeklyReflections || [])
         .filter((r) => {
@@ -80,35 +85,43 @@ export default function WellbeingChartsTab() {
           label: r.week_start ? formatDateLabel(r.week_start) : '',
           date: r.week_start,
         }));
-      if (viewMode === 'weekly') {
-        // Já está agrupado por semana
-        data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
-      } else {
-        // Diário: mostrar cada reflexão semanal como um ponto
-        data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value) && d.date && d.date >= start.toISOString() && d.date <= end.toISOString());
-      }
     } else {
-      // Demais métricas vêm dos check-ins
+      // Mapear corretamente cada métrica para o campo correspondente
+      const metricFieldMap: Record<string, string> = {
+        sleep_quality: 'sleep_quality',
+        soreness: 'soreness',
+        motivation: 'motivation',
+        confidence: 'confidence',
+        focus: 'focus',
+        emocional: 'emocional',
+        notes: 'notes',
+      };
+      const field = metricFieldMap[selectedMetric] || selectedMetric;
       const filtered = (recentCheckins as RecentCheckin[])
-        .filter((c) => c.date && c[selectedMetric] !== undefined && c[selectedMetric] !== null)
+        .filter((c) => c.date && c[field] !== undefined && c[field] !== null)
         .map((c) => ({
-          value: Number(c[selectedMetric]),
-          label: formatDateLabel(c.date),
+          value: Number(c[field]),
+          label: c.date ? formatDateLabel(c.date) : '',
           date: c.date,
         }));
+      data = filtered;
       if (viewMode === 'weekly') {
-        data = calculateWeeklyAverages(filtered);
+        data = calculateWeeklyAverages(data.filter(d => !!d.date).map(d => ({ ...d, date: String(d.date) })));
       } else {
-        data = filtered.filter((d) => {
+        data = data.filter((d) => {
           if (!d.date) return false;
-          const dDate = new Date(d.date!);
+          const dDate = new Date(d.date);
           return dDate >= start && dDate <= end;
         });
       }
       data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
     }
+    console.log('chartData MAPPED', data);
     return data;
   }, [selectedMetric, isLoading, recentCheckins, weeklyReflections, viewMode, currentDate, calculateWeeklyAverages, start, end]);
+
+  console.log('chartData', chartData);
+  console.log('chartData FINAL', chartData);
 
   const selectedLabel = METRICS.find((m) => m.value === selectedMetric)?.label || '';
 
@@ -144,6 +157,7 @@ export default function WellbeingChartsTab() {
       </Card>
       {/* Card do gráfico */}
       <Card style={{ flex: 1, padding: 8 }}>
+        {/* Título fora do gráfico */}
         <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
           Evolução da {selectedLabel}
         </Text>
@@ -151,57 +165,44 @@ export default function WellbeingChartsTab() {
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 }}>
             <Text>Carregando dados...</Text>
           </View>
-        ) : chartData.length === 0 ? (
-          <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
-        ) : (
-          <View style={{ flex: 1, alignItems: 'stretch', justifyContent: 'center' }}>
-            <LineChart
-              width={undefined}
-              height={220}
-              color1="#1976d2"
-              yAxisLabelWidth={32}
-              yAxisTextStyle={{ fontSize: 12, color: '#333' }}
-              xAxisLabelTexts={chartData.map((d) => d.label)}
-              xAxisLabelTextStyle={{ fontSize: 12, color: '#333', marginTop: 8 }}
-              yAxisColor="#ccc"
-              xAxisColor="#ccc"
-              data={chartData}
-              hideDataPoints={false}
-              areaChart
-              startFillColor="#1976d2"
-              endFillColor="#fff"
-              startOpacity={0.3}
-              endOpacity={0.05}
-              dataPointsColor="#1976d2"
-              dataPointsRadius={5}
-              dataPointsShape="circle"
-              yAxisTextNumberOfLines={1}
-              xAxisTextNumberOfLines={1}
-              yAxisLabelTexts={chartData.map((d) => d.value.toFixed(1))}
-              pointerConfig={{
-                pointerStripHeight: 180,
-                pointerStripColor: '#1976d2',
-                pointerStripWidth: 2,
-                pointerColor: '#1976d2',
-                radius: 6,
-                pointerLabelWidth: 100,
-                pointerLabelHeight: 90,
-                activatePointersOnLongPress: false,
-                autoAdjustPointerLabelPosition: false,
-                pointerLabelComponent: (items: any) => (
-                  <View style={{ padding: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#1976d2' }}>
-                    <Text style={{ fontWeight: 'bold', color: '#1976d2' }}>{items[0]?.label}</Text>
-                    <Text style={{ color: '#333' }}>Valor: {items[0]?.value?.toFixed(1)}</Text>
-                  </View>
-                ),
+        ) : (chartData && chartData.length > 0) ? (
+          <VictoryChart
+            theme={VictoryTheme.material}
+            domain={{ y: [0, 10] }}
+            height={220}
+            padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
+          >
+            <VictoryAxis
+              dependentAxis
+              tickValues={[0, 2, 4, 6, 8, 10]}
+              style={{
+                axis: { stroke: '#ccc' },
+                ticks: { stroke: '#ccc', size: 5 },
+                tickLabels: { fontSize: 12, fill: '#333' },
+                grid: { stroke: '#eee' },
               }}
             />
-            {/* Eixos visuais */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              <Text style={{ fontSize: 12, color: '#333' }}>Data</Text>
-              <Text style={{ fontSize: 12, color: '#333' }}>Valor</Text>
-            </View>
-          </View>
+            <VictoryAxis
+              tickValues={chartData.map((d) => d.label)}
+              style={{
+                axis: { stroke: '#ccc' },
+                ticks: { stroke: '#ccc', size: 5 },
+                tickLabels: { fontSize: 12, fill: '#333', angle: 0, padding: 10 },
+                grid: { stroke: 'none' },
+              }}
+            />
+            <VictoryLine
+              data={safeData(chartData)}
+              x="label"
+              y="value"
+              style={{
+                data: { stroke: '#1976d2', strokeWidth: 2, fill: 'rgba(25, 118, 210, 0.1)' },
+              }}
+              interpolation="monotoneX"
+            />
+          </VictoryChart>
+        ) : (
+          <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
         )}
       </Card>
     </View>

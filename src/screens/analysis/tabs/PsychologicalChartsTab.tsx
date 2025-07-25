@@ -1,11 +1,12 @@
 // src/screens/analysis/tabs/PsychologicalChartsTab.tsx
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { Card, SegmentedButtons, Button } from 'react-native-paper';
 import { LineChart } from 'react-native-gifted-charts';
 import { Picker } from '@react-native-picker/picker';
 import { useCheckinStore } from '../../../stores/checkin';
+import { VictoryChart, VictoryLine, VictoryAxis, VictoryTheme, VictoryVoronoiContainer, VictoryTooltip } from 'victory';
 
 const TRAINING_METRICS = [
   { label: 'Distância (km)', value: 'distance_km' },
@@ -38,6 +39,11 @@ function getPeriodRange(center: Date, days: number) {
   const end = new Date(center);
   end.setDate(center.getDate() + days);
   return { start, end };
+}
+function safeData(dataArray: any[]) {
+  return (dataArray || []).filter(
+    d => d && typeof d.value === 'number' && typeof d.label === 'string'
+  );
 }
 export default function PsychologicalChartsTab() {
   // Métricas planejadas e realizadas
@@ -131,6 +137,10 @@ export default function PsychologicalChartsTab() {
     return data;
   }, [selectedMetric, isLoading, trainingSessions, viewMode, currentDate, calculateWeeklyAverages, start, end, dataType]);
 
+  console.log('trainingSessions RAW', trainingSessions);
+  console.log('chartData', chartData);
+  console.log('chartData FINAL', chartData);
+
   const optionsToShow = dataType === 'planejado' ? plannedMetrics : realizedMetrics;
   const selectedLabel = optionsToShow.find((m) => m.value === selectedMetric)?.label || '';
 
@@ -178,6 +188,7 @@ export default function PsychologicalChartsTab() {
       {/* Card do gráfico */}
       <Card style={{ flex: 1, paddingVertical: 8 }}>
         <Card.Content style={{ paddingHorizontal: 16 }}>
+          {/* Título fora do gráfico */}
           <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
             Evolução da {selectedLabel} ({dataType === 'realizado' ? 'Realizado' : 'Planejado'})
           </Text>
@@ -185,67 +196,50 @@ export default function PsychologicalChartsTab() {
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 }}>
               <Text>Carregando dados...</Text>
             </View>
-          ) : chartData.length === 0 ? (
-            <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
-          ) : (
-            <LineChart
-              data={chartData}
-              width={undefined}
+          ) : (chartData && chartData.length > 0) ? (
+            <VictoryChart
+              theme={VictoryTheme.material}
+              domain={{ y: [0, 10] }}
               height={200}
-              color1="#1976d2"
-              yAxisLabelWidth={24}
-              yAxisTextStyle={{ fontSize: 10 }}
-              xAxisLabelTexts={chartData.map((d) => viewMode === 'weekly' ? d.label : d.label)}
-              hideDataPoints={false}
-              areaChart
-              startFillColor="#1976d2"
-              endFillColor="#fff"
-              startOpacity={0.5}
-              endOpacity={0.1}
-              dataPointsColor="#1976d2"
-              dataPointsRadius={6}
-              dataPointsShape="circle"
-              pointerConfig={{
-                pointerStripHeight: 160,
-                pointerStripColor: '#1976d2',
-                pointerStripWidth: 2,
-                pointerColor: '#1976d2',
-                radius: 6,
-                pointerLabelWidth: 100,
-                pointerLabelHeight: 90,
-                activatePointersOnLongPress: false,
-                autoAdjustPointerLabelPosition: false,
-                pointerLabelComponent: (items: any) => {
-                  return (
-                    <View
-                      style={{
-                        height: 90,
-                        width: 100,
-                        justifyContent: 'center',
-                        marginTop: -30,
-                        marginLeft: -40,
-                      }}>
-                      <Text style={{ color: '#1976d2', fontSize: 14, marginBottom: 6, textAlign: 'center' }}>
-                        {items[0].label}
-                      </Text>
-                      <View
-                        style={{
-                          paddingHorizontal: 14,
-                          paddingVertical: 6,
-                          borderRadius: 16,
-                          backgroundColor: '#1976d2',
-                          borderWidth: 1,
-                          borderColor: '#1976d2',
-                        }}>
-                        <Text style={{ fontWeight: 'bold', textAlign: 'center', color: '#fff' }}>
-                          {items[0].value}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                },
-              }}
-            />
+              padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
+              containerComponent={
+                <VictoryVoronoiContainer
+                  labels={({ datum }) => `${datum.label}\n${datum.value}`}
+                  labelComponent={<VictoryTooltip cornerRadius={4} flyoutStyle={{ fill: '#fff' }} />}
+                />
+              }
+            >
+              <VictoryAxis
+                dependentAxis
+                tickValues={[0, 2, 4, 6, 8, 10]}
+                style={{
+                  axis: { stroke: '#ccc' },
+                  ticks: { stroke: '#ccc', size: 5 },
+                  tickLabels: { fontSize: 12, fill: '#333' },
+                  grid: { stroke: '#eee' },
+                }}
+              />
+              <VictoryAxis
+                tickValues={chartData.map((d) => d.label)}
+                style={{
+                  axis: { stroke: '#ccc' },
+                  ticks: { stroke: '#ccc', size: 5 },
+                  tickLabels: { fontSize: 12, fill: '#333', angle: 0, padding: 10 },
+                  grid: { stroke: 'none' },
+                }}
+              />
+              <VictoryLine
+                data={safeData(chartData)}
+                x="label"
+                y="value"
+                style={{
+                  data: { stroke: '#1976d2', strokeWidth: 2, fill: 'rgba(25, 118, 210, 0.1)' },
+                }}
+                interpolation="monotoneX"
+              />
+            </VictoryChart>
+          ) : (
+            <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
           )}
         </Card.Content>
       </Card>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Platform } from 'react-native';
 import { Card, Chip, Button } from 'react-native-paper';
 import { LineChart } from 'react-native-gifted-charts';
+import { VictoryChart, VictoryLine, VictoryAxis, VictoryTheme, VictoryVoronoiContainer, VictoryTooltip } from 'victory';
 import { useCheckinStore } from '../../../stores/checkin';
 
 // Todas as métricas disponíveis (bem-estar, treino, reflexão semanal)
@@ -31,6 +32,12 @@ const ALL_METRICS = [
 
 function formatDateLabel(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function safeData(dataArray: any[]) {
+  return (dataArray || []).filter(
+    d => d && typeof d.value === 'number' && typeof d.label === 'string'
+  );
 }
 
 export default function CrossAnalysisTab() {
@@ -119,6 +126,19 @@ export default function CrossAnalysisTab() {
     chartData.data4.length > 0
   );
 
+  console.log('chartData', chartData);
+  console.log('data', chartData.data);
+  console.log('data2', chartData.data2);
+  console.log('data3', chartData.data3);
+  console.log('data4', chartData.data4);
+  console.log('chartData.data FINAL', chartData.data);
+  console.log('chartData.data2 FINAL', chartData.data2);
+  console.log('chartData.data3 FINAL', chartData.data3);
+  console.log('chartData.data4 FINAL', chartData.data4);
+  console.log('recentCheckins RAW', recentCheckins);
+  console.log('weeklyReflections RAW', weeklyReflections);
+  console.log('trainingSessions RAW', trainingSessions);
+
   return (
     <View style={{ flex: 1, padding: 16, backgroundColor: '#F5F5F5' }}>
       {/* Painel de Seleção com Chips */}
@@ -151,145 +171,61 @@ export default function CrossAnalysisTab() {
       </Card>
 
       {/* Card do gráfico */}
-      <Card style={{ flex: 1, padding: 16 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 12 }}>
+      <Card style={{ flex: 1, padding: 8 }}>
+        {/* Título fora do gráfico */}
+        <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
           Análise Cruzada
         </Text>
-        
-        {isLoading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 }}>
-            <Text>Carregando dados...</Text>
-          </View>
-        ) : !hasData ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 }}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>📊</Text>
-            <Text style={{ fontSize: 16, textAlign: 'center', color: '#666', marginBottom: 8 }}>
-              Selecione até 4 métricas acima
-            </Text>
-            <Text style={{ fontSize: 14, textAlign: 'center', color: '#999' }}>
-              para começar a cruzar os dados!
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* Legenda Integrada */}
-            <View style={{ 
-              flexDirection: 'row', 
-              flexWrap: 'wrap', 
-              gap: 12, 
-              marginBottom: 16, 
-              paddingVertical: 8,
-              borderBottomWidth: 1,
-              borderBottomColor: '#e0e0e0'
-            }}>
-              {selectedMetrics.map((metricValue, index) => {
-                const metric = ALL_METRICS.find(m => m.value === metricValue);
-                const color = metric?.color || '#666';
-                const isLeftAxis = index < 2;
-                
-                return (
-                  <View key={metricValue} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ 
-                      width: 12, 
-                      height: 12, 
-                      backgroundColor: color, 
-                      borderRadius: 6 
-                    }} />
-                    <Text style={{ fontSize: 12, color: '#333', fontWeight: '500' }}>
-                      {metric?.label}
-                    </Text>
-                    <View style={{ 
-                      paddingHorizontal: 6, 
-                      paddingVertical: 2, 
-                      backgroundColor: isLeftAxis ? '#e3f2fd' : '#fff3e0',
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: isLeftAxis ? '#1976d2' : '#ff9800'
-                    }}>
-                      <Text style={{ 
-                        fontSize: 10, 
-                        color: isLeftAxis ? '#1976d2' : '#ff9800',
-                        fontWeight: 'bold'
-                      }}>
-                        {isLeftAxis ? 'Eixo Y Esquerdo' : 'Eixo Y Direito'}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Gráfico com Eixo Y Secundário */}
-            <LineChart
-              data={chartData.data}
-              data2={chartData.data2}
-              data3={chartData.data3}
-              data4={chartData.data4}
-              color1={getMetricColor(0)}
-              color2={getMetricColor(1)}
-              color3={getMetricColor(2)}
-              color4={getMetricColor(3)}
-              height={220}
-              width={undefined}
-              yAxisLabelWidth={24}
-              yAxisTextStyle={{ fontSize: 10 }}
-              xAxisLabelTexts={chartData.data?.map((d: any) => d.label) || []}
-              hideDataPoints={false}
-              areaChart={false}
-              dataPointsColor={getMetricColor(0)}
-              dataPointsRadius={4}
-              dataPointsShape="circle"
-                             // Eixo Y principal
-               yAxisColor={getMetricColor(0)}
-              pointerConfig={{
-                pointerStripHeight: 180,
-                pointerStripColor: '#666',
-                pointerStripWidth: 1,
-                pointerColor: '#666',
-                radius: 4,
-                pointerLabelWidth: 120,
-                pointerLabelHeight: 100,
-                activatePointersOnLongPress: false,
-                autoAdjustPointerLabelPosition: false,
-                pointerLabelComponent: (items: any) => {
-                  return (
-                    <View
-                      style={{
-                        height: 100,
-                        width: 120,
-                        justifyContent: 'center',
-                        marginTop: -40,
-                        marginLeft: -50,
-                      }}>
-                      <Text style={{ color: '#666', fontSize: 12, marginBottom: 4, textAlign: 'center' }}>
-                        {items[0]?.label || ''}
-                      </Text>
-                      <View style={{ gap: 2 }}>
-                        {items.map((item: any, index: number) => (
-                          <View
-                            key={index}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              paddingHorizontal: 8,
-                              paddingVertical: 2,
-                              borderRadius: 8,
-                              backgroundColor: item.color || '#666',
-                              marginBottom: 2,
-                            }}>
-                            <View style={{ width: 8, height: 8, backgroundColor: '#fff', borderRadius: 4, marginRight: 6 }} />
-                            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>
-                              {item.value?.toFixed(1) || '0'}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  );
-                },
+        {(chartData && (chartData.data.length > 0 || chartData.data2.length > 0 || chartData.data3.length > 0 || chartData.data4.length > 0)) ? (
+          <VictoryChart
+            theme={VictoryTheme.material}
+            domain={{ y: [0, 10] }}
+            height={220}
+            padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
+            containerComponent={
+              <VictoryVoronoiContainer
+                labels={({ datum }) => `${datum.label}\n${datum.value}`}
+                labelComponent={<VictoryTooltip cornerRadius={4} flyoutStyle={{ fill: '#fff' }} />}
+              />
+            }
+          >
+            <VictoryAxis
+              dependentAxis
+              tickValues={[0, 2, 4, 6, 8, 10]}
+              style={{
+                axis: { stroke: '#ccc' },
+                ticks: { stroke: '#ccc', size: 5 },
+                tickLabels: { fontSize: 12, fill: '#333' },
+                grid: { stroke: '#eee' },
               }}
             />
-          </>
+            <VictoryAxis
+              tickValues={chartData.data.map((d) => d.label)}
+              style={{
+                axis: { stroke: '#ccc' },
+                ticks: { stroke: '#ccc', size: 5 },
+                tickLabels: { fontSize: 12, fill: '#333', angle: 0, padding: 10 },
+                grid: { stroke: 'none' },
+              }}
+            />
+            {/* Renderizar até 4 linhas, cada uma com sua cor */}
+            {['data', 'data2', 'data3', 'data4'].map((key, idx) =>
+              chartData[key].length > 0 ? (
+                <VictoryLine
+                  key={key}
+                  data={safeData(chartData[key])}
+                  x="label"
+                  y="value"
+                  style={{
+                    data: { stroke: getMetricColor(idx), strokeWidth: 2 },
+                  }}
+                  interpolation="monotoneX"
+                />
+              ) : null
+            )}
+          </VictoryChart>
+        ) : (
+          <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
         )}
       </Card>
     </View>
