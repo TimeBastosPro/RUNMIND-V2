@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Platform } from 'react-native';
 
 const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY!;
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -12,61 +11,105 @@ export const geminiModel = genAI.getGenerativeModel({
   }
 });
 
-export async function generateInsight(athleteData: any): Promise<string> {
-  // Em produção, use a Edge Function Supabase para proteger a chave
-  if (process.env.NODE_ENV === 'production') {
-    let url = '/functions/v1/get-gemini-insight';
-    if (typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost') {
-      url = 'http://localhost:54321/functions/v1/get-gemini-insight';
-    }
-    const response = await fetch(
-      url,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ athleteData })
+export async function generateInsight(athleteData: Record<string, unknown>): Promise<string> {
+  try {
+    // Em produção, use a Edge Function Supabase para proteger a chave
+    if (process.env.NODE_ENV === 'production') {
+      let url = '/functions/v1/get-gemini-insight';
+      if (typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost') {
+        url = 'http://localhost:54321/functions/v1/get-gemini-insight';
       }
-    );
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error('Resposta da função Gemini não é JSON. Verifique a URL e o ambiente.');
+      const response = await fetch(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ athleteData })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return data.result?.candidates?.[0]?.content?.parts?.[0]?.text || 'Insight gerado com sucesso.';
     }
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Erro ao gerar insight com Gemini');
-    }
-    return data.result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  }
-  // Em desenvolvimento/local, use a API Gemini diretamente
-  const prompt = buildPromptFromAthleteData(athleteData);
-  const result = await geminiModel.generateContent(prompt);
-  return result.response.text();
-}
-
-function buildPromptFromAthleteData(athleteData: any): string {
-  // Construa o prompt conforme sua lógica de negócio
-  // Exemplo simples:
-  const { context_type, last_checkin, planned_training } = athleteData;
-  if (context_type === 'coached') {
-    let prompt = `Este atleta, que tem um treinador, dormiu ${last_checkin?.sleep_hours ?? 'N/A'} horas, tem dor muscular nível ${last_checkin?.soreness ?? 'N/A'}/5 e hoje seu plano é ${planned_training?.description ?? 'descanso'}`;
-    if (planned_training?.distance_km) prompt += ` de ${planned_training.distance_km}km`;
-    if (planned_training?.duration_minutes) prompt += ` (${planned_training.duration_minutes} minutos)`;
-    prompt += `. Com base nisso, gere um insight de duas frases sobre sua prontidão para o treino.`;
-    return prompt;
-  } else {
-    let prompt = `Este atleta, que treina por conta própria, dormiu ${last_checkin?.sleep_hours ?? 'N/A'} horas, está se sentindo ${last_checkin?.mood ?? 'N/A'} e com dor muscular nível ${last_checkin?.soreness ?? 'N/A'}/5. `;
-    if (planned_training?.description) {
-      prompt += `Hoje o plano é: ${planned_training.description}`;
-      if (planned_training?.distance_km) prompt += ` de ${planned_training.distance_km}km`;
-      if (planned_training?.duration_minutes) prompt += ` (${planned_training.duration_minutes} minutos)`;
-      prompt += '. ';
-    }
-    prompt += 'Gere um insight de duas frases sugerindo como ele pode aproveitar bem seu treino hoje.';
-    return prompt;
+    
+    // Em desenvolvimento/local, use a API Gemini diretamente
+    const prompt = buildPromptFromAthleteData(athleteData);
+    console.log('Prompt enviado para Gemini:', prompt);
+    
+    const result = await geminiModel.generateContent(prompt);
+    const response = result.response.text();
+    console.log('Resposta do Gemini:', response);
+    
+    return response || 'Insight gerado com sucesso.';
+  } catch (error) {
+    console.error('Erro ao gerar insight:', error);
+    // Retorna um insight padrão em caso de erro
+    return 'Com base nos seus dados, mantenha a consistência nos treinos e escute seu corpo. A recuperação adequada é fundamental para o progresso.';
   }
 }
 
-export async function generateChatResponse(userQuestion: string): Promise<string> {
-  // const result = await geminiModel.generateContent(fullPrompt);
+function buildPromptFromAthleteData(athleteData: Record<string, unknown>): string {
+  try {
+    const { last_checkin, planned_training, recent_checkins } = athleteData;
+    
+    // Dados do último check-in
+    const checkin = last_checkin as Record<string, unknown> || {};
+    const sleepQuality = checkin.sleep_quality || checkin.sleep_hours || 'N/A';
+    const soreness = checkin.soreness || checkin.soreness_score || 'N/A';
+    const motivation = checkin.motivation || checkin.motivation_score || 'N/A';
+    const confidence = checkin.confidence || checkin.confidence_score || 'N/A';
+    const focus = checkin.focus || checkin.focus_score || 'N/A';
+    const emocional = checkin.emocional || 'N/A';
+    
+    // Dados do treino planejado
+    const training = planned_training as Record<string, unknown> || {};
+    const trainingType = training.training_type || training.description || 'treino';
+    const distance = training.distance_km || training.planned_distance_km || 'N/A';
+    const duration = training.duration_minutes || training.planned_duration_minutes || 'N/A';
+    
+    // Análise de tendências
+    let trendAnalysis = '';
+    if (recent_checkins && Array.isArray(recent_checkins) && recent_checkins.length > 0) {
+      const avgMotivation = recent_checkins.reduce((sum: number, c: Record<string, unknown>) => sum + (Number(c.motivation) || 0), 0) / recent_checkins.length;
+      if (avgMotivation > 4) {
+        trendAnalysis = 'Sua motivação tem estado alta ultimamente. ';
+      } else if (avgMotivation < 3) {
+        trendAnalysis = 'Sua motivação tem estado baixa ultimamente. ';
+      }
+    }
+    
+    // Construção do prompt
+    const prompt = `Como especialista em treinamento esportivo, analise os dados deste atleta e gere um insight personalizado de 2-3 frases em português brasileiro.
+
+DADOS DO ATLETA:
+- Qualidade do sono: ${sleepQuality}/7
+- Dores musculares: ${soreness}/7  
+- Motivação: ${motivation}/5
+- Confiança: ${confidence}/5
+- Foco: ${focus}/5
+- Estado emocional: ${emocional}/5
+
+TREINO PLANEJADO:
+- Tipo: ${trainingType}
+- Distância: ${distance}km
+- Duração: ${duration}min
+
+${trendAnalysis}
+
+Gere um insight motivacional e prático que ajude o atleta a aproveitar melhor seu treino hoje, considerando seu estado atual e o treino planejado.`;
+
+    return prompt;
+  } catch (error) {
+    console.error('Erro ao construir prompt:', error);
+    return 'Gere um insight motivacional para um atleta que está treinando hoje.';
+  }
+}
+
+export async function generateChatResponse(): Promise<string> {
   return Promise.resolve("Modo de desenvolvimento: O chat com IA está desativado para economizar custos.");
 }
