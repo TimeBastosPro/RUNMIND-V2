@@ -339,19 +339,6 @@ export default function SportsProfileScreen() {
         }))
       : [];
 
-  // Debug logs
-  console.log('DEBUG - Profile:', {
-    max_heart_rate: profile?.max_heart_rate,
-    resting_heart_rate: profile?.resting_heart_rate
-  });
-  console.log('DEBUG - Reference Test:', referenceTest);
-  console.log('DEBUG - VO2max:', vo2max, 'VAM:', vam);
-  console.log('DEBUG - Training Zones:', trainingZones);
-  console.log('DEBUG - Pace Zones:', paceZones);
-  console.log('DEBUG - Combined Zones:', combinedZones);
-  console.log('DEBUG - Combined Zones Length:', combinedZones.length);
-  console.log('DEBUG - Should show table:', combinedZones.length > 0);
-
   return (
     <ScrollView style={styles.container}>
       <Card style={styles.card}>
@@ -526,10 +513,6 @@ export default function SportsProfileScreen() {
                     ? 'Complete um teste de performance para calcular as zonas de ritmo'
                     : 'Nenhuma zona calculada'
                 }
-              </Text>
-              <Text style={styles.debugText}>
-                DEBUG: FC Max={profile?.max_heart_rate}, FC Repouso={profile?.resting_heart_rate}, 
-                VO2max={vo2max}, VAM={vam}, TrainingZones={trainingZones.length}, PaceZones={paceZones.length}
               </Text>
             </View>
           )}
@@ -791,12 +774,6 @@ const styles = StyleSheet.create({
   },
   paceRange: {
     color: '#2196F3',
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 8,
-    textAlign: 'center',
   },
   inputLabel: {
     marginBottom: 4,

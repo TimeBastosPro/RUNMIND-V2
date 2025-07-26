@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { generateInsight } from '../services/gemini';
-import type { DailyCheckin, UserAnalytics } from '../types/database';
+import type { DailyCheckin, Insight } from '../types/database';
 
 interface RecentCheckin {
   sleep_quality: number;
@@ -22,6 +22,27 @@ interface WeeklyReflection {
   created_at?: string;
 }
 
+interface TrainingSession {
+  id: number;
+  user_id: string;
+  training_date: string;
+  training_type: string;
+  status: string;
+  perceived_effort?: number;
+  satisfaction?: number;
+  notes?: string;
+  avg_heart_rate?: number;
+  elevation_gain_meters?: number;
+  distance_km?: number;
+  duration_minutes?: number;
+  created_at?: string;
+  // Propriedades dinâmicas para métricas planejadas
+  planned_perceived_effort?: number;
+  planned_distance_km?: number;
+  planned_duration_minutes?: number;
+  planned_elevation_gain_meters?: number;
+}
+
 interface CheckinState {
   todayCheckin: DailyCheckin | null;
   recentCheckins: RecentCheckin[];
@@ -30,7 +51,8 @@ interface CheckinState {
   isSubmitting: boolean;
   error: string | null;
   insights: string[];
-  trainingSessions: any[];
+  savedInsights: Insight[];
+  trainingSessions: TrainingSession[];
   todayReadinessScore: number | null;
   weeklyReflections: WeeklyReflection[];
   // Actions
@@ -54,7 +76,7 @@ interface CheckinState {
     details?: string;
   }) => Promise<void>;
   fetchTrainingSessions: (startDate?: string, endDate?: string) => Promise<void>;
-  saveTrainingSession: (trainingData: any) => Promise<any>;
+  saveTrainingSession: (trainingData: Partial<TrainingSession>) => Promise<TrainingSession>;
   deleteTrainingSession: (sessionId: number | string) => Promise<boolean>;
   markTrainingAsCompleted: (id: number, completedData: {
     perceived_effort?: number;
@@ -64,8 +86,8 @@ interface CheckinState {
     elevation_gain_meters?: number;
     distance_km?: number;
     duration_minutes?: number;
-  }) => Promise<any>;
-  calculateReadinessScore: (checkin: any) => number;
+  }) => Promise<TrainingSession>;
+  calculateReadinessScore: (checkin: DailyCheckin) => number;
   submitWeeklyReflection: (reflection: {
     enjoyment: number;
     progress: string;
@@ -78,10 +100,15 @@ interface CheckinState {
     motivation: number;
     focus: number;
     confidence: number;
-  }) => Promise<any>;
-  updateCheckinWithInsight: (checkinId: string, insightText: string) => Promise<any>;
+  }) => Promise<DailyCheckin>;
+  updateCheckinWithInsight: (checkinId: string, insightText: string) => Promise<void>;
   loadWeeklyReflections: () => Promise<void>;
   calculateWeeklyAverages: (data: Array<{ date: string; value: number }>) => Array<{ label: string; value: number; weekStart: string }>;
+  // Novas funções para insights
+  loadSavedInsights: () => Promise<void>;
+  saveInsight: (insightData: Omit<Insight, 'id' | 'user_id' | 'created_at'>) => Promise<void>;
+  generateAndSaveInsight: (checkinData: Record<string, unknown>) => Promise<void>;
+  deleteInsight: (insightId: string) => Promise<void>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -92,6 +119,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   isSubmitting: false,
   error: null,
   insights: [],
+  savedInsights: [],
   trainingSessions: [], // Initialize trainingSessions
   todayReadinessScore: null,
   weeklyReflections: [],
@@ -129,17 +157,18 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         todayReadinessScore: readiness,
         error: null
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading today checkin:', error);
-      set({ isLoading: false, error: error.message || 'Erro ao carregar check-in de hoje.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar check-in de hoje.';
+      set({ isLoading: false, error: errorMessage });
     }
   },
 
-  loadRecentCheckins: async (days = 7) => {
+  loadRecentCheckins: async (days = 90) => {
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { console.log('Nenhum usuário autenticado em loadRecentCheckins'); return; }
+      if (!user) { return; }
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       const { data, error } = await supabase
@@ -149,11 +178,11 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
       if (error) throw error;
-      console.log('Dados recebidos em loadRecentCheckins:', data);
       set({ recentCheckins: (data as RecentCheckin[]) || [], isLoading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading recent checkins:', error);
-      set({ isLoading: false, error: error.message || 'Erro ao carregar check-ins recentes.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar check-ins recentes.';
+      set({ isLoading: false, error: errorMessage });
     }
   },
 
@@ -185,15 +214,22 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         error: null
       });
       await get().loadRecentCheckins();
+      
+      // Gerar e salvar insight automaticamente
       try {
-        const insightText = await generateInsight(checkinData);
-        set(state => ({ insights: [...state.insights, insightText] }));
-        console.log('✨ Insight gerado pela IA:', insightText);
-      } catch (error) {
-        console.error('Erro ao gerar insight com IA:', error);
+        await get().generateAndSaveInsight({
+          ...checkinData,
+          user_id: user.id,
+          date: today,
+          context_type: 'solo', // ou buscar do perfil do usuário
+        });
+      } catch (insightError) {
+        console.error('Erro ao gerar insight com IA:', insightError);
+        // Não falhar o check-in se o insight falhar
       }
-    } catch (error: any) {
-      set({ isSubmitting: false, error: error.message || 'Erro ao enviar check-in.' });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao enviar check-in.';
+      set({ isSubmitting: false, error: errorMessage });
       throw error;
     }
   },
@@ -225,7 +261,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     }
   },
 
-  saveTrainingSession: async (trainingData: any) => {
+  saveTrainingSession: async (trainingData: Partial<TrainingSession>) => {
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -242,9 +278,10 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       if (error) throw error;
       set({ isLoading: false, error: null });
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao salvar treino (upsert):', error);
-      set({ isLoading: false, error: error.message || 'Erro ao salvar treino.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar treino.';
+      set({ isLoading: false, error: errorMessage });
       throw error;
     }
   },
@@ -260,9 +297,10 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       if (error) throw error;
       set({ isLoading: false, error: null });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao deletar treino:', error);
-      set({ isLoading: false, error: error.message || 'Erro ao deletar treino.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao deletar treino.';
+      set({ isLoading: false, error: errorMessage });
       throw error;
     }
   },
@@ -271,7 +309,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { console.log('Nenhum usuário autenticado em fetchTrainingSessions'); throw new Error('Usuário não autenticado'); }
+      if (!user) { throw new Error('Usuário não autenticado'); }
       // Calcular intervalo amplo se não fornecido
       let _startDate = startDate;
       let _endDate = endDate;
@@ -292,11 +330,11 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
       if (error) throw error;
-      console.log('Dados recebidos em fetchTrainingSessions:', data);
       set({ trainingSessions: data || [], isLoading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao buscar treinos:', error);
-      set({ trainingSessions: [], isLoading: false, error: error.message || 'Erro ao buscar treinos.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao buscar treinos.';
+      set({ trainingSessions: [], isLoading: false, error: errorMessage });
     }
   },
 
@@ -305,7 +343,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     if (!trainingSessions || trainingSessions.length === 0) return null;
 
     // 1. Carga de Treino (trainingLoad)
-    const trainingLoad = trainingSessions.map((t: any) => ({
+    const trainingLoad = trainingSessions.map((t: TrainingSession) => ({
       id: t.id,
       date: t.training_date,
       duration: t.duration_minutes || 0,
@@ -315,7 +353,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
     // 2. Carga Aguda (acuteLoad) - média dos últimos 7 dias para cada dia
     const acuteLoad: { date: string; value: number }[] = [];
-    const allDates = trainingSessions.map((t: any) => t.training_date).sort();
+    const allDates = trainingSessions.map((t: TrainingSession) => t.training_date).sort();
     allDates.forEach((date: string) => {
       const dateObj = new Date(date);
       const past7 = trainingLoad.filter((tl) => {
@@ -340,8 +378,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
     // 4. Eficiência de Corrida (runningEfficiency): para treinos do tipo 'Rodagem'
     const runningEfficiency = trainingSessions
-      .filter((t: any) => t.training_type && t.training_type.toLowerCase().includes('rodagem'))
-      .map((t: any) => ({
+      .filter((t: TrainingSession) => t.training_type && t.training_type.toLowerCase().includes('rodagem'))
+      .map((t: TrainingSession) => ({
         pace: t.duration_minutes && t.distance_km ? t.duration_minutes / t.distance_km : 0,
         pse: t.perceived_effort || 0,
         date: t.training_date,
@@ -355,7 +393,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     };
   },
 
-  calculateReadinessScore: (checkin: any) => {
+  calculateReadinessScore: (checkin: DailyCheckin) => {
     const sleep = Number(checkin.sleep_quality_score) || 0;
     const fatigue = Number(checkin.fatigue_score) || 0;
     const stress = Number(checkin.stress_score) || 0;
@@ -394,9 +432,10 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       }));
       set({ isLoading: false, error: null });
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao marcar treino como realizado:', error);
-      set({ isLoading: false, error: error.message || 'Erro ao marcar treino como realizado.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao marcar treino como realizado.';
+      set({ isLoading: false, error: errorMessage });
       throw error;
     }
   },
@@ -456,18 +495,18 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { console.log('Nenhum usuário autenticado em loadWeeklyReflections'); return; }
+      if (!user) { return; }
       const { data, error } = await supabase
         .from('weekly_reflections')
         .select('enjoyment, progress, confidence, week_start, created_at')
         .eq('user_id', user.id)
         .order('week_start', { ascending: false });
       if (error) throw error;
-      console.log('Dados recebidos em loadWeeklyReflections:', data);
       set({ weeklyReflections: (data as WeeklyReflection[]) || [], isLoading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading weekly reflections:', error);
-      set({ isLoading: false, error: error.message || 'Erro ao carregar reflexões semanais.' });
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar reflexões semanais.';
+      set({ isLoading: false, error: errorMessage });
     }
   },
   calculateWeeklyAverages: (data) => {
@@ -492,21 +531,83 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       weekStart: week,
     }));
   },
+  // Novas funções para insights
+  loadSavedInsights: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { return; }
+      const { data, error } = await supabase
+        .from('insights')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
+    } catch (error: unknown) {
+      console.error('Error loading saved insights:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar insights salvos.';
+      set({ isLoading: false, error: errorMessage });
+    }
+  },
+  saveInsight: async (insightData: Omit<Insight, 'id' | 'user_id' | 'created_at'>) => {
+    set({ isSubmitting: true, error: null });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const insertData = {
+        user_id: user.id,
+        ...insightData,
+        created_at: new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('insights')
+        .insert([insertData]);
+      if (error) throw error;
+      set({ isSubmitting: false, error: null });
+      await get().loadSavedInsights(); // Refresh the list
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar insight.';
+      set({ isSubmitting: false, error: errorMessage });
+      throw error;
+    }
+  },
+  generateAndSaveInsight: async (checkinData: Record<string, unknown>) => {
+    set({ isSubmitting: true, error: null });
+    try {
+      const insightText = await generateInsight(checkinData);
+      await get().saveInsight({
+        insight_type: 'ai_analysis',
+        insight_text: insightText,
+        confidence_score: 0.8,
+        source_data: checkinData,
+        generated_by: 'ai',
+      });
+      set(state => ({ insights: [...state.insights, insightText] }));
+      set({ isSubmitting: false, error: null });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao gerar e salvar insight.';
+      set({ isSubmitting: false, error: errorMessage });
+      throw error;
+    }
+  },
+  deleteInsight: async (insightId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const { error } = await supabase
+        .from('insights')
+        .delete()
+        .eq('id', insightId)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      set({ isLoading: false, error: null });
+      await get().loadSavedInsights(); // Refresh the list
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao deletar insight.';
+      set({ isLoading: false, error: errorMessage });
+      throw error;
+    }
+  },
 }));
-
-// Helper function to calculate correlation
-function calculateCorrelation(x: number[], y: number[]): number {
-    const n = x.length;
-    if (n !== y.length || n === 0) return 0;
-  
-    const sumX = x.reduce((sum, val) => sum + val, 0);
-    const sumY = y.reduce((sum, val) => sum + val, 0);
-    const sumXY = x.reduce((sum, val, i) => sum + val * y[i], 0);
-    const sumX2 = x.reduce((sum, val) => sum + val * val, 0);
-    const sumY2 = y.reduce((sum, val) => sum + val * val, 0);
-  
-    const numerator = n * sumXY - sumX * sumY;
-    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-  
-    return denominator === 0 ? 0 : numerator / denominator;
-  }

@@ -1,8 +1,30 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, StyleSheet, LayoutChangeEvent, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import { Picker } from '@react-native-picker/picker';
 import { useCheckinStore } from '../../../stores/checkin';
+
+// Interfaces para acessar propriedades dinâmicas
+interface DynamicRecentCheckin {
+  sleep_quality: number;
+  soreness: number;
+  motivation: number;
+  confidence: number;
+  focus: number;
+  emocional: number;
+  notes?: string;
+  date: string;
+  [key: string]: number | string | undefined;
+}
+
+interface DynamicWeeklyReflection {
+  enjoyment: number;
+  progress: string;
+  confidence: string;
+  week_start: string;
+  created_at?: string;
+  [key: string]: number | string | undefined;
+}
 
 const METRICS = [
   { label: 'Qualidade do Sono', value: 'sleep_quality' },
@@ -25,33 +47,37 @@ function formatDateLabel(dateStr: string): string {
 
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sleep_quality');
-
   const {
     recentCheckins,
-    loadRecentCheckins,
     weeklyReflections,
-    loadWeeklyReflections,
     isLoading,
+    loadRecentCheckins,
+    loadWeeklyReflections
   } = useCheckinStore();
 
   useEffect(() => {
-    loadRecentCheckins(90);
-    loadWeeklyReflections();
+    const loadData = async () => {
+      await Promise.all([
+        loadRecentCheckins(90),
+        loadWeeklyReflections()
+      ]);
+    };
+    loadData();
   }, [loadRecentCheckins, loadWeeklyReflections]);
 
   const chartData = useMemo(() => {
     if (isLoading) return [];
     let data: { value: number | string; date: string }[] = [];
     if (['enjoyment', 'progress', 'confidence_weekly'].includes(selectedMetric)) {
-      const metricKey = selectedMetric.replace('_weekly', '') as keyof typeof weeklyReflections[0];
+      const metricKey = selectedMetric.replace('_weekly', '') as keyof DynamicWeeklyReflection;
       data = (weeklyReflections || [])
-        .filter(r => r.week_start && r[metricKey] != null)
-        .map(r => ({ value: Number(r[metricKey]), date: r.week_start }));
+        .filter(r => r.week_start && (r as DynamicWeeklyReflection)[metricKey] != null)
+        .map(r => ({ value: Number((r as DynamicWeeklyReflection)[metricKey]), date: r.week_start }));
     } else {
-      const metricKey = selectedMetric as keyof typeof recentCheckins[0];
+      const metricKey = selectedMetric as keyof DynamicRecentCheckin;
       data = (recentCheckins || [])
-        .filter(c => c.date && c[metricKey] != null)
-        .map(c => ({ value: Number(c[metricKey]), date: c.date }));
+        .filter(c => c.date && (c as DynamicRecentCheckin)[metricKey] != null)
+        .map(c => ({ value: Number((c as DynamicRecentCheckin)[metricKey]), date: c.date }));
     }
     return data
       .filter(d => typeof d.value === 'number' && !isNaN(d.value))
@@ -107,6 +133,9 @@ export default function WellbeingChartsTab() {
                 const x2 = index / (chartData.length - 1) * 100;
                 const y2 = 100 - ((point.y - minY) / (maxY - minY)) * 100;
                 
+                const width = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+                const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+                
                 return (
                   <View
                     key={index}
@@ -116,9 +145,10 @@ export default function WellbeingChartsTab() {
                         backgroundColor: '#1976d2',
                         left: `${x1}%`,
                         top: `${y1}%`,
-                        width: `${x2 - x1}%`,
+                        width: `${width}%`,
                         height: 2,
-                        transform: [{ rotate: `${Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI}deg` }]
+                        transform: [{ rotate: `${angle}deg` }],
+                        transformOrigin: 'left center'
                       }
                     ]}
                   />
@@ -129,22 +159,22 @@ export default function WellbeingChartsTab() {
           
           {/* X-axis labels */}
           <View style={styles.xAxis}>
-            {chartData.map((point, index) => (
-              <Text key={index} style={styles.xAxisLabel}>{point.x}</Text>
-            ))}
+            {chartData
+              .sort((a, b) => new Date(a.x.split('/').reverse().join('-')).getTime() - new Date(b.x.split('/').reverse().join('-')).getTime())
+              .map((point, index) => (
+                <Text key={index} style={styles.xAxisLabel}>{point.x}</Text>
+              ))}
           </View>
         </View>
       </View>
     );
   };
 
-  const selectedLabel = METRICS.find((m) => m.value === selectedMetric)?.label || '';
-
   return (
     <ScrollView style={styles.container}>
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.cardTitle}>Selecione a Métrica</Text>
+          <Text style={styles.cardTitle}>Selecione a Métrica de Bem-estar</Text>
           <Picker
             selectedValue={selectedMetric}
             onValueChange={(itemValue) => setSelectedMetric(itemValue as MetricKey)}
@@ -184,6 +214,17 @@ const styles = StyleSheet.create({
   gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#e0e0e0' },
   lineContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   line: { position: 'absolute', transformOrigin: 'left center' },
-  xAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  xAxisLabel: { fontSize: 10, color: '#666', transform: [{ rotate: '-45deg' }] },
+  xAxis: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    marginTop: 10,
+    paddingHorizontal: 5
+  },
+  xAxisLabel: { 
+    fontSize: 10, 
+    color: '#666', 
+    transform: [{ rotate: '-45deg' }],
+    textAlign: 'center',
+    width: 30
+  },
 }); 
