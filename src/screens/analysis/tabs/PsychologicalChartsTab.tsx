@@ -1,248 +1,228 @@
-// src/screens/analysis/tabs/PsychologicalChartsTab.tsx
-
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, Platform } from 'react-native';
-import { Card, SegmentedButtons, Button } from 'react-native-paper';
-import { LineChart } from 'react-native-gifted-charts';
+import { View, StyleSheet, LayoutChangeEvent, ScrollView } from 'react-native';
+import { Card, Text, ActivityIndicator } from 'react-native-paper';
 import { Picker } from '@react-native-picker/picker';
 import { useCheckinStore } from '../../../stores/checkin';
-import { VictoryChart, VictoryLine, VictoryAxis, VictoryTheme, VictoryVoronoiContainer, VictoryTooltip } from 'victory';
 
 const TRAINING_METRICS = [
+  { label: 'Percepção de Esforço (PSE)', value: 'perceived_effort' },
   { label: 'Distância (km)', value: 'distance_km' },
   { label: 'Duração (min)', value: 'duration_minutes' },
   { label: 'Altimetria (m)', value: 'elevation_gain_meters' },
-  { label: 'Percepção de Esforço (PSE)', value: 'perceived_effort' },
-] as const;
+];
 
-type TrainingMetricKey = typeof TRAINING_METRICS[number]['value'];
-type ChartDatum = { value: number; label: string; date?: string };
-type TrainingSession = {
-  training_date: string;
-  distance_km?: number;
-  duration_minutes?: number;
-  elevation_gain_meters?: number;
-  perceived_effort?: number;
-  status?: 'completed' | 'planned';
-  planned_distance_km?: number;
-  planned_duration_minutes?: number;
-  planned_elevation_gain_meters?: number;
-  planned_perceived_effort?: number;
-  [key: string]: any;
-};
+type MetricKey = typeof TRAINING_METRICS[number]['value'];
+
 function formatDateLabel(dateStr: string): string {
+  if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
-function getPeriodRange(center: Date, days: number) {
-  const start = new Date(center);
-  start.setDate(center.getDate() - days);
-  const end = new Date(center);
-  end.setDate(center.getDate() + days);
-  return { start, end };
-}
-function safeData(dataArray: any[]) {
-  return (dataArray || []).filter(
-    d => d && typeof d.value === 'number' && typeof d.label === 'string'
-  );
-}
+
 export default function PsychologicalChartsTab() {
-  // Métricas planejadas e realizadas
-  const plannedMetrics = [
-    { label: 'Modalidade', value: 'planned_modality' },
-    { label: 'Esforço', value: 'planned_effort' },
-    { label: 'Percurso', value: 'planned_route' },
-    { label: 'Terreno', value: 'planned_terrain' },
-    { label: 'Tipo de Treino', value: 'planned_type' },
-    { label: 'Duração', value: 'planned_duration_min' },
-    { label: 'Zona de Treino', value: 'planned_training_zone' },
-  ];
-  const realizedMetrics = [
-    { label: 'Duração', value: 'realized_duration_min' },
-    { label: 'Altimetria', value: 'realized_elevation_m' },
-    { label: 'FC Média', value: 'realized_avg_hr' },
-    { label: 'PSE', value: 'realized_pse' },
-    { label: 'Satisfação', value: 'realized_satisfaction' },
-    { label: 'Sensação Geral', value: 'realized_general_feeling' },
-    { label: 'Clima', value: 'realized_weather' },
-  ];
-
-  const [dataType, setDataType] = useState<'realizado' | 'planejado'>('realizado');
-  const [selectedMetric, setSelectedMetric] = useState<string>(realizedMetrics[0].value);
-  const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('daily');
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const { trainingSessions, fetchTrainingSessions, calculateWeeklyAverages, isLoading } = useCheckinStore();
-
-  // Atualiza o selectedMetric ao trocar dataType
-  useEffect(() => {
-    setSelectedMetric(dataType === 'planejado' ? plannedMetrics[0].value : realizedMetrics[0].value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataType]);
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey>('perceived_effort');
+  const { trainingSessions, fetchTrainingSessions, isLoading } = useCheckinStore();
 
   useEffect(() => {
     fetchTrainingSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchTrainingSessions]);
 
-  // Navegação de período
-  const daysRange = 6; // 6 dias antes e 6 depois (13 dias)
-  const { start, end } = getPeriodRange(currentDate, daysRange);
-  const periodLabel = `${formatDateLabel(start.toISOString())} a ${formatDateLabel(end.toISOString())}`;
+  const chartData = useMemo(() => {
+    const realized = (trainingSessions || [])
+      .filter(s => s.status === 'completed' && s[selectedMetric] != null)
+      .map(s => ({
+        x: formatDateLabel(s.training_date),
+        y: Number(s[selectedMetric]),
+        originalValue: s[selectedMetric]
+      }));
 
-  // Mapear métricas para colunas do banco
-  const metricColumnMap: Record<string, string> = {
-    // Planejado
-    planned_modality: 'planned_modality',
-    planned_effort: 'planned_effort',
-    planned_route: 'planned_route',
-    planned_terrain: 'planned_terrain',
-    planned_type: 'planned_type',
-    planned_duration_min: 'planned_duration_min',
-    planned_training_zone: 'planned_training_zone',
-    // Realizado
-    realized_duration_min: 'duration_minutes',
-    realized_elevation_m: 'elevation_gain_meters',
-    realized_avg_hr: 'avg_heart_rate',
-    realized_pse: 'perceived_effort',
-    realized_satisfaction: 'satisfaction',
-    realized_general_feeling: 'general_feeling',
-    realized_weather: 'weather',
+    const plannedKey = `planned_${selectedMetric}`;
+    const planned = (trainingSessions || [])
+      .filter(s => s.status === 'planned' && s[plannedKey] != null)
+      .map(s => ({
+        x: formatDateLabel(s.training_date),
+        y: Number(s[plannedKey]),
+        originalValue: s[plannedKey]
+      }));
+      
+    return { realized, planned };
+  }, [selectedMetric, trainingSessions]);
+
+  const renderSimpleChart = () => {
+    if (chartData.realized.length === 0 && chartData.planned.length === 0) {
+      return <Text style={styles.placeholder}>Sem dados suficientes para exibir.</Text>;
+    }
+
+    const allData = [...chartData.realized, ...chartData.planned];
+    const maxY = Math.max(...allData.map(d => d.y), 10);
+    const minY = Math.min(...allData.map(d => d.y), 0);
+
+    return (
+      <View style={styles.chartContainer}>
+        <View style={styles.chartHeader}>
+          <Text style={styles.chartTitle}>{TRAINING_METRICS.find(m => m.value === selectedMetric)?.label}: Planejado vs. Realizado</Text>
+        </View>
+        
+        <View style={styles.chartArea}>
+          {/* Y-axis labels */}
+          <View style={styles.yAxis}>
+            {[maxY, maxY * 0.75, maxY * 0.5, maxY * 0.25, minY].map(value => (
+              <Text key={value} style={styles.yAxisLabel}>{value.toFixed(1)}</Text>
+            ))}
+          </View>
+          
+          {/* Chart content */}
+          <View style={styles.chartContent}>
+            {/* Grid lines */}
+            {[maxY, maxY * 0.75, maxY * 0.5, maxY * 0.25, minY].map(value => (
+              <View
+                key={value}
+                style={[
+                  styles.gridLine,
+                  { top: `${100 - ((value - minY) / (maxY - minY)) * 100}%` }
+                ]}
+              />
+            ))}
+            
+            {/* Data lines */}
+            {chartData.realized.length > 0 && (
+              <View style={styles.lineContainer}>
+                {chartData.realized.map((point, index) => {
+                  if (index === 0) return null;
+                  const prevPoint = chartData.realized[index - 1];
+                  const x1 = (index - 1) / (chartData.realized.length - 1) * 100;
+                  const y1 = 100 - ((prevPoint.y - minY) / (maxY - minY)) * 100;
+                  const x2 = index / (chartData.realized.length - 1) * 100;
+                  const y2 = 100 - ((point.y - minY) / (maxY - minY)) * 100;
+                  
+                  return (
+                    <View
+                      key={`realized-${index}`}
+                      style={[
+                        styles.line,
+                        {
+                          backgroundColor: '#c43a31',
+                          left: `${x1}%`,
+                          top: `${y1}%`,
+                          width: `${x2 - x1}%`,
+                          height: 2,
+                          transform: [{ rotate: `${Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI}deg` }]
+                        }
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            )}
+            
+            {chartData.planned.length > 0 && (
+              <View style={styles.lineContainer}>
+                {chartData.planned.map((point, index) => {
+                  if (index === 0) return null;
+                  const prevPoint = chartData.planned[index - 1];
+                  const x1 = (index - 1) / (chartData.planned.length - 1) * 100;
+                  const y1 = 100 - ((prevPoint.y - minY) / (maxY - minY)) * 100;
+                  const x2 = index / (chartData.planned.length - 1) * 100;
+                  const y2 = 100 - ((point.y - minY) / (maxY - minY)) * 100;
+                  
+                  return (
+                    <View
+                      key={`planned-${index}`}
+                      style={[
+                        styles.line,
+                        {
+                          backgroundColor: '#455A64',
+                          left: `${x1}%`,
+                          top: `${y1}%`,
+                          width: `${x2 - x1}%`,
+                          height: 2,
+                          borderStyle: 'dashed',
+                          transform: [{ rotate: `${Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI}deg` }]
+                        }
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </View>
+          
+          {/* X-axis labels */}
+          <View style={styles.xAxis}>
+            {[...new Set([...chartData.realized.map(d => d.x), ...chartData.planned.map(d => d.x)])].map((date, index) => (
+              <Text key={index} style={styles.xAxisLabel}>{date}</Text>
+            ))}
+          </View>
+        </View>
+        
+        {/* Legend */}
+        <View style={styles.legend}>
+          {chartData.realized.length > 0 && (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#c43a31' }]} />
+              <Text style={styles.legendText}>Realizado</Text>
+            </View>
+          )}
+          {chartData.planned.length > 0 && (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#455A64' }]} />
+              <Text style={styles.legendText}>Planejado</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
   };
 
-  // Lógica do gráfico dinâmico (memoizada)
-  const chartData = useMemo(() => {
-    if (isLoading) return [];
-    const metricKey = metricColumnMap[selectedMetric];
-    let data: ChartDatum[] = (trainingSessions as TrainingSession[])
-      .filter((s) =>
-        s.training_date &&
-        s[metricKey] !== undefined &&
-        s[metricKey] !== null &&
-        (dataType === 'realizado' ? s.status === 'completed' : s.status === 'planned')
-      )
-      .map((s) => ({
-        value: Number(s[metricKey]),
-        label: formatDateLabel(s.training_date),
-        date: s.training_date,
-      }));
-    if (viewMode === 'weekly') {
-      data = calculateWeeklyAverages(data.filter((d): d is ChartDatum & { date: string } => !!d.date));
-    } else {
-      data = data.filter((d) => {
-        if (!d.date) return false;
-        const dDate = new Date(d.date);
-        return dDate >= start && dDate <= end;
-      });
-    }
-    data = data.filter((d) => typeof d.value === 'number' && !isNaN(d.value));
-    return data;
-  }, [selectedMetric, isLoading, trainingSessions, viewMode, currentDate, calculateWeeklyAverages, start, end, dataType]);
-
-  console.log('trainingSessions RAW', trainingSessions);
-  console.log('chartData', chartData);
-  console.log('chartData FINAL', chartData);
-
-  const optionsToShow = dataType === 'planejado' ? plannedMetrics : realizedMetrics;
-  const selectedLabel = optionsToShow.find((m) => m.value === selectedMetric)?.label || '';
+  const selectedLabel = TRAINING_METRICS.find(m => m.value === selectedMetric)?.label || '';
 
   return (
-    <View style={{ flex: 1, padding: 16, backgroundColor: '#F5F5F5' }}>
-      {/* Navegação de período e visualização */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-        <Button mode="outlined" onPress={() => setCurrentDate(new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000))}>{'< Anterior'}</Button>
-        <Text style={{ fontWeight: 'bold', fontSize: 16, marginHorizontal: 8 }}>{periodLabel}</Text>
-        <Button mode="outlined" onPress={() => setCurrentDate(new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000))}>{'Próximo >'}</Button>
-        <SegmentedButtons
-          value={viewMode}
-          onValueChange={setViewMode}
-          buttons={[
-            { value: 'daily', label: 'Diário' },
-            { value: 'weekly', label: 'Semanal' },
-          ]}
-          style={{ marginLeft: 'auto' }}
-        />
-      </View>
-      {/* Seletor Planejado vs Realizado */}
-      <Card style={{ marginBottom: 12, padding: 8 }}>
-        <SegmentedButtons
-          value={dataType}
-          onValueChange={setDataType}
-          buttons={[
-            { value: 'realizado', label: 'Realizado' },
-            { value: 'planejado', label: 'Planejado' },
-          ]}
-        />
+    <ScrollView style={styles.container}>
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text style={styles.cardTitle}>Selecione a Métrica de Treino</Text>
+          <Picker
+            selectedValue={selectedMetric}
+            onValueChange={(itemValue) => setSelectedMetric(itemValue as MetricKey)}
+          >
+            {TRAINING_METRICS.map((m) => (
+              <Picker.Item key={m.value} label={m.label} value={m.value} />
+            ))}
+          </Picker>
+        </Card.Content>
       </Card>
-      {/* Card do seletor de métrica de treino */}
-      <Card style={{ marginBottom: 24, padding: 8 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Selecione a Métrica de Treino</Text>
-        <Picker
-          selectedValue={selectedMetric}
-          onValueChange={setSelectedMetric}
-          style={{ backgroundColor: '#fff' }}
-        >
-          {optionsToShow.map((m) => (
-            <Picker.Item key={m.value} label={m.label} value={m.value} />
-          ))}
-        </Picker>
-      </Card>
-      {/* Card do gráfico */}
-      <Card style={{ flex: 1, paddingVertical: 8 }}>
-        <Card.Content style={{ paddingHorizontal: 16 }}>
-          {/* Título fora do gráfico */}
-          <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
-            Evolução da {selectedLabel} ({dataType === 'realizado' ? 'Realizado' : 'Planejado'})
-          </Text>
+
+      <Card style={styles.card}>
+        <Card.Content>
           {isLoading ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 }}>
-              <Text>Carregando dados...</Text>
-            </View>
-          ) : (chartData && chartData.length > 0) ? (
-            <VictoryChart
-              theme={VictoryTheme.material}
-              domain={{ y: [0, 10] }}
-              height={200}
-              padding={{ top: 20, bottom: 50, left: 50, right: 20 }}
-              containerComponent={
-                <VictoryVoronoiContainer
-                  labels={({ datum }) => `${datum.label}\n${datum.value}`}
-                  labelComponent={<VictoryTooltip cornerRadius={4} flyoutStyle={{ fill: '#fff' }} />}
-                />
-              }
-            >
-              <VictoryAxis
-                dependentAxis
-                tickValues={[0, 2, 4, 6, 8, 10]}
-                style={{
-                  axis: { stroke: '#ccc' },
-                  ticks: { stroke: '#ccc', size: 5 },
-                  tickLabels: { fontSize: 12, fill: '#333' },
-                  grid: { stroke: '#eee' },
-                }}
-              />
-              <VictoryAxis
-                tickValues={chartData.map((d) => d.label)}
-                style={{
-                  axis: { stroke: '#ccc' },
-                  ticks: { stroke: '#ccc', size: 5 },
-                  tickLabels: { fontSize: 12, fill: '#333', angle: 0, padding: 10 },
-                  grid: { stroke: 'none' },
-                }}
-              />
-              <VictoryLine
-                data={safeData(chartData)}
-                x="label"
-                y="value"
-                style={{
-                  data: { stroke: '#1976d2', strokeWidth: 2, fill: 'rgba(25, 118, 210, 0.1)' },
-                }}
-                interpolation="monotoneX"
-              />
-            </VictoryChart>
+            <ActivityIndicator style={styles.placeholder} />
           ) : (
-            <Text style={{ textAlign: 'center', marginTop: 32 }}>Sem dados para exibir.</Text>
+            renderSimpleChart()
           )}
         </Card.Content>
       </Card>
-    </View>
+    </ScrollView>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 10, backgroundColor: '#f4f4f8' },
+  card: { marginBottom: 16, elevation: 2 },
+  cardTitle: { fontWeight: 'bold', fontSize: 16, marginBottom: 8 },
+  placeholder: { textAlign: 'center', marginVertical: 40, color: '#666' },
+  chartContainer: { padding: 10 },
+  chartHeader: { marginBottom: 10 },
+  chartTitle: { fontWeight: 'bold', fontSize: 14, textAlign: 'center' },
+  chartArea: { flexDirection: 'row', height: 200 },
+  yAxis: { width: 40, justifyContent: 'space-between', paddingVertical: 10 },
+  yAxisLabel: { fontSize: 10, color: '#666' },
+  chartContent: { flex: 1, position: 'relative', marginHorizontal: 10 },
+  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#e0e0e0' },
+  lineContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  line: { position: 'absolute', transformOrigin: 'left center' },
+  xAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  xAxisLabel: { fontSize: 10, color: '#666', transform: [{ rotate: '-45deg' }] },
+  legend: { flexDirection: 'row', justifyContent: 'center', marginTop: 15 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 10 },
+  legendColor: { width: 12, height: 12, marginRight: 5, borderRadius: 2 },
+  legendText: { fontSize: 12, color: '#333' },
+}); 

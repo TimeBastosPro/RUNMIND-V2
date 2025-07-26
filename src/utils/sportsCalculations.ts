@@ -85,6 +85,15 @@ export interface TrainingZone {
   description: string;
 }
 
+export interface PaceZone {
+  zone: number;
+  minPercentage: number;
+  maxPercentage: number;
+  minPace: string; // formato "mm:ss"
+  maxPace: string; // formato "mm:ss"
+  description: string;
+}
+
 export const calculateKarvonenZones = (maxHeartRate: number, restingHeartRate: number): TrainingZone[] => {
   const heartRateReserve = maxHeartRate - restingHeartRate;
   
@@ -130,4 +139,71 @@ export const calculateKarvonenZones = (maxHeartRate: number, restingHeartRate: n
       description: 'Máximo'
     }
   ];
+};
+
+// Calcular zonas de ritmo baseadas no VO2max e VAM
+export const calculatePaceZones = (vo2max: number, vam: number): PaceZone[] => {
+  console.log('DEBUG - calculatePaceZones chamado com:', { vo2max, vam });
+  
+  if (!vo2max || !vam) {
+    console.log('DEBUG - VO2max ou VAM inválidos, retornando array vazio');
+    return [];
+  }
+  
+  // Converter VAM de km/h para min/km (ritmo)
+  const vamPaceSeconds = 3600 / vam; // segundos por km
+  console.log('DEBUG - VAM Pace Seconds:', vamPaceSeconds);
+  
+  const zones = [
+    {
+      zone: 1,
+      minPercentage: 0.5,
+      maxPercentage: 0.6,
+      minPace: formatSecondsToPace(vamPaceSeconds / 0.5),
+      maxPace: formatSecondsToPace(vamPaceSeconds / 0.6),
+      description: 'Recuperação'
+    },
+    {
+      zone: 2,
+      minPercentage: 0.6,
+      maxPercentage: 0.7,
+      minPace: formatSecondsToPace(vamPaceSeconds / 0.6),
+      maxPace: formatSecondsToPace(vamPaceSeconds / 0.7),
+      description: 'Aeróbico'
+    },
+    {
+      zone: 3,
+      minPercentage: 0.7,
+      maxPercentage: 0.8,
+      minPace: formatSecondsToPace(vamPaceSeconds / 0.7),
+      maxPace: formatSecondsToPace(vamPaceSeconds / 0.8),
+      description: 'Limiar'
+    },
+    {
+      zone: 4,
+      minPercentage: 0.8,
+      maxPercentage: 0.9,
+      minPace: formatSecondsToPace(vamPaceSeconds / 0.8),
+      maxPace: formatSecondsToPace(vamPaceSeconds / 0.9),
+      description: 'Anaeróbico'
+    },
+    {
+      zone: 5,
+      minPercentage: 0.9,
+      maxPercentage: 1.0,
+      minPace: formatSecondsToPace(vamPaceSeconds / 0.9),
+      maxPace: formatSecondsToPace(vamPaceSeconds / 1.0),
+      description: 'Máximo'
+    }
+  ];
+  
+  console.log('DEBUG - Zonas de ritmo calculadas:', zones);
+  return zones;
+};
+
+// Função auxiliar para formatar segundos em ritmo (mm:ss)
+const formatSecondsToPace = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }; 

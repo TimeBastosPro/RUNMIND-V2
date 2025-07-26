@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Card, Title, Paragraph, Button, TextInput, Modal, Portal, Text, SegmentedButtons } from 'react-native-paper';
+import { Card, Title, Paragraph, Button, TextInput, Modal, Portal, Text, SegmentedButtons, IconButton, Chip, DataTable } from 'react-native-paper';
 import { useAuthStore } from '../stores/auth';
 import { 
   calculateIMC, 
@@ -13,7 +13,9 @@ import {
   calculateVo2maxFromRace,
   calculateVamFromVo2max,
   calculateKarvonenZones,
-  TrainingZone
+  calculatePaceZones,
+  TrainingZone,
+  PaceZone
 } from '../utils/sportsCalculations';
 
 interface TestProtocol {
@@ -30,8 +32,9 @@ const TEST_PROTOCOLS: TestProtocol[] = [
 ];
 
 export default function SportsProfileScreen() {
-  const { profile, loadProfile, fitnessTests, fetchFitnessTests, saveFitnessTest } = useAuthStore();
+  const { profile, loadProfile, fitnessTests, fetchFitnessTests, saveFitnessTest, updateFitnessTest, deleteFitnessTest, updateProfile } = useAuthStore();
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingTest, setEditingTest] = useState<any>(null);
   const [selectedProtocol, setSelectedProtocol] = useState<string>('');
   const [testData, setTestData] = useState({
     distance: '',
@@ -39,11 +42,44 @@ export default function SportsProfileScreen() {
     heartRate: ''
   });
   const [loading, setLoading] = useState(false);
+  const [referenceTest, setReferenceTest] = useState<any>(null);
+  const [profileData, setProfileData] = useState({
+    height_cm: '',
+    weight_kg: '',
+    date_of_birth: '',
+    gender: '',
+    max_heart_rate: '',
+    resting_heart_rate: ''
+  });
 
   useEffect(() => {
     loadProfile();
     fetchFitnessTests();
   }, [loadProfile, fetchFitnessTests]);
+
+  // Sincronizar dados do perfil com estado local
+  useEffect(() => {
+    if (profile) {
+      setProfileData({
+        height_cm: profile.height_cm?.toString() || '',
+        weight_kg: profile.weight_kg?.toString() || '',
+        date_of_birth: profile.date_of_birth || '',
+        gender: profile.gender || '',
+        max_heart_rate: profile.max_heart_rate?.toString() || '',
+        resting_heart_rate: profile.resting_heart_rate?.toString() || ''
+      });
+    }
+  }, [profile]);
+
+  // Encontrar o melhor teste para usar como referência (maior VO2max)
+  useEffect(() => {
+    if (fitnessTests.length > 0) {
+      const bestTest = fitnessTests.reduce((best, current) => 
+        current.calculated_vo2max > best.calculated_vo2max ? current : best
+      );
+      setReferenceTest(bestTest);
+    }
+  }, [fitnessTests]);
 
   const handleSaveTest = async () => {
     if (!selectedProtocol || !profile) return;
@@ -64,19 +100,19 @@ export default function SportsProfileScreen() {
           vo2max = calculateVo2maxFrom3km(parseTimeToSeconds(testData.time));
           break;
 
-                 case 'rockport':
-           if (!testData.time || !testData.heartRate || !profile.weight_kg || !profile.date_of_birth || !profile.gender) {
-             throw new Error('Todos os campos são obrigatórios para o teste Rockport');
-           }
-           const age = profile.date_of_birth ? new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 0;
-           vo2max = calculateVo2maxFromRockport(
-             profile.weight_kg,
-             age,
-             profile.gender,
-             parseTimeToSeconds(testData.time),
-             Number(testData.heartRate)
-           );
-           break;
+        case 'rockport':
+          if (!testData.time || !testData.heartRate || !profile.weight_kg || !profile.date_of_birth || !profile.gender) {
+            throw new Error('Todos os campos são obrigatórios para o teste Rockport');
+          }
+          const age = profile.date_of_birth ? new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 0;
+          vo2max = calculateVo2maxFromRockport(
+            profile.weight_kg,
+            age,
+            profile.gender,
+            parseTimeToSeconds(testData.time),
+            Number(testData.heartRate)
+          );
+          break;
 
         case 'race':
           if (!testData.distance || !testData.time) throw new Error('Distância e tempo são obrigatórios');
@@ -89,7 +125,7 @@ export default function SportsProfileScreen() {
 
       const vam = calculateVamFromVo2max(vo2max);
 
-      await saveFitnessTest({
+      const testDataToSave = {
         protocol_name: TEST_PROTOCOLS.find(p => p.name === selectedProtocol)?.label || selectedProtocol,
         test_date: currentDate,
         distance_meters: testData.distance ? Number(testData.distance) : undefined,
@@ -97,19 +133,107 @@ export default function SportsProfileScreen() {
         final_heart_rate: testData.heartRate ? Number(testData.heartRate) : undefined,
         calculated_vo2max: vo2max,
         calculated_vam: vam
-      });
+      };
+
+      console.log('Dados do teste a serem salvos:', testDataToSave);
+
+      if (editingTest) {
+        await updateFitnessTest(editingTest.id, testDataToSave);
+        Alert.alert('Sucesso', 'Teste atualizado com sucesso!');
+      } else {
+        await saveFitnessTest(testDataToSave);
+        Alert.alert('Sucesso', 'Teste registrado com sucesso!');
+      }
 
       // Atualizar perfil com novos valores
       await loadProfile();
       
-      Alert.alert('Sucesso', 'Teste registrado com sucesso!');
       setModalVisible(false);
       resetForm();
     } catch (error) {
+      console.error('Erro ao salvar teste de fitness:', error);
       Alert.alert('Erro', error instanceof Error ? error.message : 'Erro ao salvar teste');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditTest = (test: any) => {
+    setEditingTest(test);
+    setSelectedProtocol(TEST_PROTOCOLS.find(p => test.protocol_name.includes(p.label))?.name || '');
+    
+    // Preencher dados do teste para edição
+    setTestData({
+      distance: test.distance_meters?.toString() || '',
+      time: test.time_seconds ? formatSecondsToTime(test.time_seconds) : '',
+      heartRate: test.final_heart_rate?.toString() || ''
+    });
+    
+    setModalVisible(true);
+  };
+
+  const handleDeleteTest = (test: any) => {
+    console.log('DEBUG - handleDeleteTest chamado com:', test);
+    
+    Alert.alert(
+      'Confirmar Exclusão',
+      `Deseja realmente excluir o teste "${test.protocol_name}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Excluir', 
+          style: 'destructive',
+          onPress: async () => {
+            console.log('DEBUG - Iniciando exclusão do teste:', test.id);
+            try {
+              await deleteFitnessTest(test.id);
+              console.log('DEBUG - Teste excluído com sucesso');
+              Alert.alert('Sucesso', 'Teste excluído com sucesso!');
+            } catch (error) {
+              console.error('DEBUG - Erro ao excluir teste:', error);
+              Alert.alert('Erro', `Erro ao excluir teste: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSetReferenceTest = (test: any) => {
+    setReferenceTest(test);
+    Alert.alert('Sucesso', `${test.protocol_name} definido como teste de referência!`);
+  };
+
+  const handleSaveProfile = async () => {
+    console.log('DEBUG - handleSaveProfile chamado');
+    console.log('DEBUG - profileData:', profileData);
+    
+    try {
+      const updates = {
+        height_cm: profileData.height_cm ? Number(profileData.height_cm) : undefined,
+        weight_kg: profileData.weight_kg ? Number(profileData.weight_kg) : undefined,
+        date_of_birth: profileData.date_of_birth || undefined,
+        gender: profileData.gender || undefined,
+        max_heart_rate: profileData.max_heart_rate ? Number(profileData.max_heart_rate) : undefined,
+        resting_heart_rate: profileData.resting_heart_rate ? Number(profileData.resting_heart_rate) : undefined
+      };
+      
+      console.log('DEBUG - updates a serem enviados:', updates);
+      
+      await updateProfile(updates);
+      console.log('DEBUG - updateProfile executado com sucesso');
+      Alert.alert('Sucesso', 'Dados fisiológicos atualizados com sucesso!');
+    } catch (error) {
+      console.error('DEBUG - Erro ao salvar dados fisiológicos:', error);
+      Alert.alert('Erro', `Erro ao salvar dados fisiológicos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  };
+
+  const formatSecondsToTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const parseTimeToSeconds = (timeString: string): number => {
@@ -123,6 +247,7 @@ export default function SportsProfileScreen() {
   };
 
   const resetForm = () => {
+    setEditingTest(null);
     setSelectedProtocol('');
     setTestData({ distance: '', time: '', heartRate: '' });
   };
@@ -166,76 +291,138 @@ export default function SportsProfileScreen() {
     );
   };
 
+  // Usar dados do teste de referência para cálculos
+  const referenceVo2max = referenceTest?.calculated_vo2max || 0;
+  const referenceVam = referenceTest?.calculated_vam || 0;
+  
   const imc = profile?.weight_kg && profile?.height_cm ? calculateIMC(profile.weight_kg, profile.height_cm) : 0;
-  const vo2max = 0; // Será calculado a partir dos testes
-  const vam = 0; // Será calculado a partir dos testes
+  const vo2max: number = referenceVo2max;
+  const vam: number = referenceVam;
   const trainingZones = profile?.max_heart_rate && profile?.resting_heart_rate 
     ? calculateKarvonenZones(profile.max_heart_rate, profile.resting_heart_rate)
     : [];
+  const paceZones = vo2max && vam ? calculatePaceZones(vo2max, vam) : [];
+
+  // Combinar zonas de FC com zonas de ritmo
+  const combinedZones = trainingZones.length > 0 
+    ? trainingZones.map((zone, index) => ({
+        ...zone,
+        pace: paceZones[index] ? `${paceZones[index].minPace} - ${paceZones[index].maxPace}` : '--'
+      }))
+    : paceZones.length > 0 
+      ? paceZones.map((zone, index) => ({
+          zone: zone.zone,
+          minPercentage: zone.minPercentage,
+          maxPercentage: zone.maxPercentage,
+          minHeartRate: 0,
+          maxHeartRate: 0,
+          description: zone.description,
+          pace: `${zone.minPace} - ${zone.maxPace}`
+        }))
+      : [];
+
+  // Debug logs
+  console.log('DEBUG - Profile:', {
+    max_heart_rate: profile?.max_heart_rate,
+    resting_heart_rate: profile?.resting_heart_rate
+  });
+  console.log('DEBUG - Reference Test:', referenceTest);
+  console.log('DEBUG - VO2max:', vo2max, 'VAM:', vam);
+  console.log('DEBUG - Training Zones:', trainingZones);
+  console.log('DEBUG - Pace Zones:', paceZones);
+  console.log('DEBUG - Combined Zones:', combinedZones);
+  console.log('DEBUG - Combined Zones Length:', combinedZones.length);
+  console.log('DEBUG - Should show table:', combinedZones.length > 0);
 
   return (
     <ScrollView style={styles.container}>
       <Card style={styles.card}>
         <Card.Content>
           <Title>Dados Fisiológicos</Title>
-                     <View style={styles.row}>
-             <TextInput
-               label="Altura (cm)"
-               value={profile?.height_cm?.toString() || ''}
-               keyboardType="numeric"
-               style={styles.halfInput}
-             />
-             <TextInput
-               label="Peso (kg)"
-               value={profile?.weight_kg?.toString() || ''}
-               keyboardType="numeric"
-               style={styles.halfInput}
-             />
-           </View>
-           <View style={styles.row}>
-             <TextInput
-               label="Data de Nascimento"
-               value={profile?.date_of_birth || ''}
-               style={styles.halfInput}
-             />
-             <TextInput
-               label="Gênero"
-               value={profile?.gender || ''}
-               style={styles.halfInput}
-             />
-           </View>
+          <View style={styles.row}>
+            <TextInput
+              label="Altura (cm)"
+              value={profileData.height_cm}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, height_cm: text }))}
+              keyboardType="numeric"
+              style={styles.halfInput}
+            />
+            <TextInput
+              label="Peso (kg)"
+              value={profileData.weight_kg}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, weight_kg: text }))}
+              keyboardType="numeric"
+              style={styles.halfInput}
+            />
+          </View>
+          <View style={styles.row}>
+            <TextInput
+              label="Data de Nascimento"
+              value={profileData.date_of_birth}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, date_of_birth: text }))}
+              style={styles.halfInput}
+            />
+            <View style={styles.halfInput}>
+              <Text style={styles.inputLabel}>Gênero:</Text>
+              <SegmentedButtons
+                value={profileData.gender}
+                onValueChange={(value) => setProfileData(prev => ({ ...prev, gender: value }))}
+                buttons={[
+                  { value: 'masculino', label: 'Masculino' },
+                  { value: 'feminino', label: 'Feminino' }
+                ]}
+                style={styles.genderButtons}
+              />
+            </View>
+          </View>
           <View style={styles.row}>
             <TextInput
               label="FC Máxima"
-              value={profile?.max_heart_rate?.toString() || ''}
+              value={profileData.max_heart_rate}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, max_heart_rate: text }))}
               keyboardType="numeric"
               style={styles.halfInput}
             />
             <TextInput
               label="FC Repouso"
-              value={profile?.resting_heart_rate?.toString() || ''}
+              value={profileData.resting_heart_rate}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, resting_heart_rate: text }))}
               keyboardType="numeric"
               style={styles.halfInput}
             />
           </View>
+          <Button 
+            mode="contained" 
+            onPress={handleSaveProfile}
+            style={styles.button}
+          >
+            Salvar Dados Fisiológicos
+          </Button>
         </Card.Content>
       </Card>
 
       <Card style={styles.card}>
         <Card.Content>
           <Title>Resultados Calculados</Title>
+          {referenceTest && (
+            <View style={styles.referenceInfo}>
+              <Text style={styles.referenceText}>
+                Baseado no teste: {referenceTest.protocol_name}
+              </Text>
+            </View>
+          )}
           <View style={styles.resultsContainer}>
-                         <View style={styles.resultItem}>
-               <Text style={styles.resultLabel}>IMC:</Text>
-               <Text style={styles.resultValue}>{imc ? imc.toFixed(1) : '--'}</Text>
-             </View>
+            <View style={styles.resultItem}>
+              <Text style={styles.resultLabel}>IMC:</Text>
+              <Text style={styles.resultValue}>{imc ? imc.toFixed(1) : '--'}</Text>
+            </View>
             <View style={styles.resultItem}>
               <Text style={styles.resultLabel}>VO2max:</Text>
-              <Text style={styles.resultValue}>{vo2max.toFixed(1)} ml/kg/min</Text>
+              <Text style={styles.resultValue}>{vo2max ? `${vo2max.toFixed(1)} ml/kg/min` : '--'}</Text>
             </View>
             <View style={styles.resultItem}>
               <Text style={styles.resultLabel}>VAM:</Text>
-              <Text style={styles.resultValue}>{vam.toFixed(1)} km/h</Text>
+              <Text style={styles.resultValue}>{vam ? `${vam.toFixed(1)} km/h` : '--'}</Text>
             </View>
           </View>
         </Card.Content>
@@ -244,13 +431,59 @@ export default function SportsProfileScreen() {
       <Card style={styles.card}>
         <Card.Content>
           <Title>Zonas de Treino (Karvonen)</Title>
-          {trainingZones.map((zone) => (
-            <View key={zone.zone} style={styles.zoneItem}>
-              <Text style={styles.zoneText}>
-                Zona {zone.zone} ({zone.description}): {zone.minHeartRate}-{zone.maxHeartRate} bpm
+          {referenceTest && (
+            <View style={styles.referenceInfo}>
+              <Text style={styles.referenceText}>
+                Baseado no teste: {referenceTest.protocol_name} (VO2max: {referenceTest.calculated_vo2max.toFixed(1)} ml/kg/min, VAM: {referenceTest.calculated_vam.toFixed(1)} km/h)
               </Text>
             </View>
-          ))}
+          )}
+          {combinedZones.length > 0 ? (
+            <View style={styles.tableContainer}>
+              <Text style={styles.debugText}>DEBUG: {combinedZones.length} zonas encontradas</Text>
+              <DataTable>
+                <DataTable.Header>
+                  <DataTable.Title style={styles.zoneColumn}>Zona</DataTable.Title>
+                  <DataTable.Title style={styles.descColumn}>Descrição</DataTable.Title>
+                  <DataTable.Title style={styles.fcColumn}>FC (bpm)</DataTable.Title>
+                  <DataTable.Title style={styles.paceColumn}>Ritmo (min/km)</DataTable.Title>
+                </DataTable.Header>
+                {combinedZones.map((zone) => (
+                  <DataTable.Row key={zone.zone}>
+                    <DataTable.Cell style={styles.zoneColumn}>
+                      <Text style={styles.zoneNumber}>{zone.zone}</Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={styles.descColumn}>
+                      <Text style={styles.zoneDescription}>{zone.description}</Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={styles.fcColumn}>
+                      <Text style={styles.fcRange}>
+                        {zone.minHeartRate > 0 ? `${zone.minHeartRate}-${zone.maxHeartRate}` : '--'}
+                      </Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={styles.paceColumn}>
+                      <Text style={styles.paceRange}>{zone.pace}</Text>
+                    </DataTable.Cell>
+                  </DataTable.Row>
+                ))}
+              </DataTable>
+            </View>
+          ) : (
+            <View>
+              <Text style={styles.noDataText}>
+                {!profile?.max_heart_rate || !profile?.resting_heart_rate 
+                  ? 'Preencha FC Máxima e FC Repouso para calcular as zonas de FC'
+                  : !vo2max || !vam
+                    ? 'Complete um teste de performance para calcular as zonas de ritmo'
+                    : 'Nenhuma zona calculada'
+                }
+              </Text>
+              <Text style={styles.debugText}>
+                DEBUG: FC Max={profile?.max_heart_rate}, FC Repouso={profile?.resting_heart_rate}, 
+                VO2max={vo2max}, VAM={vam}, TrainingZones={trainingZones.length}, PaceZones={paceZones.length}
+              </Text>
+            </View>
+          )}
         </Card.Content>
       </Card>
 
@@ -267,10 +500,37 @@ export default function SportsProfileScreen() {
           
           {fitnessTests.map((test) => (
             <View key={test.id} style={styles.testItem}>
-              <Text style={styles.testTitle}>{test.protocol_name}</Text>
-              <Text style={styles.testDate}>{new Date(test.test_date).toLocaleDateString('pt-BR')}</Text>
-              <Text style={styles.testResult}>VO2max: {test.calculated_vo2max.toFixed(1)} ml/kg/min</Text>
-              <Text style={styles.testResult}>VAM: {test.calculated_vam.toFixed(1)} km/h</Text>
+              <View style={styles.testHeader}>
+                <View style={styles.testInfo}>
+                  <Text style={styles.testTitle}>{test.protocol_name}</Text>
+                  <Text style={styles.testDate}>{new Date(test.test_date).toLocaleDateString('pt-BR')}</Text>
+                </View>
+                <View style={styles.testActions}>
+                  <IconButton
+                    icon="pencil"
+                    size={20}
+                    onPress={() => handleEditTest(test)}
+                    style={styles.actionButton}
+                  />
+                  <IconButton
+                    icon="delete"
+                    size={20}
+                    onPress={() => handleDeleteTest(test)}
+                    style={styles.actionButton}
+                  />
+                </View>
+              </View>
+              <Text style={styles.testResult}>VO2max: {test.calculated_vo2max ? test.calculated_vo2max.toFixed(1) : '--'} ml/kg/min</Text>
+              <Text style={styles.testResult}>VAM: {test.calculated_vam ? test.calculated_vam.toFixed(1) : '--'} km/h</Text>
+              <View style={styles.testFooter}>
+                <Chip
+                  mode={referenceTest?.id === test.id ? "flat" : "outlined"}
+                  onPress={() => handleSetReferenceTest(test)}
+                  style={styles.referenceChip}
+                >
+                  {referenceTest?.id === test.id ? 'Referência Atual' : 'Usar como Referência'}
+                </Chip>
+              </View>
             </View>
           ))}
         </Card.Content>
@@ -279,10 +539,15 @@ export default function SportsProfileScreen() {
       <Portal>
         <Modal
           visible={modalVisible}
-          onDismiss={() => setModalVisible(false)}
+          onDismiss={() => {
+            setModalVisible(false);
+            resetForm();
+          }}
           contentContainerStyle={styles.modal}
         >
-          <Title style={styles.modalTitle}>Registrar Novo Teste</Title>
+          <Title style={styles.modalTitle}>
+            {editingTest ? 'Editar Teste' : 'Registrar Novo Teste'}
+          </Title>
           
           <Text style={styles.modalLabel}>Protocolo do Teste:</Text>
           <SegmentedButtons
@@ -315,7 +580,7 @@ export default function SportsProfileScreen() {
               disabled={!selectedProtocol || loading}
               style={styles.modalButton}
             >
-              Calcular e Salvar
+              {editingTest ? 'Atualizar' : 'Calcular e Salvar'}
             </Button>
           </View>
         </Modal>
@@ -370,6 +635,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     borderRadius: 8,
   },
+  testHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  testInfo: {
+    flex: 1,
+  },
   testTitle: {
     fontWeight: 'bold',
     fontSize: 16,
@@ -378,9 +652,39 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 12,
   },
+  testActions: {
+    flexDirection: 'row',
+  },
+  actionButton: {
+    marginLeft: 8,
+  },
   testResult: {
     marginTop: 4,
     color: '#2196F3',
+  },
+  testFooter: {
+    marginTop: 8,
+  },
+  referenceChip: {
+    backgroundColor: '#e0f2f7',
+    borderColor: '#2196F3',
+    borderWidth: 1,
+  },
+  referenceInfo: {
+    marginBottom: 8,
+    padding: 8,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 4,
+  },
+  referenceText: {
+    fontStyle: 'italic',
+    color: '#666',
+    fontSize: 12,
+  },
+  noDataText: {
+    textAlign: 'center',
+    color: '#999',
+    fontStyle: 'italic',
   },
   modal: {
     backgroundColor: 'white',
@@ -411,5 +715,45 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 0.48,
+  },
+  tableContainer: {
+    marginTop: 8,
+  },
+  zoneColumn: {
+    flex: 0.15,
+  },
+  descColumn: {
+    flex: 0.35,
+  },
+  fcColumn: {
+    flex: 0.2,
+  },
+  paceColumn: {
+    flex: 0.3,
+  },
+  zoneNumber: {
+    fontWeight: 'bold',
+  },
+  zoneDescription: {
+    fontStyle: 'italic',
+  },
+  fcRange: {
+    color: '#2196F3',
+  },
+  paceRange: {
+    color: '#2196F3',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  inputLabel: {
+    marginBottom: 4,
+    fontWeight: 'bold',
+  },
+  genderButtons: {
+    marginTop: 8,
   },
 }); 

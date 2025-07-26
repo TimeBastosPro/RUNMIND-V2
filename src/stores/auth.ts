@@ -32,6 +32,8 @@ interface AuthState {
   fetchProfile: () => Promise<void>;
   fetchFitnessTests: () => Promise<void>;
   saveFitnessTest: (testData: Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<FitnessTest>;
+  updateFitnessTest: (testId: string, testData: Partial<Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => Promise<FitnessTest>;
+  deleteFitnessTest: (testId: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -131,10 +133,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateProfile: async (updates: Partial<Profile>) => {
+    console.log('DEBUG - updateProfile chamado com:', updates);
     const { user, profile } = get();
-    if (!user || !profile) return;
+    console.log('DEBUG - user:', user?.id, 'profile:', profile?.id);
+    
+    if (!user || !profile) {
+      console.log('DEBUG - Usuário ou perfil não encontrado');
+      return;
+    }
     
     try {
+      console.log('DEBUG - Enviando update para Supabase...');
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
@@ -142,11 +151,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select()
         .single();
         
+      console.log('DEBUG - Resposta do Supabase:', { data, error });
+        
       if (error) throw error;
       
       set({ profile: data });
+      console.log('DEBUG - Perfil atualizado com sucesso:', data);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error('DEBUG - Erro ao atualizar perfil:', error);
       throw error;
     }
   },
@@ -223,6 +235,54 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return data;
     } catch (error) {
       console.error('Erro ao salvar teste de fitness:', error);
+      throw error;
+    }
+  },
+
+  updateFitnessTest: async (testId: string, testData: Partial<Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => {
+    try {
+      const { data, error } = await supabase
+        .from('fitness_tests')
+        .update(testData)
+        .eq('id', testId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Atualizar a lista de testes
+      const currentTests = get().fitnessTests;
+      const updatedTests = currentTests.map(test =>
+        test.id === testId ? data : test
+      );
+      set({ fitnessTests: updatedTests });
+
+      return data;
+    } catch (error) {
+      console.error('Erro ao atualizar teste de fitness:', error);
+      throw error;
+    }
+  },
+
+  deleteFitnessTest: async (testId: string) => {
+    console.log('DEBUG - deleteFitnessTest chamado com testId:', testId);
+    try {
+      const { error } = await supabase
+        .from('fitness_tests')
+        .delete()
+        .eq('id', testId);
+
+      console.log('DEBUG - Resposta do Supabase:', { error });
+
+      if (error) throw error;
+
+      // Atualizar a lista de testes
+      const currentTests = get().fitnessTests;
+      const updatedTests = currentTests.filter(test => test.id !== testId);
+      console.log('DEBUG - Testes antes:', currentTests.length, 'Testes depois:', updatedTests.length);
+      set({ fitnessTests: updatedTests });
+    } catch (error) {
+      console.error('DEBUG - Erro ao deletar teste de fitness:', error);
       throw error;
     }
   },
