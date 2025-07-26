@@ -78,8 +78,13 @@ export default function HomeScreen() {
 
   const readinessPercent = todayReadinessScore !== null ? Math.round((1 - (todayReadinessScore / 28)) * 100) : null;
   
+  // Buscar o próximo treino do dia seguinte
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  
   const nextTraining = trainingSessions?.find(session => 
-    session.planned_date && new Date(session.planned_date) >= new Date()
+    session.training_date === tomorrowStr
   );
 
   return (
@@ -164,20 +169,39 @@ export default function HomeScreen() {
           <Card.Content>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Próximo Treino</Text>
-              <IconButton icon="calendar-clock" size={24} />
+              {nextTraining.status === 'completed' ? (
+                <Chip icon="check-circle" mode="flat" style={styles.successChip}>
+                  Realizado
+                </Chip>
+              ) : (
+                <Chip icon="clock-outline" mode="flat" style={styles.warningChip}>
+                  Planejado
+                </Chip>
+              )}
             </View>
             
             <View style={styles.trainingInfo}>
               <Text style={styles.trainingType}>{nextTraining.training_type || 'Treino'}</Text>
-              {nextTraining.planned_distance_km && (
-                <Text style={styles.trainingDetails}>📏 {nextTraining.planned_distance_km}km</Text>
+              {nextTraining.distance_km && (
+                <Text style={styles.trainingDetails}>📏 {nextTraining.distance_km}km</Text>
               )}
-              {nextTraining.planned_duration_minutes && (
-                <Text style={styles.trainingDetails}>⏱️ {nextTraining.planned_duration_minutes}min</Text>
+              {nextTraining.duration_minutes && (
+                <Text style={styles.trainingDetails}>⏱️ {nextTraining.duration_minutes}min</Text>
               )}
               <Text style={styles.trainingDate}>
-                📅 {format(new Date(nextTraining.planned_date!), "dd 'de' MMMM", { locale: ptBR })}
+                📅 {format(new Date(nextTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
               </Text>
+              
+              {nextTraining.status === 'completed' && (
+                <View style={styles.completedInfo}>
+                  {nextTraining.perceived_effort && (
+                    <Text style={styles.completedDetails}>💪 Esforço: {nextTraining.perceived_effort}/10</Text>
+                  )}
+                  {nextTraining.satisfaction && (
+                    <Text style={styles.completedDetails}>😊 Satisfação: {nextTraining.satisfaction}/10</Text>
+                  )}
+                </View>
+              )}
             </View>
 
             <Button 
@@ -185,7 +209,7 @@ export default function HomeScreen() {
               style={styles.trainingButton}
               onPress={() => navigation.navigate('Training' as never)}
             >
-              Ver Todos os Treinos
+              {nextTraining.status === 'completed' ? 'Ver Detalhes' : 'Ver Todos os Treinos'}
             </Button>
           </Card.Content>
         </Card>
@@ -385,6 +409,17 @@ const styles = StyleSheet.create({
   },
   trainingButton: {
     borderRadius: 8,
+  },
+  completedInfo: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  completedDetails: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
   },
   quoteText: {
     fontSize: 16,
