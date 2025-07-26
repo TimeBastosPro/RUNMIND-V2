@@ -206,4 +206,11 @@ const formatSecondsToPace = (seconds: number): string => {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Fórmula de Tanaka para calcular FC Máxima baseada na idade
+export const calculateMaxHeartRateTanaka = (age: number): number => {
+  if (!age || age <= 0) return 0;
+  // Fórmula de Tanaka: FCmax = 208 - (0.7 × idade)
+  return Math.round(208 - (0.7 * age));
 }; 

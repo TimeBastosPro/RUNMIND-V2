@@ -14,6 +14,7 @@ import {
   calculateVamFromVo2max,
   calculateKarvonenZones,
   calculatePaceZones,
+  calculateMaxHeartRateTanaka,
   TrainingZone,
   PaceZone
 } from '../utils/sportsCalculations';
@@ -51,6 +52,7 @@ export default function SportsProfileScreen() {
     max_heart_rate: '',
     resting_heart_rate: ''
   });
+  const [autoCalculatedMaxHR, setAutoCalculatedMaxHR] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -80,6 +82,23 @@ export default function SportsProfileScreen() {
       setReferenceTest(bestTest);
     }
   }, [fitnessTests]);
+
+  // Calcular FC Máxima automaticamente quando a data de nascimento for preenchida
+  useEffect(() => {
+    if (profileData.date_of_birth && !profileData.max_heart_rate) {
+      const birthDate = new Date(profileData.date_of_birth);
+      const age = new Date().getFullYear() - birthDate.getFullYear();
+      
+      if (age > 0 && age < 120) { // Validação de idade razoável
+        const calculatedMaxHeartRate = calculateMaxHeartRateTanaka(age);
+        setProfileData(prev => ({
+          ...prev,
+          max_heart_rate: calculatedMaxHeartRate.toString()
+        }));
+        setAutoCalculatedMaxHR(true);
+      }
+    }
+  }, [profileData.date_of_birth]);
 
   const handleSaveTest = async () => {
     if (!selectedProtocol || !profile) return;
@@ -175,28 +194,27 @@ export default function SportsProfileScreen() {
   const handleDeleteTest = (test: any) => {
     console.log('DEBUG - handleDeleteTest chamado com:', test);
     
-    Alert.alert(
-      'Confirmar Exclusão',
-      `Deseja realmente excluir o teste "${test.protocol_name}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Excluir', 
-          style: 'destructive',
-          onPress: async () => {
-            console.log('DEBUG - Iniciando exclusão do teste:', test.id);
-            try {
-              await deleteFitnessTest(test.id);
-              console.log('DEBUG - Teste excluído com sucesso');
-              Alert.alert('Sucesso', 'Teste excluído com sucesso!');
-            } catch (error) {
-              console.error('DEBUG - Erro ao excluir teste:', error);
-              Alert.alert('Erro', `Erro ao excluir teste: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-            }
-          }
-        }
-      ]
-    );
+    // Confirmação simples para web
+    const confirmed = window.confirm(`Deseja realmente excluir o teste "${test.protocol_name}"?`);
+    
+    if (confirmed) {
+      console.log('DEBUG - Usuário confirmou exclusão');
+      deleteTestAsync(test);
+    } else {
+      console.log('DEBUG - Usuário cancelou exclusão');
+    }
+  };
+
+  const deleteTestAsync = async (test: any) => {
+    console.log('DEBUG - Iniciando exclusão do teste:', test.id);
+    try {
+      await deleteFitnessTest(test.id);
+      console.log('DEBUG - Teste excluído com sucesso');
+      alert('Teste excluído com sucesso!');
+    } catch (error) {
+      console.error('DEBUG - Erro ao excluir teste:', error);
+      alert(`Erro ao excluir teste: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
   };
 
   const handleSetReferenceTest = (test: any) => {
@@ -339,6 +357,12 @@ export default function SportsProfileScreen() {
       <Card style={styles.card}>
         <Card.Content>
           <Title>Dados Fisiológicos</Title>
+          <Paragraph style={styles.formulaInfo}>
+            💡 <Text style={styles.formulaText}>FC Máxima: Calculada automaticamente pela fórmula de Tanaka (208 - 0.7 × idade)</Text>
+          </Paragraph>
+          <Paragraph style={styles.formulaInfo}>
+            💡 <Text style={styles.formulaText}>Zonas de Treino: Calculadas pela fórmula de Karvonen quando FC Repouso estiver preenchida</Text>
+          </Paragraph>
           <View style={styles.row}>
             <TextInput
               label="Altura (cm)"
@@ -363,25 +387,46 @@ export default function SportsProfileScreen() {
               style={styles.halfInput}
             />
             <View style={styles.halfInput}>
-              <Text style={styles.inputLabel}>Gênero:</Text>
-              <SegmentedButtons
-                value={profileData.gender}
-                onValueChange={(value) => setProfileData(prev => ({ ...prev, gender: value }))}
-                buttons={[
-                  { value: 'masculino', label: 'Masculino' },
-                  { value: 'feminino', label: 'Feminino' }
-                ]}
-                style={styles.genderButtons}
-              />
+              <Text style={styles.inputLabel}>Gênero</Text>
+              <View style={styles.genderContainer}>
+                <Button
+                  mode={profileData.gender === 'masculino' ? 'contained' : 'outlined'}
+                  onPress={() => setProfileData(prev => ({ ...prev, gender: 'masculino' }))}
+                  style={[
+                    styles.genderButton,
+                    profileData.gender === 'masculino' && { backgroundColor: '#e0e0e0' }
+                  ]}
+                  labelStyle={styles.genderButtonLabel}
+                  buttonColor={profileData.gender === 'masculino' ? '#e0e0e0' : undefined}
+                >
+                  Masculino
+                </Button>
+                <Button
+                  mode={profileData.gender === 'feminino' ? 'contained' : 'outlined'}
+                  onPress={() => setProfileData(prev => ({ ...prev, gender: 'feminino' }))}
+                  style={[
+                    styles.genderButton,
+                    profileData.gender === 'feminino' && { backgroundColor: '#e0e0e0' }
+                  ]}
+                  labelStyle={styles.genderButtonLabel}
+                  buttonColor={profileData.gender === 'feminino' ? '#e0e0e0' : undefined}
+                >
+                  Feminino
+                </Button>
+              </View>
             </View>
           </View>
           <View style={styles.row}>
             <TextInput
               label="FC Máxima"
               value={profileData.max_heart_rate}
-              onChangeText={(text) => setProfileData(prev => ({ ...prev, max_heart_rate: text }))}
+              onChangeText={(text) => {
+                setProfileData(prev => ({ ...prev, max_heart_rate: text }));
+                setAutoCalculatedMaxHR(false); // Reset quando usuário edita manualmente
+              }}
               keyboardType="numeric"
               style={styles.halfInput}
+              right={autoCalculatedMaxHR ? <TextInput.Icon icon="calculator" /> : undefined}
             />
             <TextInput
               label="FC Repouso"
@@ -430,7 +475,12 @@ export default function SportsProfileScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Title>Zonas de Treino (Karvonen)</Title>
+          <Title>Zonas de Treino</Title>
+          {profile?.resting_heart_rate && (
+            <Paragraph style={styles.formulaInfo}>
+              💡 <Text style={styles.formulaText}>Usando fórmula de Karvonen: FC Treino = FC Repouso + % × (FC Máxima - FC Repouso)</Text>
+            </Paragraph>
+          )}
           {referenceTest && (
             <View style={styles.referenceInfo}>
               <Text style={styles.referenceText}>
@@ -440,7 +490,6 @@ export default function SportsProfileScreen() {
           )}
           {combinedZones.length > 0 ? (
             <View style={styles.tableContainer}>
-              <Text style={styles.debugText}>DEBUG: {combinedZones.length} zonas encontradas</Text>
               <DataTable>
                 <DataTable.Header>
                   <DataTable.Title style={styles.zoneColumn}>Zona</DataTable.Title>
@@ -472,7 +521,7 @@ export default function SportsProfileScreen() {
             <View>
               <Text style={styles.noDataText}>
                 {!profile?.max_heart_rate || !profile?.resting_heart_rate 
-                  ? 'Preencha FC Máxima e FC Repouso para calcular as zonas de FC'
+                  ? 'Preencha a Data de Nascimento (FC Máxima será calculada pela fórmula de Tanaka) e FC Repouso para calcular as zonas de FC pela fórmula de Karvonen'
                   : !vo2max || !vam
                     ? 'Complete um teste de performance para calcular as zonas de ritmo'
                     : 'Nenhuma zona calculada'
@@ -752,8 +801,33 @@ const styles = StyleSheet.create({
   inputLabel: {
     marginBottom: 4,
     fontWeight: 'bold',
+    fontSize: 12,
+    color: '#666',
   },
-  genderButtons: {
+  genderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 8,
+  },
+  genderButton: {
+    flex: 1,
+    marginHorizontal: 2,
+    borderRadius: 4,
+    height: 40,
+    backgroundColor: '#f5f5f5',
+    borderColor: '#ccc',
+  },
+  genderButtonLabel: {
+    fontSize: 12,
+    color: '#333',
+  },
+  formulaInfo: {
+    marginBottom: 8,
+    fontSize: 12,
+    color: '#666',
+  },
+  formulaText: {
+    fontWeight: 'bold',
+    color: '#2196F3',
   },
 }); 

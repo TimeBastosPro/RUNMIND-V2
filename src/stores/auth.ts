@@ -266,7 +266,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   deleteFitnessTest: async (testId: string) => {
     console.log('DEBUG - deleteFitnessTest chamado com testId:', testId);
+    console.log('DEBUG - Tipo do testId:', typeof testId);
+    
     try {
+      console.log('DEBUG - Enviando delete para Supabase...');
       const { error } = await supabase
         .from('fitness_tests')
         .delete()
@@ -274,13 +277,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       console.log('DEBUG - Resposta do Supabase:', { error });
 
-      if (error) throw error;
+      if (error) {
+        console.log('DEBUG - Erro retornado pelo Supabase:', error);
+        throw error;
+      }
+
+      console.log('DEBUG - Delete executado com sucesso no Supabase');
 
       // Atualizar a lista de testes
       const currentTests = get().fitnessTests;
+      console.log('DEBUG - Testes atuais:', currentTests.length);
+      
       const updatedTests = currentTests.filter(test => test.id !== testId);
-      console.log('DEBUG - Testes antes:', currentTests.length, 'Testes depois:', updatedTests.length);
+      console.log('DEBUG - Testes filtrados:', updatedTests.length);
+      
       set({ fitnessTests: updatedTests });
+      console.log('DEBUG - Estado atualizado com sucesso');
     } catch (error) {
       console.error('DEBUG - Erro ao deletar teste de fitness:', error);
       throw error;
