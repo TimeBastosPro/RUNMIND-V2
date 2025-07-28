@@ -78,14 +78,25 @@ export default function HomeScreen() {
 
   const readinessPercent = todayReadinessScore !== null ? Math.round((1 - (todayReadinessScore / 28)) * 100) : null;
   
-  // Buscar o próximo treino do dia seguinte
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
-  
-  const nextTraining = trainingSessions?.find(session => 
-    session.training_date === tomorrowStr
+  // Buscar treino para hoje
+  const today = new Date().toISOString().split('T')[0];
+  const todayTraining = trainingSessions?.find(session => 
+    session.training_date === today
   );
+  
+  // Buscar o próximo treino (hoje ou próximo dia)
+  const nextTraining = todayTraining || trainingSessions?.find(session => 
+    session.training_date > today
+  );
+  
+  // Verificar se o treino de hoje não foi realizado e já passou do dia
+  const isTodayPast = new Date().getHours() >= 22; // Considera "passou do dia" após 22h
+  const todayTrainingNotCompleted = todayTraining && todayTraining.status === 'planned' && isTodayPast;
+
+  // Buscar o último treino realizado
+  const lastCompletedTraining = trainingSessions
+    ?.filter(session => session.status === 'completed')
+    ?.sort((a, b) => new Date(b.training_date).getTime() - new Date(a.training_date).getTime())[0];
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -168,8 +179,14 @@ export default function HomeScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Próximo Treino</Text>
-              {nextTraining.status === 'completed' ? (
+              <Text style={styles.cardTitle}>
+                {todayTrainingNotCompleted ? 'Treino Pendente' : 'Próximo Treino'}
+              </Text>
+              {todayTrainingNotCompleted ? (
+                <Chip icon="alert" mode="flat" style={styles.errorChip}>
+                  Não Realizado
+                </Chip>
+              ) : nextTraining.status === 'completed' ? (
                 <Chip icon="check-circle" mode="flat" style={styles.successChip}>
                   Realizado
                 </Chip>
@@ -180,28 +197,116 @@ export default function HomeScreen() {
               )}
             </View>
             
+            {todayTrainingNotCompleted ? (
+              <View style={styles.trainingInfo}>
+                <Text style={styles.alertMessage}>⚠️ Você tem um treino planejado para hoje que ainda não foi realizado!</Text>
+                <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
+                
+                {nextTraining.treino_tipo && (
+                  <Text style={styles.trainingDetails}>🎯 Tipo: {nextTraining.treino_tipo.charAt(0).toUpperCase() + nextTraining.treino_tipo.slice(1)}</Text>
+                )}
+                
+                {nextTraining.terreno && (
+                  <Text style={styles.trainingDetails}>🏃 Terreno: {nextTraining.terreno.charAt(0).toUpperCase() + nextTraining.terreno.slice(1)}</Text>
+                )}
+                
+                {nextTraining.distance_km && (
+                  <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
+                )}
+                
+                {(nextTraining.duracao_horas || nextTraining.duracao_minutos) && (
+                  <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duracao_horas || '0'}h {nextTraining.duracao_minutos || '0'}min</Text>
+                )}
+                
+                {nextTraining.intensidade && (
+                  <Text style={styles.trainingDetails}>⚡ Intensidade: {nextTraining.intensidade}</Text>
+                )}
+                
+                <Text style={styles.trainingDate}>
+                  📅 {format(new Date(nextTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.trainingInfo}>
+                <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
+                
+                {nextTraining.treino_tipo && (
+                  <Text style={styles.trainingDetails}>🎯 Tipo: {nextTraining.treino_tipo.charAt(0).toUpperCase() + nextTraining.treino_tipo.slice(1)}</Text>
+                )}
+                
+                {nextTraining.terreno && (
+                  <Text style={styles.trainingDetails}>🏃 Terreno: {nextTraining.terreno.charAt(0).toUpperCase() + nextTraining.terreno.slice(1)}</Text>
+                )}
+                
+                {nextTraining.distance_km && (
+                  <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
+                )}
+                
+                {(nextTraining.duracao_horas || nextTraining.duracao_minutos) && (
+                  <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duracao_horas || '0'}h {nextTraining.duracao_minutos || '0'}min</Text>
+                )}
+                
+                {nextTraining.intensidade && (
+                  <Text style={styles.trainingDetails}>⚡ Intensidade: {nextTraining.intensidade}</Text>
+                )}
+                
+                <Text style={styles.trainingDate}>
+                  📅 {format(new Date(nextTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
+                </Text>
+              </View>
+            )}
+
+            <Button 
+              mode="outlined" 
+              style={styles.trainingButton}
+              onPress={() => navigation.navigate('Training' as never)}
+            >
+              {todayTrainingNotCompleted ? 'Marcar como Realizado' : 'Ver Todos os Treinos'}
+            </Button>
+          </Card.Content>
+        </Card>
+      )}
+
+      {lastCompletedTraining && (
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Último Treino Realizado</Text>
+              <Chip icon="check-circle" mode="flat" style={styles.successChip}>
+                Concluído
+              </Chip>
+            </View>
+            
             <View style={styles.trainingInfo}>
-              <Text style={styles.trainingType}>{nextTraining.training_type || 'Treino'}</Text>
-              {nextTraining.distance_km && (
-                <Text style={styles.trainingDetails}>📏 {nextTraining.distance_km}km</Text>
-              )}
-              {nextTraining.duration_minutes && (
-                <Text style={styles.trainingDetails}>⏱️ {nextTraining.duration_minutes}min</Text>
-              )}
-              <Text style={styles.trainingDate}>
-                📅 {format(new Date(nextTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
-              </Text>
+              <Text style={styles.trainingType}>{lastCompletedTraining.modalidade ? lastCompletedTraining.modalidade.charAt(0).toUpperCase() + lastCompletedTraining.modalidade.slice(1) : 'Treino'}</Text>
               
-              {nextTraining.status === 'completed' && (
-                <View style={styles.completedInfo}>
-                  {nextTraining.perceived_effort && (
-                    <Text style={styles.completedDetails}>💪 Esforço: {nextTraining.perceived_effort}/10</Text>
-                  )}
-                  {nextTraining.satisfaction && (
-                    <Text style={styles.completedDetails}>😊 Satisfação: {nextTraining.satisfaction}/10</Text>
-                  )}
-                </View>
+              {lastCompletedTraining.treino_tipo && (
+                <Text style={styles.trainingDetails}>🎯 Tipo: {lastCompletedTraining.treino_tipo.charAt(0).toUpperCase() + lastCompletedTraining.treino_tipo.slice(1)}</Text>
               )}
+              
+              {lastCompletedTraining.distance_km && (
+                <Text style={styles.trainingDetails}>📏 Distância: {lastCompletedTraining.distance_km}km</Text>
+              )}
+              
+              {lastCompletedTraining.duration_minutes && (
+                <Text style={styles.trainingDetails}>⏱️ Duração: {lastCompletedTraining.duration_minutes}min</Text>
+              )}
+              
+              {lastCompletedTraining.elevation_gain_meters && (
+                <Text style={styles.trainingDetails}>⛰️ Altimetria: +{lastCompletedTraining.elevation_gain_meters}m</Text>
+              )}
+              
+              {lastCompletedTraining.avg_heart_rate && (
+                <Text style={styles.trainingDetails}>❤️ FC Média: {lastCompletedTraining.avg_heart_rate}bpm</Text>
+              )}
+              
+              {lastCompletedTraining.perceived_effort && (
+                <Text style={styles.trainingDetails}>💪 PSE: {lastCompletedTraining.perceived_effort}/10</Text>
+              )}
+              
+              <Text style={styles.trainingDate}>
+                📅 {format(new Date(lastCompletedTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
+              </Text>
             </View>
 
             <Button 
@@ -209,7 +314,7 @@ export default function HomeScreen() {
               style={styles.trainingButton}
               onPress={() => navigation.navigate('Training' as never)}
             >
-              {nextTraining.status === 'completed' ? 'Ver Detalhes' : 'Ver Todos os Treinos'}
+              Ver Todos os Treinos
             </Button>
           </Card.Content>
         </Card>
@@ -334,6 +439,9 @@ const styles = StyleSheet.create({
   warningChip: {
     backgroundColor: '#FF9800',
   },
+  errorChip: {
+    backgroundColor: '#F44336',
+  },
   checkinSuccess: {
     alignItems: 'center',
   },
@@ -409,6 +517,12 @@ const styles = StyleSheet.create({
   },
   trainingButton: {
     borderRadius: 8,
+  },
+  alertMessage: {
+    fontSize: 14,
+    color: '#FF9800',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   completedInfo: {
     marginTop: 8,
