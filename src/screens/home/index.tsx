@@ -80,23 +80,34 @@ export default function HomeScreen() {
   
   // Buscar treino para hoje
   const today = new Date().toISOString().split('T')[0];
+  
   const todayTraining = trainingSessions?.find(session => 
     session.training_date === today
   );
   
-  // Buscar o próximo treino (hoje ou próximo dia)
-  const nextTraining = todayTraining || trainingSessions?.find(session => 
-    session.training_date > today
+  // Buscar o próximo treino planejado (hoje ou próximo dia)
+  const nextPlannedTraining = trainingSessions?.find(session => 
+    session.status === 'planned' && session.training_date >= today
   );
+  
+  // Lógica do próximo treino: se há treino planejado para hoje, mostra ele. Se não, mostra o próximo planejado
+  const nextTraining = nextPlannedTraining;
   
   // Verificar se o treino de hoje não foi realizado e já passou do dia
   const isTodayPast = new Date().getHours() >= 22; // Considera "passou do dia" após 22h
   const todayTrainingNotCompleted = todayTraining && todayTraining.status === 'planned' && isTodayPast;
 
-  // Buscar o último treino realizado
-  const lastCompletedTraining = trainingSessions
-    ?.filter(session => session.status === 'completed')
-    ?.sort((a, b) => new Date(b.training_date).getTime() - new Date(a.training_date).getTime())[0];
+  // Buscar o último treino realizado (ordenar por data mais recente)
+  const completedTrainings = trainingSessions?.filter(session => session.status === 'completed') || [];
+  
+  // Ordenar por data mais recente primeiro
+  const sortedCompletedTrainings = completedTrainings.sort((a, b) => {
+    const dateA = new Date(a.training_date);
+    const dateB = new Date(b.training_date);
+    return dateB.getTime() - dateA.getTime();
+  });
+  
+  const lastCompletedTraining = sortedCompletedTrainings[0];
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -179,89 +190,62 @@ export default function HomeScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>
-                {todayTrainingNotCompleted ? 'Treino Pendente' : 'Próximo Treino'}
-              </Text>
-              {todayTrainingNotCompleted ? (
-                <Chip icon="alert" mode="flat" style={styles.errorChip}>
-                  Não Realizado
-                </Chip>
-              ) : nextTraining.status === 'completed' ? (
-                <Chip icon="check-circle" mode="flat" style={styles.successChip}>
-                  Realizado
-                </Chip>
-              ) : (
-                <Chip icon="clock-outline" mode="flat" style={styles.warningChip}>
-                  Planejado
-                </Chip>
-              )}
+              <Text style={styles.cardTitle}>Próximo Treino Planejado</Text>
+              <Chip icon="calendar-check" mode="flat" style={styles.successChip}>
+                Planejado
+              </Chip>
             </View>
             
-            {todayTrainingNotCompleted ? (
-              <View style={styles.trainingInfo}>
-                <Text style={styles.alertMessage}>⚠️ Você tem um treino planejado para hoje que ainda não foi realizado!</Text>
-                <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
-                
-                {nextTraining.treino_tipo && (
-                  <Text style={styles.trainingDetails}>🎯 Tipo: {nextTraining.treino_tipo.charAt(0).toUpperCase() + nextTraining.treino_tipo.slice(1)}</Text>
-                )}
-                
-                {nextTraining.terreno && (
-                  <Text style={styles.trainingDetails}>🏃 Terreno: {nextTraining.terreno.charAt(0).toUpperCase() + nextTraining.terreno.slice(1)}</Text>
-                )}
-                
-                {nextTraining.distance_km && (
-                  <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
-                )}
-                
-                {(nextTraining.duracao_horas || nextTraining.duracao_minutos) && (
-                  <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duracao_horas || '0'}h {nextTraining.duracao_minutos || '0'}min</Text>
-                )}
-                
-                {nextTraining.intensidade && (
-                  <Text style={styles.trainingDetails}>⚡ Intensidade: {nextTraining.intensidade}</Text>
-                )}
-                
-                <Text style={styles.trainingDate}>
-                  📅 {format(new Date(nextTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.trainingInfo}>
-                <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
-                
-                {nextTraining.treino_tipo && (
-                  <Text style={styles.trainingDetails}>🎯 Tipo: {nextTraining.treino_tipo.charAt(0).toUpperCase() + nextTraining.treino_tipo.slice(1)}</Text>
-                )}
-                
-                {nextTraining.terreno && (
-                  <Text style={styles.trainingDetails}>🏃 Terreno: {nextTraining.terreno.charAt(0).toUpperCase() + nextTraining.terreno.slice(1)}</Text>
-                )}
-                
-                {nextTraining.distance_km && (
-                  <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
-                )}
-                
-                {(nextTraining.duracao_horas || nextTraining.duracao_minutos) && (
-                  <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duracao_horas || '0'}h {nextTraining.duracao_minutos || '0'}min</Text>
-                )}
-                
-                {nextTraining.intensidade && (
-                  <Text style={styles.trainingDetails}>⚡ Intensidade: {nextTraining.intensidade}</Text>
-                )}
-                
-                <Text style={styles.trainingDate}>
-                  📅 {format(new Date(nextTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
-                </Text>
-              </View>
-            )}
+            <View style={styles.trainingInfo}>
+              <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
+              
+              {nextTraining.treino_tipo && (
+                <Text style={styles.trainingDetails}>🎯 Tipo: {nextTraining.treino_tipo.charAt(0).toUpperCase() + nextTraining.treino_tipo.slice(1)}</Text>
+              )}
+              
+              {nextTraining.terreno && (
+                <Text style={styles.trainingDetails}>🏃 Terreno: {nextTraining.terreno.charAt(0).toUpperCase() + nextTraining.terreno.slice(1)}</Text>
+              )}
+              
+              {nextTraining.distance_km && (
+                <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
+              )}
+              
+              {(nextTraining.duracao_horas || nextTraining.duracao_minutos) && (
+                <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duracao_horas || '0'}h {nextTraining.duracao_minutos || '0'}min</Text>
+              )}
+              
+              {nextTraining.duration_minutes && !nextTraining.duracao_horas && !nextTraining.duracao_minutos && (
+                <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duration_minutes}min</Text>
+              )}
+              
+              {nextTraining.intensidade && (
+                <Text style={styles.trainingDetails}>⚡ Intensidade: {nextTraining.intensidade}</Text>
+              )}
+              
+              {nextTraining.esforco && (
+                <Text style={styles.trainingDetails}>💪 Esforço: {nextTraining.esforco}</Text>
+              )}
+              
+              {nextTraining.percurso && (
+                <Text style={styles.trainingDetails}>🛣️ Percurso: {nextTraining.percurso}</Text>
+              )}
+              
+              {nextTraining.observacoes && (
+                <Text style={styles.trainingDetails}>📝 Observações: {nextTraining.observacoes}</Text>
+              )}
+              
+              <Text style={styles.trainingDate}>
+                📅 {format(new Date(nextTraining.training_date + 'T00:00:00'), "dd 'de' MMMM", { locale: ptBR })}
+              </Text>
+            </View>
 
             <Button 
               mode="outlined" 
               style={styles.trainingButton}
               onPress={() => navigation.navigate('Training' as never)}
             >
-              {todayTrainingNotCompleted ? 'Marcar como Realizado' : 'Ver Todos os Treinos'}
+              Ver Todos os Treinos
             </Button>
           </Card.Content>
         </Card>
@@ -305,7 +289,7 @@ export default function HomeScreen() {
               )}
               
               <Text style={styles.trainingDate}>
-                📅 {format(new Date(lastCompletedTraining.training_date), "dd 'de' MMMM", { locale: ptBR })}
+                📅 {format(new Date(lastCompletedTraining.training_date + 'T00:00:00'), "dd 'de' MMMM", { locale: ptBR })}
               </Text>
             </View>
 
