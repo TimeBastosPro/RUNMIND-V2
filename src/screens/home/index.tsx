@@ -76,6 +76,40 @@ export default function HomeScreen() {
     return 'Boa noite';
   };
 
+  // Funções para converter números em textos
+  const getTerrenoText = (terreno: string) => {
+    const terrenoMap: { [key: string]: string } = {
+      '1': 'Asfalto',
+      '2': 'Esteira',
+      '3': 'Trilha/Montanha',
+      '4': 'Pista',
+      '5': 'Outro'
+    };
+    return terrenoMap[terreno] || terreno;
+  };
+
+  const getEsforcoText = (esforco: string) => {
+    const esforcoMap: { [key: string]: string } = {
+      '1': 'Muito Leve',
+      '2': 'Leve',
+      '3': 'Moderado',
+      '4': 'Forte',
+      '5': 'Muito Forte'
+    };
+    return esforcoMap[esforco] || esforco;
+  };
+
+  const getPercursoText = (percurso: string) => {
+    const percursoMap: { [key: string]: string } = {
+      '1': 'Plano',
+      '2': 'Ligeira Inclinação',
+      '3': 'Moderada',
+      '4': 'Forte',
+      '5': 'Muita Inclinação'
+    };
+    return percursoMap[percurso] || percurso;
+  };
+
   const readinessPercent = todayReadinessScore !== null ? Math.round((1 - (todayReadinessScore / 28)) * 100) : null;
   
   // Buscar treino para hoje
@@ -204,7 +238,7 @@ export default function HomeScreen() {
               )}
               
               {nextTraining.terreno && (
-                <Text style={styles.trainingDetails}>🏃 Terreno: {nextTraining.terreno.charAt(0).toUpperCase() + nextTraining.terreno.slice(1)}</Text>
+                <Text style={styles.trainingDetails}>🏃 Terreno: {getTerrenoText(nextTraining.terreno)}</Text>
               )}
               
               {nextTraining.distance_km && (
@@ -224,11 +258,11 @@ export default function HomeScreen() {
               )}
               
               {nextTraining.esforco && (
-                <Text style={styles.trainingDetails}>💪 Esforço: {nextTraining.esforco}</Text>
+                <Text style={styles.trainingDetails}>💪 Esforço: {getEsforcoText(nextTraining.esforco)}</Text>
               )}
               
               {nextTraining.percurso && (
-                <Text style={styles.trainingDetails}>🛣️ Percurso: {nextTraining.percurso}</Text>
+                <Text style={styles.trainingDetails}>🛣️ Percurso: {getPercursoText(nextTraining.percurso)}</Text>
               )}
               
               {nextTraining.observacoes && (
