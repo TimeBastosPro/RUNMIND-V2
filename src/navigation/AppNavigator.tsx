@@ -21,6 +21,7 @@ import GlossaryScreen from '../screens/academy/GlossaryScreen';
 import GuidesScreen from '../screens/academy/GuidesScreen';
 import ChatScreen from '../screens/academy/ChatScreen';
 import ComparativeChartsScreen from '../screens/analysis/ComparativeChartsScreen';
+
 import SportsProfileScreen from '../screens/SportsProfileScreen';
 // Remover: import CalendarScreen from '../screens/training/CalendarScreen';
 
@@ -31,6 +32,7 @@ type TabParamList = {
   Insights: undefined;
   Treinos: undefined;
   Análise: undefined;
+
   Profile: undefined;
   Academy: undefined;
   'Perfil Esportivo': undefined;
@@ -40,7 +42,7 @@ type StackParamList = {
   Main: undefined;
   Auth: undefined;
   InitialLoading: undefined;
-  ComparativeCharts: undefined;
+
   Calendar: undefined;
 };
 
@@ -224,8 +226,8 @@ function MainTabs() {
             iconName = 'lightbulb';
           } else if (route.name === 'Treinos') {
             iconName = 'run';
-          } else if (route.name === 'Análise') { 
-            iconName = 'chart-line'; 
+          } else if (route.name === 'Análise') {
+            iconName = 'chart-line';
           } else if (route.name === 'Profile') {
             iconName = 'account';
           } else if (route.name === 'Academy') {
@@ -245,15 +247,7 @@ function MainTabs() {
       <Tab.Screen name="Check-in" component={DailyCheckinScreen} />
       <Tab.Screen name="Insights" component={InsightsScreen} />
       <Tab.Screen name="Treinos" component={TrainingScreen} />
-      <Tab.Screen 
-        name="Análise" 
-        component={ComparativeChartsScreen}
-        options={{ 
-          title: 'Análise',
-          headerShown: true,
-          headerTitle: 'Análise Comparativa'
-        }} 
-      />
+      <Tab.Screen name="Análise" component={ComparativeChartsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
       <Tab.Screen name="Perfil Esportivo" component={SportsProfileScreen} options={{ title: 'Perfil Esportivo' }} />
       <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />
@@ -331,7 +325,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
             <Stack.Screen name="Main" component={MainTabs} />
-            {/* <Stack.Screen name="ComparativeCharts" component={ComparativeChartsScreen} /> */}
+    
           </>
         )}
       </Stack.Navigator>

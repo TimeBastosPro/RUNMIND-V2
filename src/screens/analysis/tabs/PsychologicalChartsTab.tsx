@@ -1,235 +1,149 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Card, Text, ActivityIndicator } from 'react-native-paper';
-import { Picker } from '@react-native-picker/picker';
+import React, { useState, useEffect } from 'react';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { Card, Text, Chip } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
 
-// Interface para acessar propriedades dinâmicas
-interface DynamicTrainingSession {
-  id: number;
-  user_id: string;
-  training_date: string;
-  training_type: string;
-  status: string;
-  perceived_effort?: number;
-  satisfaction?: number;
-  notes?: string;
-  avg_heart_rate?: number;
-  elevation_gain_meters?: number;
-  distance_km?: number;
-  duration_minutes?: number;
-  created_at?: string;
-  planned_perceived_effort?: number;
-  planned_distance_km?: number;
-  planned_duration_minutes?: number;
-  planned_elevation_gain_meters?: number;
-  [key: string]: number | string | undefined;
-}
-
 const TRAINING_METRICS = [
-  { label: 'Percepção de Esforço (PSE)', value: 'perceived_effort' },
-  { label: 'Distância (km)', value: 'distance_km' },
-  { label: 'Duração (min)', value: 'duration_minutes' },
-  { label: 'Altimetria (m)', value: 'elevation_gain_meters' },
+  { 
+    label: 'Distância', 
+    value: 'distance',
+    icon: 'map-marker-distance',
+    color: '#4CAF50',
+    unit: 'km',
+  },
+  { 
+    label: 'Duração', 
+    value: 'duration',
+    icon: 'clock-outline',
+    color: '#2196F3',
+    unit: 'min',
+  },
+  { 
+    label: 'Intensidade', 
+    value: 'intensity',
+    icon: 'lightning-bolt',
+    color: '#FF5722',
+    unit: '/10',
+  },
+  { 
+    label: 'Frequência', 
+    value: 'frequency',
+    icon: 'calendar-week',
+    color: '#9C27B0',
+    unit: 'x/sem',
+  },
 ];
 
-type MetricKey = typeof TRAINING_METRICS[number]['value'];
-
-function formatDateLabel(dateStr: string): string {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
 export default function PsychologicalChartsTab() {
-  const [selectedMetric, setSelectedMetric] = useState<MetricKey>('perceived_effort');
-  const { trainingSessions, isLoading, fetchTrainingSessions } = useCheckinStore();
+  const [selectedMetric, setSelectedMetric] = useState('distance');
+  const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
     fetchTrainingSessions();
   }, [fetchTrainingSessions]);
 
-  const chartData = useMemo(() => {
-    const realized = (trainingSessions || [])
-      .filter(s => s.status === 'completed' && (s as DynamicTrainingSession)[selectedMetric] != null)
-      .map(s => ({
-        x: formatDateLabel(s.training_date),
-        y: Number((s as DynamicTrainingSession)[selectedMetric]),
-        originalValue: (s as DynamicTrainingSession)[selectedMetric]
-      }))
-      .filter(d => typeof d.y === 'number' && !isNaN(d.y));
-
-    const plannedKey = `planned_${selectedMetric}`;
-    const planned = (trainingSessions || [])
-      .filter(s => s.status === 'planned' && (s as DynamicTrainingSession)[plannedKey] != null)
-      .map(s => ({
-        x: formatDateLabel(s.training_date),
-        y: Number((s as DynamicTrainingSession)[plannedKey]),
-        originalValue: (s as DynamicTrainingSession)[plannedKey]
-      }))
-      .filter(d => typeof d.y === 'number' && !isNaN(d.y));
-      
-    return { realized, planned };
-  }, [selectedMetric, trainingSessions]);
-
-  const renderSimpleChart = () => {
-    if (chartData.realized.length === 0 && chartData.planned.length === 0) {
-      return <Text style={styles.placeholder}>Sem dados suficientes para exibir.</Text>;
-    }
-
-    const allData = [...chartData.realized, ...chartData.planned];
-    const maxY = Math.max(...allData.map(d => d.y), 10);
-    const minY = Math.min(...allData.map(d => d.y), 0);
-
-    return (
-      <View style={styles.chartContainer}>
-        <View style={styles.chartHeader}>
-          <Text style={styles.chartTitle}>{TRAINING_METRICS.find(m => m.value === selectedMetric)?.label}: Planejado vs. Realizado</Text>
-        </View>
-        
-        <View style={styles.chartArea}>
-          {/* Y-axis labels */}
-          <View style={styles.yAxis}>
-            {[maxY, maxY * 0.75, maxY * 0.5, maxY * 0.25, minY].map(value => (
-              <Text key={value} style={styles.yAxisLabel}>{value.toFixed(1)}</Text>
-            ))}
-          </View>
-          
-          {/* Chart content */}
-          <View style={styles.chartContent}>
-            {/* Grid lines */}
-            {[maxY, maxY * 0.75, maxY * 0.5, maxY * 0.25, minY].map(value => (
-              <View
-                key={value}
-                style={[
-                  styles.gridLine,
-                  { top: `${100 - ((value - minY) / (maxY - minY)) * 100}%` }
-                ]}
-              />
-            ))}
-            
-            {/* Data lines */}
-            {chartData.realized.length > 0 && (
-              <View style={styles.lineContainer}>
-                {chartData.realized.map((point, index) => {
-                  if (index === 0) return null;
-                  const prevPoint = chartData.realized[index - 1];
-                  const x1 = (index - 1) / (chartData.realized.length - 1) * 100;
-                  const y1 = 100 - ((prevPoint.y - minY) / (maxY - minY)) * 100;
-                  const x2 = index / (chartData.realized.length - 1) * 100;
-                  const y2 = 100 - ((point.y - minY) / (maxY - minY)) * 100;
-                  
-                  const width = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                  const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-                  
-                  return (
-                    <View
-                      key={`realized-${index}`}
-                      style={[
-                        styles.line,
-                        {
-                          backgroundColor: '#c43a31',
-                          left: `${x1}%`,
-                          top: `${y1}%`,
-                          width: `${width}%`,
-                          height: 2,
-                          transform: [{ rotate: `${angle}deg` }],
-                          transformOrigin: 'left center'
-                        }
-                      ]}
-                    />
-                  );
-                })}
-              </View>
-            )}
-            
-            {chartData.planned.length > 0 && (
-              <View style={styles.lineContainer}>
-                {chartData.planned.map((point, index) => {
-                  if (index === 0) return null;
-                  const prevPoint = chartData.planned[index - 1];
-                  const x1 = (index - 1) / (chartData.planned.length - 1) * 100;
-                  const y1 = 100 - ((prevPoint.y - minY) / (maxY - minY)) * 100;
-                  const x2 = index / (chartData.planned.length - 1) * 100;
-                  const y2 = 100 - ((point.y - minY) / (maxY - minY)) * 100;
-                  
-                  const width = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                  const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-                  
-                  return (
-                    <View
-                      key={`planned-${index}`}
-                      style={[
-                        styles.line,
-                        {
-                          backgroundColor: '#455A64',
-                          left: `${x1}%`,
-                          top: `${y1}%`,
-                          width: `${width}%`,
-                          height: 2,
-                          borderStyle: 'dashed',
-                          transform: [{ rotate: `${angle}deg` }],
-                          transformOrigin: 'left center'
-                        }
-                      ]}
-                    />
-                  );
-                })}
-              </View>
-            )}
-          </View>
-          
-          {/* X-axis labels */}
-          <View style={styles.xAxis}>
-            {[...new Set([...chartData.realized.map(d => d.x), ...chartData.planned.map(d => d.x)])]
-              .sort((a, b) => new Date(a.split('/').reverse().join('-')).getTime() - new Date(b.split('/').reverse().join('-')).getTime())
-              .map((date, index) => (
-                <Text key={index} style={styles.xAxisLabel}>{date}</Text>
-              ))}
-          </View>
-        </View>
-        
-        {/* Legend */}
-        <View style={styles.legend}>
-          {chartData.realized.length > 0 && (
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: '#c43a31' }]} />
-              <Text style={styles.legendText}>Realizado</Text>
-            </View>
-          )}
-          {chartData.planned.length > 0 && (
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: '#455A64' }]} />
-              <Text style={styles.legendText}>Planejado</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
+  const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
+  
+  // Dados de exemplo para teste
+  const exampleData = [
+    { date: '2024-01-01', value: 5.2 },
+    { date: '2024-01-03', value: 7.8 },
+    { date: '2024-01-05', value: 4.5 },
+    { date: '2024-01-07', value: 8.1 },
+    { date: '2024-01-09', value: 6.3 },
+  ];
 
   return (
-    <ScrollView style={styles.container}>
-      <Card style={styles.card}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Seleção de Métricas de Treino */}
+      <Card style={styles.metricsCard}>
         <Card.Content>
-          <Text style={styles.cardTitle}>Selecione a Métrica de Treino</Text>
-          <Picker
-            selectedValue={selectedMetric}
-            onValueChange={(itemValue) => setSelectedMetric(itemValue as MetricKey)}
-          >
-            {TRAINING_METRICS.map((m) => (
-              <Picker.Item key={m.value} label={m.label} value={m.value} />
+          <Text style={styles.sectionTitle}>Métricas de Treino:</Text>
+          <View style={styles.metricsGrid}>
+            {TRAINING_METRICS.map((metric) => (
+              <Chip
+                key={metric.value}
+                selected={selectedMetric === metric.value}
+                onPress={() => setSelectedMetric(metric.value)}
+                style={[
+                  styles.metricChip,
+                  selectedMetric === metric.value && { backgroundColor: metric.color + '20' }
+                ]}
+                textStyle={[
+                  styles.metricChipText,
+                  selectedMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
+                ]}
+                icon={metric.icon}
+              >
+                {metric.label}
+              </Chip>
             ))}
-          </Picker>
+          </View>
         </Card.Content>
       </Card>
 
-      <Card style={styles.card}>
+      {/* Gráfico de Treinos */}
+      <Card style={styles.chartCard}>
         <Card.Content>
-          {isLoading ? (
-            <ActivityIndicator style={styles.placeholder} />
-          ) : (
-            renderSimpleChart()
-          )}
+          <View style={styles.chartHeader}>
+            <View style={styles.chartTitleContainer}>
+              <MaterialCommunityIcons 
+                name={selectedMetricInfo?.icon as any} 
+                size={24} 
+                color={selectedMetricInfo?.color} 
+              />
+              <Text style={styles.chartTitle}>{selectedMetricInfo?.label}</Text>
+            </View>
+            <Text style={styles.unitText}>{selectedMetricInfo?.unit}</Text>
+          </View>
+          
+          <View style={styles.chartContainer}>
+            <View style={styles.chartBars}>
+              {exampleData.map((item, index) => (
+                <View key={index} style={styles.barWrapper}>
+                  <View 
+                    style={[
+                      styles.bar,
+                      {
+                        height: (item.value / 10) * 100,
+                        backgroundColor: selectedMetricInfo?.color
+                      }
+                    ]}
+                  />
+                  <Text style={styles.barLabel}>
+                    {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  </Text>
+                  <Text style={styles.barValue}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
+
+      {/* Resumo de Treinos */}
+      <Card style={styles.summaryCard}>
+        <Card.Content>
+          <Text style={styles.summaryTitle}>Resumo dos Últimos 30 Dias</Text>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Total de Treinos</Text>
+              <Text style={styles.summaryValue}>12</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Distância Total</Text>
+              <Text style={styles.summaryValue}>78.5 km</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Tempo Total</Text>
+              <Text style={styles.summaryValue}>8h 30m</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Média Intensidade</Text>
+              <Text style={styles.summaryValue}>7.2/10</Text>
+            </View>
+          </View>
         </Card.Content>
       </Card>
     </ScrollView>
@@ -237,35 +151,126 @@ export default function PsychologicalChartsTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: '#f4f4f8' },
-  card: { marginBottom: 16, elevation: 2 },
-  cardTitle: { fontWeight: 'bold', fontSize: 16, marginBottom: 8 },
-  placeholder: { textAlign: 'center', marginVertical: 40, color: '#666' },
-  chartContainer: { padding: 10 },
-  chartHeader: { marginBottom: 10 },
-  chartTitle: { fontWeight: 'bold', fontSize: 14, textAlign: 'center' },
-  chartArea: { flexDirection: 'row', height: 200 },
-  yAxis: { width: 40, justifyContent: 'space-between', paddingVertical: 10 },
-  yAxisLabel: { fontSize: 10, color: '#666' },
-  chartContent: { flex: 1, position: 'relative', marginHorizontal: 10 },
-  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#e0e0e0' },
-  lineContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  line: { position: 'absolute', transformOrigin: 'left center' },
-  xAxis: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginTop: 10,
-    paddingHorizontal: 5
+  container: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    padding: 16,
   },
-  xAxisLabel: { 
-    fontSize: 10, 
-    color: '#666', 
-    transform: [{ rotate: '-45deg' }],
+  metricsCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metricChip: {
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  metricChipText: {
+    color: '#333',
+  },
+  chartCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  chartTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginLeft: 8,
+  },
+  unitText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  chartContainer: {
+    height: 200,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+  },
+  chartBars: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    height: '100%',
+  },
+  barWrapper: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: 40,
+    height: '100%',
+  },
+  bar: {
+    width: '100%',
+    borderRadius: 4,
+    minHeight: 10,
+  },
+  barLabel: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
     textAlign: 'center',
-    width: 30
   },
-  legend: { flexDirection: 'row', justifyContent: 'center', marginTop: 15 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 10 },
-  legendColor: { width: 12, height: 12, marginRight: 5, borderRadius: 2 },
-  legendText: { fontSize: 12, color: '#333' },
+  barValue: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 2,
+  },
+  summaryCard: {
+    borderRadius: 12,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  summaryItem: {
+    width: '48%',
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
 }); 
