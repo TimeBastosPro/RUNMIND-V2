@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { generateInsight } from '../services/gemini';
-import type { DailyCheckin, Insight } from '../types/database';
+import type { DailyCheckin, Insight, Race } from '../types/database';
 
 interface RecentCheckin {
   sleep_quality: number;
@@ -55,6 +55,7 @@ interface CheckinState {
   trainingSessions: TrainingSession[];
   todayReadinessScore: number | null;
   weeklyReflections: WeeklyReflection[];
+  races: Race[];
   // Actions
   loadTodayCheckin: () => Promise<void>;
   loadRecentCheckins: (days?: number) => Promise<void>;
@@ -109,6 +110,7 @@ interface CheckinState {
   saveInsight: (insightData: Omit<Insight, 'id' | 'user_id' | 'created_at'>) => Promise<void>;
   generateAndSaveInsight: (checkinData: Record<string, unknown>) => Promise<void>;
   deleteInsight: (insightId: string) => Promise<void>;
+  fetchRaces: () => Promise<void>;
 }
 
 export const useCheckinStore = create<CheckinState>((set, get) => ({
@@ -123,6 +125,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   trainingSessions: [], // Initialize trainingSessions
   todayReadinessScore: null,
   weeklyReflections: [],
+  races: [],
 
   loadTodayCheckin: async () => {
     set({ isLoading: true, error: null });
@@ -608,6 +611,24 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const errorMessage = error instanceof Error ? error.message : 'Erro ao deletar insight.';
       set({ isLoading: false, error: errorMessage });
       throw error;
+    }
+  },
+
+  fetchRaces: async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('races')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('start_date', { ascending: true });
+
+      if (error) throw error;
+      set({ races: data || [] });
+    } catch (error) {
+      console.error('Erro ao buscar provas:', error);
     }
   },
 }));

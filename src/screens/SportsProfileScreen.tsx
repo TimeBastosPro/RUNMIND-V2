@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Title, Paragraph, Button, TextInput, Modal, Portal, Text, SegmentedButtons, IconButton, Chip, DataTable } from 'react-native-paper';
 import { useAuthStore } from '../stores/auth';
+import { Race } from '../types/database';
 import { 
   calculateIMC, 
   calculateVO2maxFromRaceTime, 
@@ -33,7 +34,21 @@ const TEST_PROTOCOLS: TestProtocol[] = [
 ];
 
 export default function SportsProfileScreen() {
-  const { profile, loadProfile, fitnessTests, fetchFitnessTests, saveFitnessTest, updateFitnessTest, deleteFitnessTest, updateProfile } = useAuthStore();
+  const { 
+    profile, 
+    loadProfile, 
+    fitnessTests, 
+    races,
+    fetchFitnessTests, 
+    fetchRaces,
+    saveFitnessTest, 
+    updateFitnessTest, 
+    deleteFitnessTest, 
+    saveRace,
+    updateRace,
+    deleteRace,
+    updateProfile 
+  } = useAuthStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTest, setEditingTest] = useState<any>(null);
   const [selectedProtocol, setSelectedProtocol] = useState<string>('');
@@ -53,11 +68,21 @@ export default function SportsProfileScreen() {
     resting_heart_rate: ''
   });
   const [autoCalculatedMaxHR, setAutoCalculatedMaxHR] = useState(false);
+  const [raceModalVisible, setRaceModalVisible] = useState(false);
+  const [editingRace, setEditingRace] = useState<Race | null>(null);
+  const [raceData, setRaceData] = useState({
+    event_name: '',
+    city: '',
+    start_date: '',
+    start_time: '',
+    distance_km: ''
+  });
 
   useEffect(() => {
     loadProfile();
     fetchFitnessTests();
-  }, [loadProfile, fetchFitnessTests]);
+    fetchRaces();
+  }, [loadProfile, fetchFitnessTests, fetchRaces]);
 
   // Sincronizar dados do perfil com estado local
   useEffect(() => {
@@ -268,6 +293,81 @@ export default function SportsProfileScreen() {
     setEditingTest(null);
     setSelectedProtocol('');
     setTestData({ distance: '', time: '', heartRate: '' });
+  };
+
+  const resetRaceForm = () => {
+    setEditingRace(null);
+    setRaceData({
+      event_name: '',
+      city: '',
+      start_date: '',
+      start_time: '',
+      distance_km: ''
+    });
+  };
+
+  const handleSaveRace = async () => {
+    if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
+      Alert.alert('Erro', 'Todos os campos são obrigatórios');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const raceDataToSave = {
+        event_name: raceData.event_name,
+        city: raceData.city,
+        start_date: raceData.start_date,
+        start_time: raceData.start_time,
+        distance_km: Number(raceData.distance_km)
+      };
+
+      if (editingRace) {
+        await updateRace(editingRace.id, raceDataToSave);
+        Alert.alert('Sucesso', 'Prova atualizada com sucesso!');
+      } else {
+        await saveRace(raceDataToSave);
+        Alert.alert('Sucesso', 'Prova cadastrada com sucesso!');
+      }
+
+      setRaceModalVisible(false);
+      resetRaceForm();
+    } catch (error) {
+      console.error('Erro ao salvar prova:', error);
+      Alert.alert('Erro', error instanceof Error ? error.message : 'Erro ao salvar prova');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditRace = (race: Race) => {
+    setEditingRace(race);
+    setRaceData({
+      event_name: race.event_name,
+      city: race.city,
+      start_date: race.start_date,
+      start_time: race.start_time,
+      distance_km: race.distance_km.toString()
+    });
+    setRaceModalVisible(true);
+  };
+
+  const handleDeleteRace = (race: Race) => {
+    const confirmed = window.confirm(`Deseja realmente excluir a prova "${race.event_name}"?`);
+    
+    if (confirmed) {
+      deleteRaceAsync(race);
+    }
+  };
+
+  const deleteRaceAsync = async (race: Race) => {
+    try {
+      await deleteRace(race.id);
+      alert('Prova excluída com sucesso!');
+    } catch (error) {
+      console.error('Erro ao excluir prova:', error);
+      alert(`Erro ao excluir prova: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
   };
 
   const renderProtocolFields = () => {
@@ -521,6 +621,54 @@ export default function SportsProfileScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
+          <Title>Minhas Provas</Title>
+          <Button 
+            mode="contained" 
+            onPress={() => setRaceModalVisible(true)}
+            style={styles.button}
+          >
+            Cadastrar Nova Prova
+          </Button>
+          
+          {races.length > 0 ? (
+            races.map((race) => (
+              <View key={race.id} style={styles.raceItem}>
+                <View style={styles.raceHeader}>
+                  <View style={styles.raceInfo}>
+                    <Text style={styles.raceTitle}>{race.event_name}</Text>
+                    <Text style={styles.raceDate}>
+                      {new Date(race.start_date).toLocaleDateString('pt-BR')} às {race.start_time}
+                    </Text>
+                  </View>
+                  <View style={styles.raceActions}>
+                    <IconButton
+                      icon="pencil"
+                      size={20}
+                      onPress={() => handleEditRace(race)}
+                      style={styles.actionButton}
+                    />
+                    <IconButton
+                      icon="delete"
+                      size={20}
+                      onPress={() => handleDeleteRace(race)}
+                      style={styles.actionButton}
+                    />
+                  </View>
+                </View>
+                <Text style={styles.raceDetails}>🏃 {race.city}</Text>
+                <Text style={styles.raceDetails}>📏 {race.distance_km}km</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>
+              Nenhuma prova cadastrada. Clique em "Cadastrar Nova Prova" para adicionar suas próximas competições.
+            </Text>
+          )}
+        </Card.Content>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Content>
           <Title>Testes de Performance</Title>
           <Button 
             mode="contained" 
@@ -613,6 +761,81 @@ export default function SportsProfileScreen() {
               style={styles.modalButton}
             >
               {editingTest ? 'Atualizar' : 'Calcular e Salvar'}
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+
+      <Portal>
+        <Modal
+          visible={raceModalVisible}
+          onDismiss={() => {
+            setRaceModalVisible(false);
+            resetRaceForm();
+          }}
+          contentContainerStyle={styles.modal}
+        >
+          <Title style={styles.modalTitle}>
+            {editingRace ? 'Editar Prova' : 'Cadastrar Nova Prova'}
+          </Title>
+          
+          <TextInput
+            label="Nome do Evento"
+            value={raceData.event_name}
+            onChangeText={(text) => setRaceData(prev => ({ ...prev, event_name: text }))}
+            style={styles.input}
+          />
+          
+          <TextInput
+            label="Cidade"
+            value={raceData.city}
+            onChangeText={(text) => setRaceData(prev => ({ ...prev, city: text }))}
+            style={styles.input}
+          />
+          
+          <TextInput
+            label="Data da Largada (YYYY-MM-DD)"
+            value={raceData.start_date}
+            onChangeText={(text) => setRaceData(prev => ({ ...prev, start_date: text }))}
+            placeholder="2024-12-25"
+            style={styles.input}
+          />
+          
+          <TextInput
+            label="Hora da Largada (HH:MM)"
+            value={raceData.start_time}
+            onChangeText={(text) => setRaceData(prev => ({ ...prev, start_time: text }))}
+            placeholder="08:00"
+            style={styles.input}
+          />
+          
+          <TextInput
+            label="Distância (km)"
+            value={raceData.distance_km}
+            onChangeText={(text) => setRaceData(prev => ({ ...prev, distance_km: text }))}
+            keyboardType="numeric"
+            style={styles.input}
+          />
+
+          <View style={styles.modalButtons}>
+            <Button 
+              mode="outlined" 
+              onPress={() => {
+                setRaceModalVisible(false);
+                resetRaceForm();
+              }}
+              style={styles.modalButton}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              mode="contained" 
+              onPress={handleSaveRace}
+              loading={loading}
+              disabled={!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km || loading}
+              style={styles.modalButton}
+            >
+              {editingRace ? 'Atualizar' : 'Salvar'}
             </Button>
           </View>
         </Modal>
@@ -805,6 +1028,36 @@ const styles = StyleSheet.create({
   },
   formulaText: {
     fontWeight: 'bold',
+    color: '#2196F3',
+  },
+  raceItem: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  raceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  raceInfo: {
+    flex: 1,
+  },
+  raceTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  raceDate: {
+    color: '#666',
+    fontSize: 12,
+  },
+  raceActions: {
+    flexDirection: 'row',
+  },
+  raceDetails: {
+    marginTop: 4,
     color: '#2196F3',
   },
 }); 

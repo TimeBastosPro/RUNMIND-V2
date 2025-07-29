@@ -42,6 +42,41 @@ const motivationalQuotes = [
   }
 ];
 
+const sportCuriosities = [
+  {
+    title: "Por que os corredores da Etiópia são tão rápidos?",
+    content: "A altitude elevada de Adis Abeba (2.355m) faz com que os corredores etíopes desenvolvam mais glóbulos vermelhos, melhorando o transporte de oxigênio. Isso, combinado com treinos desde a infância e uma dieta rica em carboidratos complexos, explica seu domínio nas provas de longa distância."
+  },
+  {
+    title: "O recorde mundial da maratona",
+    content: "O recorde mundial da maratona masculina é de 2h01min09s, estabelecido por Eliud Kipchoge em 2022. Para manter esse ritmo, ele correu cada quilômetro em aproximadamente 2min52s - uma velocidade impressionante mantida por 42km!"
+  },
+  {
+    title: "A ciência por trás do 'runner's high'",
+    content: "O 'runner's high' é causado pela liberação de endorfinas e endocanabinoides durante exercícios intensos. Essas substâncias químicas naturais reduzem a dor e criam uma sensação de euforia, explicando por que muitos corredores se sentem 'viciados' no esporte."
+  },
+  {
+    title: "Por que alongar é importante?",
+    content: "O alongamento melhora a flexibilidade, aumenta o fluxo sanguíneo para os músculos e reduz o risco de lesões. Estudos mostram que alongamentos dinâmicos antes do treino são mais eficazes que os estáticos para melhorar performance."
+  },
+  {
+    title: "A evolução do tênis de corrida",
+    content: "O primeiro tênis específico para corrida foi criado em 1895. Hoje, com tecnologias como amortecimento de gel, cabos de carbono e solas de borracha especial, os tênis modernos podem reduzir o impacto em até 40% comparado a correr descalço."
+  },
+  {
+    title: "A importância da hidratação",
+    content: "Perder apenas 2% do peso corporal em água pode reduzir a performance em até 20%. Para um corredor de 70kg, isso significa apenas 1,4kg de perda de água. Por isso, a hidratação antes, durante e após o treino é fundamental."
+  },
+  {
+    title: "O mito do 'carb loading'",
+    content: "O carregamento de carboidratos não significa comer massas na véspera da prova. O processo ideal começa 3-4 dias antes, aumentando gradualmente a ingestão de carboidratos para 7-10g por kg de peso corporal, maximizando o estoque de glicogênio."
+  },
+  {
+    title: "A biomecânica da corrida",
+    content: "Durante a corrida, os músculos das pernas geram força equivalente a 2-3 vezes o peso corporal a cada passada. Isso explica por que corredores experientes desenvolvem músculos específicos e por que a técnica correta é tão importante para prevenir lesões."
+  }
+];
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { user } = useAuthStore();
@@ -49,24 +84,35 @@ export default function HomeScreen() {
     todayReadinessScore, 
     hasCheckedInToday, 
     trainingSessions,
+    races,
     loadRecentCheckins,
-    fetchTrainingSessions
+    fetchTrainingSessions,
+    fetchRaces
   } = useCheckinStore();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [motivationalQuote, setMotivationalQuote] = useState(motivationalQuotes[0]);
+  const [dailyCuriosity, setDailyCuriosity] = useState(sportCuriosities[0]);
 
   useEffect(() => {
     loadRecentCheckins();
     fetchTrainingSessions();
+    fetchRaces();
     
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
-  }, [loadRecentCheckins, fetchTrainingSessions]);
+  }, [loadRecentCheckins, fetchTrainingSessions, fetchRaces]);
 
   useEffect(() => {
-    const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
-    setMotivationalQuote(motivationalQuotes[randomIndex]);
+    // Usar o dia do ano para selecionar a frase e curiosidade do dia
+    const today = new Date();
+    const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+    
+    const quoteIndex = dayOfYear % motivationalQuotes.length;
+    const curiosityIndex = dayOfYear % sportCuriosities.length;
+    
+    setMotivationalQuote(motivationalQuotes[quoteIndex]);
+    setDailyCuriosity(sportCuriosities[curiosityIndex]);
   }, []);
 
   const getGreeting = () => {
@@ -112,16 +158,16 @@ export default function HomeScreen() {
 
   const readinessPercent = todayReadinessScore !== null ? Math.round((1 - (todayReadinessScore / 28)) * 100) : null;
   
-  // Buscar treino para hoje
-  const today = new Date().toISOString().split('T')[0];
+  // Buscar treino para hoje e próxima prova
+  const todayDateString = new Date().toISOString().split('T')[0];
   
   const todayTraining = trainingSessions?.find(session => 
-    session.training_date === today
+    session.training_date === todayDateString
   );
   
   // Buscar o próximo treino planejado (hoje ou próximo dia)
   const nextPlannedTraining = trainingSessions?.find(session => 
-    session.status === 'planned' && session.training_date >= today
+    session.status === 'planned' && session.training_date >= todayDateString
   );
   
   // Lógica do próximo treino: se há treino planejado para hoje, mostra ele. Se não, mostra o próximo planejado
@@ -143,6 +189,16 @@ export default function HomeScreen() {
   
   const lastCompletedTraining = sortedCompletedTrainings[0];
 
+  // Buscar a próxima prova (a mais próxima)
+  const nextRace = races
+    ?.filter(race => race.start_date >= todayDateString)
+    ?.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
+
+  // Calcular dias restantes para a próxima prova
+  const daysUntilRace = nextRace ? 
+    Math.ceil((new Date(nextRace.start_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 
+    null;
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <Surface style={styles.header} elevation={2}>
@@ -158,6 +214,8 @@ export default function HomeScreen() {
           />
         </View>
         <Text style={styles.date}>{format(currentTime, "EEEE, d 'de' MMMM", { locale: ptBR })}</Text>
+        <Text style={styles.inspirationQuote}>&ldquo;{motivationalQuote.text}&rdquo;</Text>
+        <Text style={styles.inspirationAuthor}>— {motivationalQuote.author}</Text>
       </Surface>
 
       <Card style={styles.card}>
@@ -245,9 +303,14 @@ export default function HomeScreen() {
                 <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
               )}
               
-              {(nextTraining.duracao_horas || nextTraining.duracao_minutos) && (
-                <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duracao_horas || '0'}h {nextTraining.duracao_minutos || '0'}min</Text>
-              )}
+              {(() => {
+                const horas = nextTraining.duracao_horas || 0;
+                const minutos = nextTraining.duracao_minutos || 0;
+                if (horas > 0 || minutos > 0) {
+                  return <Text style={styles.trainingDetails}>⏱️ Duração: {horas}h {minutos}min</Text>;
+                }
+                return null;
+              })()}
               
               {nextTraining.duration_minutes && !nextTraining.duracao_horas && !nextTraining.duracao_minutos && (
                 <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duration_minutes}min</Text>
@@ -338,61 +401,80 @@ export default function HomeScreen() {
         </Card>
       )}
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Inspiração do Dia</Text>
-            <IconButton icon="lightbulb" size={24} />
-          </View>
-          
-          <Text style={styles.quoteText}>&ldquo;{motivationalQuote.text}&rdquo;</Text>
-          <Text style={styles.quoteAuthor}>— {motivationalQuote.author}</Text>
-        </Card.Content>
-      </Card>
+      {nextRace ? (
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Próxima Prova</Text>
+              <Chip icon="flag-checkered" mode="flat" style={styles.successChip}>
+                Confirmada
+              </Chip>
+            </View>
+            
+            <View style={styles.trainingInfo}>
+              <Text style={styles.trainingType}>{nextRace.event_name}</Text>
+              
+              <Text style={styles.trainingDetails}>🏃 {nextRace.city}</Text>
+              <Text style={styles.trainingDetails}>📏 {nextRace.distance_km}km</Text>
+              <Text style={styles.trainingDetails}>⏰ Largada: {nextRace.start_time}</Text>
+              
+              <Text style={styles.trainingDate}>
+                📅 {format(new Date(nextRace.start_date + 'T00:00:00'), "dd 'de' MMMM", { locale: ptBR })}
+              </Text>
+              
+              {daysUntilRace !== null && (
+                <Text style={[styles.trainingDetails, styles.countdownText]}>
+                  ⏳ {daysUntilRace === 0 ? 'Hoje!' : daysUntilRace === 1 ? 'Amanhã!' : `${daysUntilRace} dias restantes`}
+                </Text>
+              )}
+            </View>
+
+            <Button 
+              mode="outlined" 
+              style={styles.trainingButton}
+              onPress={() => navigation.navigate('SportsProfile' as never)}
+            >
+              Ver Todas as Provas
+            </Button>
+          </Card.Content>
+        </Card>
+      ) : (
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Próximas Provas</Text>
+              <IconButton icon="flag-checkered" size={24} />
+            </View>
+            
+            <View style={styles.trainingInfo}>
+              <Text style={styles.trainingType}>Nenhuma prova cadastrada</Text>
+              <Text style={styles.trainingDetails}>📝 Cadastre suas próximas provas para acompanhar seus objetivos!</Text>
+            </View>
+
+            <Button 
+              mode="contained" 
+              style={styles.trainingButton}
+              onPress={() => navigation.navigate('SportsProfile' as never)}
+            >
+              Cadastrar Primeira Prova
+            </Button>
+          </Card.Content>
+        </Card>
+      )}
 
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.cardTitle}>Ações Rápidas</Text>
-          
-          <View style={styles.quickActions}>
-            <Button 
-              mode="contained-tonal" 
-              style={styles.actionButton}
-              icon="chart-line"
-              onPress={() => navigation.navigate('Analysis' as never)}
-            >
-              Análises
-            </Button>
-            
-            <Button 
-              mode="contained-tonal" 
-              style={styles.actionButton}
-              icon="lightbulb-outline"
-              onPress={() => navigation.navigate('Insights' as never)}
-            >
-              Insights
-            </Button>
-            
-            <Button 
-              mode="contained-tonal" 
-              style={styles.actionButton}
-              icon="account"
-              onPress={() => navigation.navigate('SportsProfile' as never)}
-            >
-              Perfil
-            </Button>
-            
-            <Button 
-              mode="contained-tonal" 
-              style={styles.actionButton}
-              icon="school"
-              onPress={() => navigation.navigate('Academy' as never)}
-            >
-              Academia
-            </Button>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Curiosidades</Text>
+            <IconButton icon="lightbulb-on" size={24} />
           </View>
+          
+          <Text style={styles.curiosityTitle}>{dailyCuriosity.title}</Text>
+          <Text style={styles.curiosityContent}>{dailyCuriosity.content}</Text>
         </Card.Content>
       </Card>
+
+
 
       <View style={styles.bottomSpace} />
     </ScrollView>
@@ -433,6 +515,22 @@ const styles = StyleSheet.create({
     color: 'white',
     opacity: 0.8,
     textTransform: 'capitalize',
+  },
+  inspirationQuote: {
+    fontSize: 16,
+    color: 'white',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 22,
+  },
+  inspirationAuthor: {
+    fontSize: 14,
+    color: 'white',
+    opacity: 0.9,
+    textAlign: 'right',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   card: {
     marginHorizontal: 16,
@@ -561,23 +659,24 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 24,
   },
-  quoteAuthor: {
+  curiosityTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  curiosityContent: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'right',
-    fontStyle: 'italic',
+    lineHeight: 20,
   },
-  quickActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginTop: 8,
+  countdownText: {
+    fontWeight: 'bold',
+    color: '#2196F3',
+    fontSize: 16,
   },
-  actionButton: {
-    width: '48%',
-    marginBottom: 8,
-    borderRadius: 8,
-  },
+
   bottomSpace: {
     height: 20,
   },

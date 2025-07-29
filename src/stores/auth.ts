@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Profile, FitnessTest } from '../types/database';
+import { Profile, FitnessTest, Race } from '../types/database';
 
 interface AuthState {
   user: User | null;
@@ -10,6 +10,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isInitializing: boolean;
   fitnessTests: FitnessTest[];
+  races: Race[];
   
   // Actions
   signIn: (email: string, password: string) => Promise<void>;
@@ -34,6 +35,10 @@ interface AuthState {
   saveFitnessTest: (testData: Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<FitnessTest>;
   updateFitnessTest: (testId: string, testData: Partial<Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => Promise<FitnessTest>;
   deleteFitnessTest: (testId: string) => Promise<void>;
+  fetchRaces: () => Promise<void>;
+  saveRace: (raceData: Omit<Race, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<Race>;
+  updateRace: (raceId: string, raceData: Partial<Omit<Race, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => Promise<Race>;
+  deleteRace: (raceId: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -43,6 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isInitializing: true,
   fitnessTests: [],
+  races: [],
 
   signIn: async (email: string, password: string) => {
     set({ isLoading: true });
@@ -295,6 +301,95 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.log('DEBUG - Estado atualizado com sucesso');
     } catch (error) {
       console.error('DEBUG - Erro ao deletar teste de fitness:', error);
+      throw error;
+    }
+  },
+
+  fetchRaces: async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('races')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('start_date', { ascending: true });
+
+      if (error) throw error;
+      set({ races: data || [] });
+    } catch (error) {
+      console.error('Erro ao buscar provas:', error);
+    }
+  },
+
+  saveRace: async (raceData: Omit<Race, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const { data, error } = await supabase
+        .from('races')
+        .insert([{
+          ...raceData,
+          user_id: user.id
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Atualizar a lista de provas
+      const currentRaces = get().races;
+      set({ races: [...currentRaces, data].sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()) });
+
+      return data;
+    } catch (error) {
+      console.error('Erro ao salvar prova:', error);
+      throw error;
+    }
+  },
+
+  updateRace: async (raceId: string, raceData: Partial<Omit<Race, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => {
+    try {
+      const { data, error } = await supabase
+        .from('races')
+        .update(raceData)
+        .eq('id', raceId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Atualizar a lista de provas
+      const currentRaces = get().races;
+      const updatedRaces = currentRaces.map(race =>
+        race.id === raceId ? data : race
+      );
+      set({ races: updatedRaces.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()) });
+
+      return data;
+    } catch (error) {
+      console.error('Erro ao atualizar prova:', error);
+      throw error;
+    }
+  },
+
+  deleteRace: async (raceId: string) => {
+    try {
+      const { error } = await supabase
+        .from('races')
+        .delete()
+        .eq('id', raceId);
+
+      if (error) throw error;
+
+      // Atualizar a lista de provas
+      const currentRaces = get().races;
+      const updatedRaces = currentRaces.filter(race => race.id !== raceId);
+      set({ races: updatedRaces });
+    } catch (error) {
+      console.error('Erro ao deletar prova:', error);
       throw error;
     }
   },

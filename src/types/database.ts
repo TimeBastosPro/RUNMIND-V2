@@ -124,4 +124,16 @@ export interface Profile {
     created_at: string;
     updated_at?: string;
   }
+
+  export interface Race {
+    id: string;
+    user_id: string;
+    event_name: string;
+    city: string;
+    start_date: string;
+    start_time: string;
+    distance_km: number;
+    created_at: string;
+    updated_at?: string;
+  }
   
