@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert, useWindowDimensions } from 'react-native';
 // LINHA CORRIGIDA: Adicionados 'RadioButton' e outros componentes que estavam em falta.
 import { Portal, Modal, TextInput, Button, Text, Checkbox, RadioButton, List, Chip } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
@@ -212,11 +212,16 @@ export default function TrainingScreen() {
     });
 
     const userId = useAuthStore(s => s.user?.id);
+    const { width } = useWindowDimensions();
+    const isMobile = width < 600;
 
     useEffect(() => {
         setLoading(true);
-        fetchTrainingSessions().finally(() => setLoading(false));
-    }, [fetchTrainingSessions]);
+        // Modo teste: simular carregamento
+        setTimeout(() => {
+            setLoading(false);
+        }, 500);
+    }, []);
 
     // Função para obter o início da semana (domingo)
     function getWeekStart(date: Date) {
@@ -237,20 +242,22 @@ export default function TrainingScreen() {
     }, []);
 
     const handleSaveWeeklyReflection = async (answers: any) => {
-      const weekStart = getWeekStart(new Date());
-      await submitWeeklyReflection({
-        enjoyment: answers.enjoyment,
-        progress: answers.progress,
-        confidence: answers.confidence,
-        week_start: weekStart,
-      });
+      // Modo teste: simular salvamento
+      console.log('Reflexão semanal (modo teste):', answers);
       setWeeklyReflectionVisible(false);
     };
 
-    const days = useMemo(() => generateCalendarDays(displayDate), [displayDate]);
-    const weeks = useMemo(() => groupDaysByWeek(days), [days]);
+    const calendarDays = useMemo(() => generateCalendarDays(displayDate), [displayDate]);
+    const weeks = useMemo(() => groupDaysByWeek(calendarDays), [calendarDays]);
+    const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
+
+    useEffect(() => {
+      // Sempre que mudar o mês, resetar para a semana atual
+      setCurrentWeekIndex(0);
+    }, [displayDate]);
+
     // Agrupar treinos por data, priorizando o realizado
-    const trainingByDate = useMemo(() => {
+    const trainingSessionsByDate = useMemo(() => {
         const map: Record<string, TrainingSession> = {};
         // Primeiro, pegar todos os realizados
         trainingSessions.filter(t => t.status === 'completed').forEach(t => {
@@ -303,10 +310,9 @@ export default function TrainingScreen() {
           [
             { text: "Cancelar", style: "cancel", onPress: () => resolve() },
             { text: "Excluir", style: "destructive", onPress: async () => {
-                if (training.id) {
-                  await deleteTrainingSession(training.id);
-                  await fetchTrainingSessions();
-                }
+                // Modo teste: simular exclusão
+                console.log('Treino excluído (modo teste):', training);
+                Alert.alert('✅ Sucesso', 'Treino excluído! (Modo teste)');
                 resolve();
               }
             }
@@ -336,10 +342,10 @@ export default function TrainingScreen() {
             observacoes: planningState.observacoes || undefined,
         };
         try {
-            await saveTrainingSession(trainingData);
-            await fetchTrainingSessions(); // Garante atualização imediata dos cards
+            // Temporariamente: simular salvamento local
+            console.log('Treino planejado (simulado):', trainingData);
             setModalPlanVisible(false);
-            Alert.alert("Sucesso", "Treino salvo com sucesso!");
+            Alert.alert("Sucesso", "Treino planejado! (Modo teste - não salvo no servidor)");
         } catch (err) {
             console.error('Erro ao salvar treino:', err);
             Alert.alert("Erro", "Não foi possível salvar o treino. Tente novamente.");
@@ -348,35 +354,22 @@ export default function TrainingScreen() {
 
     const handleSaveDone = async (completedData: Partial<TrainingSession>) => {
         if (!editingSession) return;
-        if (editingSession.id) {
-            // Atualiza treino existente
-            const safeCompletedData: any = { ...completedData };
-            if ('avg_heart_rate' in safeCompletedData && (safeCompletedData.avg_heart_rate == null)) delete safeCompletedData.avg_heart_rate;
-            if ('elevation_gain_meters' in safeCompletedData && (safeCompletedData.elevation_gain_meters == null)) delete safeCompletedData.elevation_gain_meters;
-            if ('distance_km' in safeCompletedData && (safeCompletedData.distance_km == null)) delete safeCompletedData.distance_km;
-            if ('duration_minutes' in safeCompletedData && (safeCompletedData.duration_minutes == null)) delete safeCompletedData.duration_minutes;
-            await markTrainingAsCompleted(editingSession.id, safeCompletedData);
-        } else {
-            try {
-                // Garante todos os campos obrigatórios para criar treino realizado do zero
-                const treinoParaSalvar: Partial<TrainingSession> = {
-                    ...completedData,
-                    user_id: userId,
-                    training_date: editingSession.training_date,
-                    status: 'completed',
-                    title: completedData.title || 'Treino Realizado',
-                    training_type: completedData.training_type || 'manual',
-                };
-                console.log('Tentando criar treino realizado:', treinoParaSalvar);
-                await saveTrainingSession(treinoParaSalvar);
-                Alert.alert('Sucesso', 'Treino realizado cadastrado!');
-            } catch (err: any) {
-                Alert.alert('Erro ao salvar treino', err.message || String(err));
-                console.error('Erro ao salvar treino realizado:', err);
-            }
+        try {
+            // Temporariamente: simular salvamento local
+            const treinoParaSalvar: Partial<TrainingSession> = {
+                ...completedData,
+                training_date: editingSession.training_date,
+                status: 'completed',
+                title: completedData.title || 'Treino Realizado',
+                training_type: completedData.training_type || 'manual',
+            };
+            console.log('Treino realizado (simulado):', treinoParaSalvar);
+            Alert.alert('Sucesso', 'Treino realizado! (Modo teste - não salvo no servidor)');
+        } catch (err: any) {
+            Alert.alert('Erro ao salvar treino', err.message || String(err));
+            console.error('Erro ao salvar treino realizado:', err);
         }
         setModalDoneVisible(false);
-        await fetchTrainingSessions();
     };
 
     const monthLabel = `${MONTHS_PT[displayDate.getMonth()]} / ${displayDate.getFullYear()}`;
@@ -401,80 +394,92 @@ export default function TrainingScreen() {
             Papa.parse(file, {
                 header: true,
                 complete: async (results: any) => {
-                    // results.data é um array de objetos
-                    // Adapte para o formato de treino necessário
-                    const treinos = results.data;
-                    for (const treino of treinos) {
-                        // Exemplo: ajuste os campos conforme seu modelo
-                        await saveTrainingSession({
-                            training_date: treino.data,
-                            status: 'planned',
-                            modalidade: treino.modalidade,
-                            treino_tipo: treino.treino_tipo,
-                            terreno: treino.terreno,
-                            duracao_horas: treino.duracao_horas,
-                            duracao_minutos: treino.duracao_minutos,
-                            distance_km: treino.distance_km,
-                            observacoes: treino.observacoes,
-                        });
-                    }
-                    await fetchTrainingSessions();
-                    Alert.alert('Sucesso', 'Treinos importados com sucesso!');
+                    // Modo teste: simular importação
+                    console.log('CSV importado (modo teste):', results.data);
+                    Alert.alert('✅ Sucesso', 'CSV processado! (Modo teste - não salvo no servidor)');
                     setImportModalVisible(false);
                 },
                 error: (err: any) => {
-                    Alert.alert('Erro', 'Falha ao importar CSV: ' + err.message);
+                    Alert.alert('❌ Erro', 'Falha ao processar CSV: ' + err.message);
                 },
             });
         } catch (err: any) {
-            Alert.alert('Erro', 'Falha ao importar CSV: ' + err.message);
+            Alert.alert('❌ Erro', 'Falha ao importar CSV: ' + err.message);
         } finally {
             setImporting(false);
         }
     };
 
+    // Renderização condicional
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Button onPress={goPrevMonth}>Anterior</Button>
-                <Text style={styles.headerText}>{monthLabel}</Text>
-                <Button onPress={goNextMonth}>Próximo</Button>
-                <Button mode="outlined" onPress={() => setImportModalVisible(true)} style={{ marginLeft: 8 }}>
+        <ScrollView style={{ flex: 1 }}>
+            {/* Navegação de semana/mês */}
+            <View style={[styles.headerContainer, isMobile && styles.headerContainerMobile]}>
+                <Button onPress={() => isMobile ? setCurrentWeekIndex(i => Math.max(i - 1, 0)) : setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1))}>
+                    Anterior
+                </Button>
+                <Text style={[styles.headerTitle, isMobile && styles.headerTitleMobile]}>
+                    {MONTHS_PT[displayDate.getMonth()]} {displayDate.getFullYear()}
+                </Text>
+                <Button onPress={() => isMobile ? setCurrentWeekIndex(i => Math.min(i + 1, weeks.length - 1)) : setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 1))}>
+                    Próximo
+                </Button>
+                <Button onPress={() => setImportModalVisible(true)} style={[styles.importButton, isMobile && styles.importButtonMobile]}>
                     Importar Planilha (.csv)
                 </Button>
             </View>
-            <View style={styles.weekdaysContainer}>
-                {WEEKDAYS.map((day, index) => <Text key={`${day}-${index}`} style={styles.weekdayText}>{day}</Text>)}
-            </View>
-            {loading ? (
-                <ActivityIndicator size="large" style={{ marginTop: 50 }} />
+            {/* Dias da semana - apenas no desktop */}
+            {!isMobile && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 12 }}>
+                    {WEEKDAYS.map((d, i) => (
+                        <Text key={i} style={{ flex: 1, textAlign: 'center', fontWeight: 'bold', color: '#888' }}>{d}</Text>
+                    ))}
+                </View>
+            )}
+            {/* Renderização semanal (mobile) ou mensal (desktop) */}
+            {isMobile ? (
+                <View style={{ flexDirection: 'column', margin: 8 }}>
+                    {weeks[currentWeekIndex]?.map((day, idx) => {
+                        const dateKey = formatDate(day);
+                        const training = trainingSessionsByDate[dateKey] || null;
+                        return (
+                            <View key={dateKey} style={{ marginVertical: 4 }}>
+                                <CustomDay
+                                    day={day}
+                                    displayMonth={displayDate.getMonth()}
+                                    training={training}
+                                    onOpenPlanModal={handleOpenPlanModal}
+                                    onOpenRealizadoModal={handleOpenDoneModal}
+                                />
+                            </View>
+                        );
+                    })}
+                </View>
             ) : (
-                <ScrollView>
-                    {weeks.map((week, weekIdx) => (
-                        <View key={weekIdx} style={styles.weekRow}>
-                            {week.map((day, dayIdx) => {
-                                const training = trainingByDate[formatDate(day)] || null;
-                                return (
+                weeks.map((week, wIdx) => (
+                    <View key={wIdx} style={{ flexDirection: 'row', marginVertical: 2 }}>
+                        {week.map((day, idx) => {
+                            const dateKey = formatDate(day);
+                            const training = trainingSessionsByDate[dateKey] || null;
+                            return (
+                                <View key={dateKey} style={{ flex: 1, marginHorizontal: 2 }}>
                                     <CustomDay
-                                        key={day.toISOString()}
                                         day={day}
                                         displayMonth={displayDate.getMonth()}
                                         training={training}
-                                        onPress={handleDayPress}
-                                        onLongPress={handleDayLongPress}
                                         onOpenPlanModal={handleOpenPlanModal}
-                                        onOpenRealizadoModal={handleOpenRealizadoModal}
+                                        onOpenRealizadoModal={handleOpenDoneModal}
                                     />
-                                );
-                            })}
-                        </View>
-                    ))}
-                </ScrollView>
+                                </View>
+                            );
+                        })}
+                    </View>
+                ))
             )}
 
             {/* Modais permanecem iguais */}
             <Portal>
-                <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ width: '90%', alignSelf: 'center', marginVertical: 20, borderRadius: 12, padding: 20, backgroundColor: 'white', maxWidth: 600, maxHeight: '90%' }}>
+                <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ width: '95%', alignSelf: 'center', marginVertical: 10, borderRadius: 12, padding: 16, backgroundColor: 'white', maxHeight: '90%' }}>
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <Text variant="titleLarge" style={{ marginBottom: 10, textAlign: 'left', fontWeight: 'bold' }}>
                           {editingSession ? 'Editar Treino Planejado' : 'Planejar Novo Treino'}
@@ -541,11 +546,15 @@ export default function TrainingScreen() {
                         </RadioButton.Group>
                         {/* Duração/Distância */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Duração / Distância</Text>
-                        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
-                          <TextInput label="Distância (km)" value={planningState.distance_km} onChangeText={val => setPlanningState(p => ({...p, distance_km: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
-                          <TextInput label="Metros" value={planningState.distancia_m} onChangeText={val => setPlanningState(p => ({...p, distancia_m: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
-                          <TextInput label="Horas" value={planningState.duracao_horas} onChangeText={val => setPlanningState(p => ({...p, duracao_horas: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
-                          <TextInput label="Minutos" value={planningState.duracao_minutos} onChangeText={val => setPlanningState(p => ({...p, duracao_minutos: val}))} keyboardType="numeric" style={{flex: 1}} mode="outlined" dense />
+                        <View style={{marginBottom: 12}}>
+                          <View style={{flexDirection: 'row', marginBottom: 8}}>
+                            <TextInput label="Distância (km)" value={planningState.distance_km} onChangeText={val => setPlanningState(p => ({...p, distance_km: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
+                            <TextInput label="Metros" value={planningState.distancia_m} onChangeText={val => setPlanningState(p => ({...p, distancia_m: val}))} keyboardType="numeric" style={{flex: 1}} mode="outlined" dense />
+                          </View>
+                          <View style={{flexDirection: 'row'}}>
+                            <TextInput label="Horas" value={planningState.duracao_horas} onChangeText={val => setPlanningState(p => ({...p, duracao_horas: val}))} keyboardType="numeric" style={{flex: 1, marginRight: 8}} mode="outlined" dense />
+                            <TextInput label="Minutos" value={planningState.duracao_minutos} onChangeText={val => setPlanningState(p => ({...p, duracao_minutos: val}))} keyboardType="numeric" style={{flex: 1}} mode="outlined" dense />
+                          </View>
                         </View>
                         {/* Intensidade */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Intensidade</Text>
@@ -560,34 +569,35 @@ export default function TrainingScreen() {
                         </RadioButton.Group>
                         {/* Observações */}
                         <TextInput label="Observações" value={planningState.observacoes} onChangeText={val => setPlanningState(p => ({...p, observacoes: val}))} multiline numberOfLines={3} mode="outlined" style={{marginBottom: 12}}/>
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 }}>
-                             <Button onPress={() => setModalPlanVisible(false)}>Cancelar</Button>
-                             <Button mode="contained" onPress={handleSavePlan} style={{ marginLeft: 8 }}>
-                               {editingSession ? 'Salvar Alterações' : 'Salvar Treino'}
+                        <View style={{ marginTop: 10 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <Button onPress={() => setModalPlanVisible(false)}>Cancelar</Button>
+                            <Button mode="contained" onPress={handleSavePlan}>
+                              {editingSession ? 'Salvar Alterações' : 'Salvar Treino'}
+                            </Button>
+                          </View>
+                                                     {editingSession && (
+                             <Button 
+                               textColor='red' 
+                               onPress={async () => {
+                                 // Modo teste: simular exclusão
+                                 console.log('Treino excluído via modal (modo teste):', editingSession);
+                                 Alert.alert('✅ Sucesso', 'Treino excluído! (Modo teste)');
+                                 setEditingSession(null);
+                                 setSelectedDay(null);
+                                 setModalPlanVisible(false);
+                               }} 
+                               style={{ alignSelf: 'center' }}
+                             >
+                               Excluir Treino
                              </Button>
-                             {editingSession && (
-                               <Button 
-                                 textColor='red' 
-                                 onPress={async () => {
-                                   if (editingSession.id) {
-                                     await deleteTrainingSession(editingSession.id);
-                                     await fetchTrainingSessions();
-                                     setEditingSession(null);
-                                     setSelectedDay(null);
-                                     setModalPlanVisible(false);
-                                   }
-                                 }} 
-                                 style={{ marginLeft: 8 }}
-                               >
-                                 Excluir Treino
-                               </Button>
-                             )}
+                           )}
                         </View>
                     </ScrollView>
                 </Modal>
             </Portal>
             <Portal>
-                <Modal visible={importModalVisible} onDismiss={() => setImportModalVisible(false)} contentContainerStyle={{ width: '90%', alignSelf: 'center', marginVertical: 20, borderRadius: 12, padding: 20, backgroundColor: 'white', maxWidth: 600 }}>
+                <Modal visible={importModalVisible} onDismiss={() => setImportModalVisible(false)} contentContainerStyle={{ width: '95%', alignSelf: 'center', marginVertical: 10, borderRadius: 12, padding: 16, backgroundColor: 'white' }}>
                     <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 16 }}>Importar Treinos via CSV</Text>
                     <UniversalDocumentPicker onPick={handleImportCSV} loading={importing} />
                     <Button onPress={() => setImportModalVisible(false)} style={{ marginTop: 8 }}>Cancelar</Button>
@@ -601,7 +611,7 @@ export default function TrainingScreen() {
                     onCancel={() => setModalDoneVisible(false)}
                 />
             )}
-        </View>
+        </ScrollView>
     );
 }
 
@@ -802,5 +812,31 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 6,
     gap: 4,
+  },
+  // Estilos para mobile
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    margin: 12,
+  },
+  headerContainerMobile: {
+    marginTop: 50, // Espaço para evitar conflito com status bar
+    marginHorizontal: 8,
+    marginBottom: 8,
+  },
+  headerTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  headerTitleMobile: {
+    fontSize: 14,
+  },
+  importButton: {
+    marginLeft: 8,
+  },
+  importButtonMobile: {
+    marginLeft: 4,
+    fontSize: 12,
   },
 }); 

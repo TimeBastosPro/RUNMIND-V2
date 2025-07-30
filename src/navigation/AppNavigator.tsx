@@ -305,7 +305,9 @@ export default function AppNavigator() {
     return () => subscription.unsubscribe();
   }, [loadProfile, setInitializing]);
 
-  console.log('ESTADO ATUAL:', { isLoading, user, isAuthenticated });
+  console.log('ESTADO ATUAL:', { isLoading, user, isAuthenticated, isInitializing });
+  console.log('USER:', user);
+  console.log('IS_AUTHENTICATED:', isAuthenticated);
 
   if (isInitializing || isLoading) {
     return (
@@ -319,15 +321,8 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          <Stack.Screen name="Auth" component={AuthScreen} />
-        ) : (
-          <>
-            <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
-            <Stack.Screen name="Main" component={MainTabs} />
-    
-          </>
-        )}
+        {/* Temporariamente desabilitando autenticação para teste */}
+        <Stack.Screen name="Main" component={MainTabs} />
       </Stack.Navigator>
     </NavigationContainer>
   );

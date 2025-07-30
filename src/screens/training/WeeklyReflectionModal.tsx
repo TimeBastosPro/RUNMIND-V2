@@ -39,7 +39,7 @@ export default function WeeklyReflectionModal({ visible, onSave, onCancel }: Wee
 
   return (
     <Portal>
-      <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={{ backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 12, maxHeight: '80%' }}>
+      <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={{ backgroundColor: 'white', padding: 16, margin: 10, borderRadius: 12, maxHeight: '90%', width: '95%', alignSelf: 'center' }}>
         <ScrollView>
           <Text variant="titleLarge" style={{ marginBottom: 16 }}>Reflexão Semanal</Text>
 

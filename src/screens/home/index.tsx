@@ -161,6 +161,10 @@ export default function HomeScreen() {
   // Buscar treino para hoje e próxima prova
   const todayDateString = new Date().toISOString().split('T')[0];
   
+  // Debug logs
+  console.log('DEBUG - trainingSessions:', trainingSessions);
+  console.log('DEBUG - todayDateString:', todayDateString);
+  
   const todayTraining = trainingSessions?.find(session => 
     session.training_date === todayDateString
   );
@@ -169,6 +173,9 @@ export default function HomeScreen() {
   const nextPlannedTraining = trainingSessions?.find(session => 
     session.status === 'planned' && session.training_date >= todayDateString
   );
+  
+  console.log('DEBUG - todayTraining:', todayTraining);
+  console.log('DEBUG - nextPlannedTraining:', nextPlannedTraining);
   
   // Lógica do próximo treino: se há treino planejado para hoje, mostra ele. Se não, mostra o próximo planejado
   const nextTraining = nextPlannedTraining;

@@ -32,7 +32,7 @@ function DailyCheckinModal({ visible, onSave, onCancel, initialValues }: DailyCh
 
   return (
     <Portal>
-      <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={{ backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 12, maxHeight: '80%' }}>
+      <Modal visible={visible} onDismiss={onCancel} contentContainerStyle={{ backgroundColor: 'white', padding: 16, margin: 10, borderRadius: 12, maxHeight: '90%', width: '95%', alignSelf: 'center' }}>
         <Text variant="titleLarge" style={{ marginBottom: 16 }}>Check-in Diário</Text>
         <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Qualidade do Sono (1 = Péssima, 7 = Excelente)</Text>
         <SliderUniversal
@@ -372,7 +372,7 @@ export default function DailyCheckinScreen() {
         </Card.Content>
       </Card>
       {/* Modal do wizard de check-in diário */}
-      <Modal visible={dailyCheckinVisible} onDismiss={() => setDailyCheckinVisible(false)} contentContainerStyle={{ backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 12, maxHeight: '90%' }}>
+      <Modal visible={dailyCheckinVisible} onDismiss={() => setDailyCheckinVisible(false)} contentContainerStyle={{ backgroundColor: 'white', padding: 16, margin: 10, borderRadius: 12, maxHeight: '90%', width: '95%', alignSelf: 'center' }}>
         <Text variant="titleLarge" style={{ marginBottom: 16 }}>Check-in Diário</Text>
         <Text style={{ marginBottom: 8, color: 'gray', textAlign: 'center' }}>Passo {step+1} de {steps.length}</Text>
         <Text style={{ marginBottom: 8 }}>{steps[step].label}</Text>
