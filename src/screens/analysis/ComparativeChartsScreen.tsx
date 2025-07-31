@@ -5,7 +5,7 @@ import { Text } from 'react-native-paper';
 
 // Tabs que vamos criar
 import WellbeingChartsTab from './tabs/WellbeingChartsTab';
-import PsychologicalChartsTab from './tabs/PsychologicalChartsTab';
+import TrainingChartsTab from './tabs/TrainingChartsTab';
 import CrossAnalysisTab from './tabs/CrossAnalysisTab';
 
 const Tab = createMaterialTopTabNavigator();
@@ -34,7 +34,7 @@ export default function ComparativeChartsScreen() {
         />
         <Tab.Screen 
           name="Training" 
-          component={PsychologicalChartsTab}
+          component={TrainingChartsTab}
           options={{ tabBarLabel: 'Treinos' }}
         />
         <Tab.Screen 
