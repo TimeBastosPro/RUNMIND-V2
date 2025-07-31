@@ -4,162 +4,152 @@ import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
 
-const TRAINING_METRICS = {
+const TRAINING_METRICS = [
   // Métricas Básicas (comuns a planejado e realizado)
-  basic: [
-    { 
-      label: 'Distância', 
-      value: 'distance',
-      icon: 'map-marker-distance',
-      color: '#4CAF50',
-      unit: 'km',
-      planned: 'planned_distance_km',
-      completed: 'distance_km',
-    },
-    { 
-      label: 'Duração', 
-      value: 'duration',
-      icon: 'clock-outline',
-      color: '#2196F3',
-      unit: 'min',
-      planned: 'planned_duration',
-      completed: 'duration',
-    },
-    { 
-      label: 'Elevação Positiva', 
-      value: 'elevation_gain',
-      icon: 'elevation-rise',
-      color: '#795548',
-      unit: 'm',
-      planned: 'planned_elevation_gain_meters',
-      completed: 'elevation_gain_meters',
-    },
-    { 
-      label: 'Elevação Negativa', 
-      value: 'elevation_loss',
-      icon: 'elevation-fall',
-      color: '#8D6E63',
-      unit: 'm',
-      planned: 'planned_elevation_loss_meters',
-      completed: 'elevation_loss_meters',
-    },
-    { 
-      label: 'FC Média', 
-      value: 'avg_heart_rate',
-      icon: 'heart-pulse',
-      color: '#E91E63',
-      unit: 'bpm',
-      planned: 'planned_avg_heart_rate',
-      completed: 'avg_heart_rate',
-    },
-  ],
+  { 
+    label: 'Distância', 
+    value: 'distance',
+    icon: 'map-marker-distance',
+    color: '#4CAF50',
+    unit: 'km',
+    planned: 'planned_distance_km',
+    completed: 'distance_km',
+  },
+  { 
+    label: 'Duração', 
+    value: 'duration',
+    icon: 'clock-outline',
+    color: '#2196F3',
+    unit: 'min',
+    planned: 'planned_duration',
+    completed: 'duration',
+  },
+  { 
+    label: 'Elevação Positiva', 
+    value: 'elevation_gain',
+    icon: 'elevation-rise',
+    color: '#795548',
+    unit: 'm',
+    planned: 'planned_elevation_gain_meters',
+    completed: 'elevation_gain_meters',
+  },
+  { 
+    label: 'Elevação Negativa', 
+    value: 'elevation_loss',
+    icon: 'elevation-fall',
+    color: '#8D6E63',
+    unit: 'm',
+    planned: 'planned_elevation_loss_meters',
+    completed: 'elevation_loss_meters',
+  },
+  { 
+    label: 'FC Média', 
+    value: 'avg_heart_rate',
+    icon: 'heart-pulse',
+    color: '#E91E63',
+    unit: 'bpm',
+    planned: 'planned_avg_heart_rate',
+    completed: 'avg_heart_rate',
+  },
   
   // Métricas de Esforço
-  effort: [
-    { 
-      label: 'Esforço Percebido', 
-      value: 'perceived_effort',
-      icon: 'lightning-bolt',
-      color: '#FF5722',
-      unit: '/10',
-      planned: 'planned_perceived_effort',
-      completed: 'perceived_effort',
-    },
-    { 
-      label: 'Nível de Esforço', 
-      value: 'effort_level',
-      icon: 'gauge',
-      color: '#FF9800',
-      unit: '1-5',
-      planned: 'esforco',
-      completed: 'effort_level',
-    },
-    { 
-      label: 'Intensidade', 
-      value: 'intensity',
-      icon: 'speedometer',
-      color: '#F44336',
-      unit: 'Z1-Z5',
-      planned: 'intensidade',
-      completed: null, // Não existe no realizado
-    },
-  ],
+  { 
+    label: 'Esforço Percebido', 
+    value: 'perceived_effort',
+    icon: 'lightning-bolt',
+    color: '#FF5722',
+    unit: '/10',
+    planned: 'planned_perceived_effort',
+    completed: 'perceived_effort',
+  },
+  { 
+    label: 'Nível de Esforço', 
+    value: 'effort_level',
+    icon: 'gauge',
+    color: '#FF9800',
+    unit: '1-5',
+    planned: 'esforco',
+    completed: 'effort_level',
+  },
+  { 
+    label: 'Intensidade', 
+    value: 'intensity',
+    icon: 'speedometer',
+    color: '#F44336',
+    unit: 'Z1-Z5',
+    planned: 'intensidade',
+    completed: null, // Não existe no realizado
+  },
   
   // Métricas de Satisfação e Qualidade (apenas realizado)
-  satisfaction: [
-    { 
-      label: 'Satisfação', 
-      value: 'session_satisfaction',
-      icon: 'heart',
-      color: '#E91E63',
-      unit: '/5',
-      planned: null, // Não existe no planejado
-      completed: 'session_satisfaction',
-    },
-    { 
-      label: 'FC Máxima', 
-      value: 'max_heart_rate',
-      icon: 'heart-plus',
-      color: '#D32F2F',
-      unit: 'bpm',
-      planned: null, // Não existe no planejado
-      completed: 'max_heart_rate',
-    },
-  ],
+  { 
+    label: 'Satisfação', 
+    value: 'session_satisfaction',
+    icon: 'heart',
+    color: '#E91E63',
+    unit: '/5',
+    planned: null, // Não existe no planejado
+    completed: 'session_satisfaction',
+  },
+  { 
+    label: 'FC Máxima', 
+    value: 'max_heart_rate',
+    icon: 'heart-plus',
+    color: '#D32F2F',
+    unit: 'bpm',
+    planned: null, // Não existe no planejado
+    completed: 'max_heart_rate',
+  },
   
   // Métricas de Frequência
-  frequency: [
-    { 
-      label: 'Frequência Semanal', 
-      value: 'frequency',
-      icon: 'calendar-week',
-      color: '#9C27B0',
-      unit: 'x/sem',
-      planned: null, // Calculado
-      completed: null, // Calculado
-    },
-  ],
+  { 
+    label: 'Frequência Semanal', 
+    value: 'frequency',
+    icon: 'calendar-week',
+    color: '#9C27B0',
+    unit: 'x/sem',
+    planned: null, // Calculado
+    completed: null, // Calculado
+  },
   
   // Métricas de Características (apenas planejado)
-  characteristics: [
-    { 
-      label: 'Modalidade', 
-      value: 'modalidade',
-      icon: 'run',
-      color: '#4CAF50',
-      unit: 'tipo',
-      planned: 'modalidade',
-      completed: null, // Não existe no realizado
-    },
-    { 
-      label: 'Tipo de Treino', 
-      value: 'treino_tipo',
-      icon: 'format-list-bulleted',
-      color: '#2196F3',
-      unit: 'tipo',
-      planned: 'treino_tipo',
-      completed: null, // Não existe no realizado
-    },
-    { 
-      label: 'Terreno', 
-      value: 'terreno',
-      icon: 'terrain',
-      color: '#795548',
-      unit: 'tipo',
-      planned: 'terreno',
-      completed: null, // Não existe no realizado
-    },
-    { 
-      label: 'Percurso', 
-      value: 'percurso',
-      icon: 'map',
-      color: '#607D8B',
-      unit: 'tipo',
-      planned: 'percurso',
-      completed: null, // Não existe no realizado
-    },
-  ],
-};
+  { 
+    label: 'Modalidade', 
+    value: 'modalidade',
+    icon: 'run',
+    color: '#4CAF50',
+    unit: 'tipo',
+    planned: 'modalidade',
+    completed: null, // Não existe no realizado
+  },
+  { 
+    label: 'Tipo de Treino', 
+    value: 'treino_tipo',
+    icon: 'format-list-bulleted',
+    color: '#2196F3',
+    unit: 'tipo',
+    planned: 'treino_tipo',
+    completed: null, // Não existe no realizado
+  },
+  { 
+    label: 'Terreno', 
+    value: 'terreno',
+    icon: 'terrain',
+    color: '#795548',
+    unit: 'tipo',
+    planned: 'terreno',
+    completed: null, // Não existe no realizado
+  },
+  { 
+    label: 'Percurso', 
+    value: 'percurso',
+    icon: 'map',
+    color: '#607D8B',
+    unit: 'tipo',
+    planned: 'percurso',
+    completed: null, // Não existe no realizado
+  },
+];
 
 const ANALYSIS_TYPES = [
   { label: 'Realizados', value: 'completed', color: '#4CAF50' },
@@ -170,20 +160,42 @@ const ANALYSIS_TYPES = [
 export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
-  const [selectedCategory, setSelectedCategory] = useState('basic');
   const { trainingSessions, fetchTrainingSessions, calculateAnalytics } = useCheckinStore();
 
   useEffect(() => {
     fetchTrainingSessions();
   }, [fetchTrainingSessions]);
 
-  const selectedMetricInfo = TRAINING_METRICS[selectedCategory]?.find(m => m.value === selectedMetric) || 
-                            Object.values(TRAINING_METRICS).flat().find(m => m.value === selectedMetric);
+  const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
   const analytics = calculateAnalytics();
   
   // Separar dados por status
   const completedSessions = trainingSessions.filter(t => t.status === 'completed');
   const plannedSessions = trainingSessions.filter(t => t.status === 'planned');
+
+  // Filtrar métricas disponíveis baseado no tipo de análise
+  const getAvailableMetrics = () => {
+    switch (selectedAnalysis) {
+      case 'completed':
+        return TRAINING_METRICS.filter(metric => metric.completed !== null);
+      case 'planned':
+        return TRAINING_METRICS.filter(metric => metric.planned !== null);
+      case 'comparison':
+        return TRAINING_METRICS.filter(metric => metric.planned !== null && metric.completed !== null);
+      default:
+        return TRAINING_METRICS;
+    }
+  };
+
+  const availableMetrics = getAvailableMetrics();
+
+  // Atualizar métrica selecionada se não estiver disponível no novo tipo de análise
+  useEffect(() => {
+    const isCurrentMetricAvailable = availableMetrics.some(m => m.value === selectedMetric);
+    if (!isCurrentMetricAvailable && availableMetrics.length > 0) {
+      setSelectedMetric(availableMetrics[0].value);
+    }
+  }, [selectedAnalysis, availableMetrics, selectedMetric]);
 
   // Calcular dados para a métrica selecionada
   const getMetricData = () => {
@@ -393,73 +405,33 @@ export default function TrainingChartsTab() {
         </Card.Content>
       </Card>
 
-      {/* Categorias de Métricas */}
-      <Card style={styles.categoriesCard}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Categorias de Métricas:</Text>
-          <View style={styles.categoriesGrid}>
-            {Object.entries(TRAINING_METRICS).map(([category, metrics]) => (
-              <Chip
-                key={category}
-                selected={selectedCategory === category}
-                onPress={() => {
-                  setSelectedCategory(category);
-                  setSelectedMetric(metrics[0]?.value || 'distance');
-                }}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category && { backgroundColor: '#2196F320' }
-                ]}
-                textStyle={[
-                  styles.categoryChipText,
-                  selectedCategory === category && { color: '#2196F3', fontWeight: 'bold' }
-                ]}
-              >
-                {category === 'basic' ? 'Básicas' :
-                 category === 'effort' ? 'Esforço' :
-                 category === 'satisfaction' ? 'Satisfação' :
-                 category === 'frequency' ? 'Frequência' :
-                 category === 'characteristics' ? 'Características' : category}
-              </Chip>
-            ))}
-          </View>
-        </Card.Content>
-      </Card>
-
       {/* Seleção de Métricas */}
       <Card style={styles.metricsCard}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Métricas de Treino:</Text>
+          <Text style={styles.sectionTitle}>
+            {selectedAnalysis === 'completed' ? 'Métricas de Treinos Realizados:' :
+             selectedAnalysis === 'planned' ? 'Métricas de Treinos Planejados:' :
+             'Métricas para Comparação (Planejado vs Realizado):'}
+          </Text>
           <View style={styles.metricsGrid}>
-            {TRAINING_METRICS[selectedCategory]?.map((metric) => {
-              // Verificar se a métrica está disponível para o tipo de análise
-              const isAvailable = selectedAnalysis === 'planned' ? metric.planned : 
-                                selectedAnalysis === 'completed' ? metric.completed : 
-                                metric.planned && metric.completed;
-              
-              return (
-                <Chip
-                  key={metric.value}
-                  selected={selectedMetric === metric.value}
-                  onPress={() => setSelectedMetric(metric.value)}
-                  disabled={!isAvailable}
-                  style={[
-                    styles.metricChip,
-                    selectedMetric === metric.value && { backgroundColor: metric.color + '20' },
-                    !isAvailable && { opacity: 0.5 }
-                  ]}
-                  textStyle={[
-                    styles.metricChipText,
-                    selectedMetric === metric.value && { color: metric.color, fontWeight: 'bold' },
-                    !isAvailable && { color: '#999' }
-                  ]}
-                  icon={metric.icon}
-                >
-                  {metric.label}
-                  {!isAvailable && ' (N/A)'}
-                </Chip>
-              );
-            })}
+            {availableMetrics.map((metric) => (
+              <Chip
+                key={metric.value}
+                selected={selectedMetric === metric.value}
+                onPress={() => setSelectedMetric(metric.value)}
+                style={[
+                  styles.metricChip,
+                  selectedMetric === metric.value && { backgroundColor: metric.color + '20' }
+                ]}
+                textStyle={[
+                  styles.metricChipText,
+                  selectedMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
+                ]}
+                icon={metric.icon}
+              >
+                {metric.label}
+              </Chip>
+            ))}
           </View>
         </Card.Content>
       </Card>
@@ -613,10 +585,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 12,
   },
-  categoriesCard: {
-    marginBottom: 16,
-    borderRadius: 12,
-  },
   metricsCard: {
     marginBottom: 16,
     borderRadius: 12,
@@ -638,19 +606,6 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   analysisChipText: {
-    color: '#333',
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChip: {
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  categoryChipText: {
     color: '#333',
   },
   metricsGrid: {
