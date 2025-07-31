@@ -4,64 +4,194 @@ import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
 
-const CORRELATION_METRICS = [
+// Métricas de Bem-estar
+const WELLBEING_METRICS = [
   { 
-    label: 'Sono vs Performance', 
-    value: 'sleep_performance',
+    label: 'Qualidade do Sono', 
+    value: 'sleep_quality',
     icon: 'sleep',
     color: '#4CAF50',
-    description: 'Como a qualidade do sono afeta seus treinos',
   },
   { 
-    label: 'Motivação vs Distância', 
-    value: 'motivation_distance',
-    icon: 'lightning-bolt',
-    color: '#FFC107',
-    description: 'Relação entre motivação e distância percorrida',
-  },
-  { 
-    label: 'Dores vs Intensidade', 
-    value: 'soreness_intensity',
+    label: 'Dores Musculares', 
+    value: 'soreness',
     icon: 'human-handsup',
     color: '#FF5722',
-    description: 'Impacto das dores na intensidade dos treinos',
   },
   { 
-    label: 'Foco vs Satisfação', 
-    value: 'focus_satisfaction',
+    label: 'Motivação', 
+    value: 'motivation',
+    icon: 'lightning-bolt',
+    color: '#FFC107',
+  },
+  { 
+    label: 'Confiança', 
+    value: 'confidence',
+    icon: 'target',
+    color: '#9C27B0',
+  },
+  { 
+    label: 'Foco', 
+    value: 'focus',
     icon: 'eye',
     color: '#2196F3',
-    description: 'Correlação entre foco e satisfação com treinos',
+  },
+  { 
+    label: 'Emocional', 
+    value: 'emocional',
+    icon: 'heart',
+    color: '#E91E63',
+  },
+];
+
+// Métricas de Treino Planejado
+const PLANNED_TRAINING_METRICS = [
+  { 
+    label: 'Distância', 
+    value: 'planned_distance',
+    icon: 'map-marker-distance',
+    color: '#4CAF50',
+  },
+  { 
+    label: 'Duração', 
+    value: 'planned_duration',
+    icon: 'clock-outline',
+    color: '#2196F3',
+  },
+  { 
+    label: 'Esforço', 
+    value: 'planned_effort',
+    icon: 'gauge',
+    color: '#FF9800',
+  },
+  { 
+    label: 'Intensidade', 
+    value: 'planned_intensity',
+    icon: 'speedometer',
+    color: '#F44336',
+  },
+  { 
+    label: 'Modalidade', 
+    value: 'planned_modality',
+    icon: 'run',
+    color: '#4CAF50',
+  },
+  { 
+    label: 'Tipo de Treino', 
+    value: 'planned_training_type',
+    icon: 'format-list-bulleted',
+    color: '#2196F3',
+  },
+  { 
+    label: 'Terreno', 
+    value: 'planned_terrain',
+    icon: 'terrain',
+    color: '#795548',
+  },
+  { 
+    label: 'Percurso', 
+    value: 'planned_route',
+    icon: 'map',
+    color: '#607D8B',
+  },
+];
+
+// Métricas de Treino Realizado
+const COMPLETED_TRAINING_METRICS = [
+  { 
+    label: 'Distância', 
+    value: 'completed_distance',
+    icon: 'map-marker-distance',
+    color: '#4CAF50',
+  },
+  { 
+    label: 'Duração', 
+    value: 'completed_duration',
+    icon: 'clock-outline',
+    color: '#2196F3',
+  },
+  { 
+    label: 'Elevação Positiva', 
+    value: 'elevation_gain',
+    icon: 'elevation-rise',
+    color: '#795548',
+  },
+  { 
+    label: 'Elevação Negativa', 
+    value: 'elevation_loss',
+    icon: 'elevation-fall',
+    color: '#8D6E63',
+  },
+  { 
+    label: 'Frequência Cardíaca', 
+    value: 'avg_heart_rate',
+    icon: 'heart-pulse',
+    color: '#E91E63',
+  },
+  { 
+    label: 'Esforço Percebido', 
+    value: 'perceived_effort',
+    icon: 'lightning-bolt',
+    color: '#FF5722',
+  },
+  { 
+    label: 'Sensação Geral', 
+    value: 'effort_level',
+    icon: 'gauge',
+    color: '#FF9800',
+  },
+  { 
+    label: 'Satisfação', 
+    value: 'session_satisfaction',
+    icon: 'heart',
+    color: '#E91E63',
+  },
+  { 
+    label: 'Clima', 
+    value: 'max_heart_rate',
+    icon: 'weather-partly-cloudy',
+    color: '#D32F2F',
   },
 ];
 
 export default function CrossAnalysisTab() {
-  const [selectedCorrelation, setSelectedCorrelation] = useState('sleep_performance');
-  const { recentCheckins, loadRecentCheckins } = useCheckinStore();
+  const [selectedWellbeingMetric, setSelectedWellbeingMetric] = useState('sleep_quality');
+  const [selectedPlannedMetric, setSelectedPlannedMetric] = useState('planned_distance');
+  const [selectedCompletedMetric, setSelectedCompletedMetric] = useState('completed_distance');
+  
+  // Estados para controlar as gavetas
+  const [wellbeingDrawerOpen, setWellbeingDrawerOpen] = useState(false);
+  const [plannedDrawerOpen, setPlannedDrawerOpen] = useState(false);
+  const [completedDrawerOpen, setCompletedDrawerOpen] = useState(false);
+  
+  const { recentCheckins, loadRecentCheckins, trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
     loadRecentCheckins(30);
-  }, [loadRecentCheckins]);
+    fetchTrainingSessions();
+  }, [loadRecentCheckins, fetchTrainingSessions]);
 
-  const selectedCorrelationInfo = CORRELATION_METRICS.find(m => m.value === selectedCorrelation);
-  
+  const selectedWellbeingInfo = WELLBEING_METRICS.find(m => m.value === selectedWellbeingMetric);
+  const selectedPlannedInfo = PLANNED_TRAINING_METRICS.find(m => m.value === selectedPlannedMetric);
+  const selectedCompletedInfo = COMPLETED_TRAINING_METRICS.find(m => m.value === selectedCompletedMetric);
+
   // Dados de exemplo para correlação
   const correlationData = [
-    { sleep: 8, performance: 9, date: '2024-01-01' },
-    { sleep: 6, performance: 6, date: '2024-01-02' },
-    { sleep: 7, performance: 8, date: '2024-01-03' },
-    { sleep: 5, performance: 5, date: '2024-01-04' },
-    { sleep: 9, performance: 9, date: '2024-01-05' },
+    { wellbeing: 8, training: 9, date: '2024-01-01' },
+    { wellbeing: 6, training: 6, date: '2024-01-02' },
+    { wellbeing: 7, training: 8, date: '2024-01-03' },
+    { wellbeing: 5, training: 5, date: '2024-01-04' },
+    { wellbeing: 9, training: 9, date: '2024-01-05' },
   ];
 
   const calculateCorrelation = () => {
     // Cálculo simples de correlação (exemplo)
     const n = correlationData.length;
-    const sumX = correlationData.reduce((sum, d) => sum + d.sleep, 0);
-    const sumY = correlationData.reduce((sum, d) => sum + d.performance, 0);
-    const sumXY = correlationData.reduce((sum, d) => sum + (d.sleep * d.performance), 0);
-    const sumX2 = correlationData.reduce((sum, d) => sum + (d.sleep * d.sleep), 0);
-    const sumY2 = correlationData.reduce((sum, d) => sum + (d.performance * d.performance), 0);
+    const sumX = correlationData.reduce((sum, d) => sum + d.wellbeing, 0);
+    const sumY = correlationData.reduce((sum, d) => sum + d.training, 0);
+    const sumXY = correlationData.reduce((sum, d) => sum + (d.wellbeing * d.training), 0);
+    const sumX2 = correlationData.reduce((sum, d) => sum + (d.wellbeing * d.wellbeing), 0);
+    const sumY2 = correlationData.reduce((sum, d) => sum + (d.training * d.training), 0);
     
     const correlation = (n * sumXY - sumX * sumY) / 
       Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
@@ -88,45 +218,194 @@ export default function CrossAnalysisTab() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Seleção de Correlações */}
+      {/* Card de Análise de Correlação com Três Gavetas */}
       <Card style={styles.correlationCard}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Análise de Correlação:</Text>
-          <View style={styles.correlationGrid}>
-            {CORRELATION_METRICS.map((correlation) => (
-              <Chip
-                key={correlation.value}
-                selected={selectedCorrelation === correlation.value}
-                onPress={() => setSelectedCorrelation(correlation.value)}
-                style={[
-                  styles.correlationChip,
-                  selectedCorrelation === correlation.value && { backgroundColor: correlation.color + '20' }
-                ]}
-                textStyle={[
-                  styles.correlationChipText,
-                  selectedCorrelation === correlation.value && { color: correlation.color, fontWeight: 'bold' }
-                ]}
-                icon={correlation.icon}
-              >
-                {correlation.label}
-              </Chip>
-            ))}
+          
+          {/* Gaveta 1: Bem-estar */}
+          <View style={styles.drawerContainer}>
+            <Button
+              mode="outlined"
+              onPress={() => setWellbeingDrawerOpen(!wellbeingDrawerOpen)}
+              style={styles.drawerButton}
+              contentStyle={styles.drawerButtonContent}
+              labelStyle={styles.drawerButtonLabel}
+              icon={({ size, color }) => (
+                <MaterialCommunityIcons 
+                  name={wellbeingDrawerOpen ? "chevron-up" : "chevron-down"} 
+                  size={size} 
+                  color={color} 
+                />
+              )}
+            >
+              <View style={styles.drawerButtonTextContainer}>
+                <View style={styles.drawerButtonLeft}>
+                  <MaterialCommunityIcons name="heart" size={24} color="#4CAF50" />
+                  <Text style={styles.drawerButtonText}>Bem-estar</Text>
+                </View>
+                <View style={styles.drawerButtonRight}>
+                  <Text style={styles.selectedMetricText}>
+                    {selectedWellbeingInfo?.label}
+                  </Text>
+                </View>
+              </View>
+            </Button>
+            
+            {wellbeingDrawerOpen && (
+              <View style={styles.drawerContent}>
+                <View style={styles.metricsGrid}>
+                  {WELLBEING_METRICS.map((metric) => (
+                    <Chip
+                      key={metric.value}
+                      selected={selectedWellbeingMetric === metric.value}
+                      onPress={() => setSelectedWellbeingMetric(metric.value)}
+                      style={[
+                        styles.metricChip,
+                        selectedWellbeingMetric === metric.value && { backgroundColor: metric.color + '20' }
+                      ]}
+                      textStyle={[
+                        styles.metricChipText,
+                        selectedWellbeingMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
+                      ]}
+                      icon={metric.icon}
+                    >
+                      {metric.label}
+                    </Chip>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Gaveta 2: Treino Planejado */}
+          <View style={styles.drawerContainer}>
+            <Button
+              mode="outlined"
+              onPress={() => setPlannedDrawerOpen(!plannedDrawerOpen)}
+              style={styles.drawerButton}
+              contentStyle={styles.drawerButtonContent}
+              labelStyle={styles.drawerButtonLabel}
+              icon={({ size, color }) => (
+                <MaterialCommunityIcons 
+                  name={plannedDrawerOpen ? "chevron-up" : "chevron-down"} 
+                  size={size} 
+                  color={color} 
+                />
+              )}
+            >
+              <View style={styles.drawerButtonTextContainer}>
+                <View style={styles.drawerButtonLeft}>
+                  <MaterialCommunityIcons name="calendar" size={24} color="#2196F3" />
+                  <Text style={styles.drawerButtonText}>Treino Planejado</Text>
+                </View>
+                <View style={styles.drawerButtonRight}>
+                  <Text style={styles.selectedMetricText}>
+                    {selectedPlannedInfo?.label}
+                  </Text>
+                </View>
+              </View>
+            </Button>
+            
+            {plannedDrawerOpen && (
+              <View style={styles.drawerContent}>
+                <View style={styles.metricsGrid}>
+                  {PLANNED_TRAINING_METRICS.map((metric) => (
+                    <Chip
+                      key={metric.value}
+                      selected={selectedPlannedMetric === metric.value}
+                      onPress={() => setSelectedPlannedMetric(metric.value)}
+                      style={[
+                        styles.metricChip,
+                        selectedPlannedMetric === metric.value && { backgroundColor: metric.color + '20' }
+                      ]}
+                      textStyle={[
+                        styles.metricChipText,
+                        selectedPlannedMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
+                      ]}
+                      icon={metric.icon}
+                    >
+                      {metric.label}
+                    </Chip>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Gaveta 3: Treino Realizado */}
+          <View style={styles.drawerContainer}>
+            <Button
+              mode="outlined"
+              onPress={() => setCompletedDrawerOpen(!completedDrawerOpen)}
+              style={styles.drawerButton}
+              contentStyle={styles.drawerButtonContent}
+              labelStyle={styles.drawerButtonLabel}
+              icon={({ size, color }) => (
+                <MaterialCommunityIcons 
+                  name={completedDrawerOpen ? "chevron-up" : "chevron-down"} 
+                  size={size} 
+                  color={color} 
+                />
+              )}
+            >
+              <View style={styles.drawerButtonTextContainer}>
+                <View style={styles.drawerButtonLeft}>
+                  <MaterialCommunityIcons name="check-circle" size={24} color="#4CAF50" />
+                  <Text style={styles.drawerButtonText}>Treino Realizado</Text>
+                </View>
+                <View style={styles.drawerButtonRight}>
+                  <Text style={styles.selectedMetricText}>
+                    {selectedCompletedInfo?.label}
+                  </Text>
+                </View>
+              </View>
+            </Button>
+            
+            {completedDrawerOpen && (
+              <View style={styles.drawerContent}>
+                <View style={styles.metricsGrid}>
+                  {COMPLETED_TRAINING_METRICS.map((metric) => (
+                    <Chip
+                      key={metric.value}
+                      selected={selectedCompletedMetric === metric.value}
+                      onPress={() => setSelectedCompletedMetric(metric.value)}
+                      style={[
+                        styles.metricChip,
+                        selectedCompletedMetric === metric.value && { backgroundColor: metric.color + '20' }
+                      ]}
+                      textStyle={[
+                        styles.metricChipText,
+                        selectedCompletedMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
+                      ]}
+                      icon={metric.icon}
+                    >
+                      {metric.label}
+                    </Chip>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
         </Card.Content>
       </Card>
 
-      {/* Descrição da Correlação */}
+      {/* Descrição da Correlação Selecionada */}
       <Card style={styles.descriptionCard}>
         <Card.Content>
           <View style={styles.descriptionHeader}>
             <MaterialCommunityIcons 
-              name={selectedCorrelationInfo?.icon as any} 
+              name="chart-scatter-plot" 
               size={24} 
-              color={selectedCorrelationInfo?.color} 
+              color="#2196F3" 
             />
-            <Text style={styles.descriptionTitle}>{selectedCorrelationInfo?.label}</Text>
+            <Text style={styles.descriptionTitle}>
+              {selectedWellbeingInfo?.label} vs {selectedPlannedInfo?.label} vs {selectedCompletedInfo?.label}
+            </Text>
           </View>
-          <Text style={styles.descriptionText}>{selectedCorrelationInfo?.description}</Text>
+          <Text style={styles.descriptionText}>
+            Análise de correlação entre bem-estar, treinos planejados e treinos realizados
+          </Text>
         </Card.Content>
       </Card>
 
@@ -169,17 +448,17 @@ export default function CrossAnalysisTab() {
                   style={[
                     styles.scatterPoint,
                     {
-                      left: (point.sleep / 10) * 200,
-                      bottom: (point.performance / 10) * 150,
-                      backgroundColor: selectedCorrelationInfo?.color,
+                      left: (point.wellbeing / 10) * 200,
+                      bottom: (point.training / 10) * 150,
+                      backgroundColor: '#2196F3',
                     }
                   ]}
                 />
               ))}
             </View>
             <View style={styles.axisLabels}>
-              <Text style={styles.axisLabel}>Qualidade do Sono (1-10)</Text>
-              <Text style={styles.axisLabelVertical}>Performance (1-10)</Text>
+              <Text style={styles.axisLabel}>Bem-estar (1-10)</Text>
+              <Text style={styles.axisLabelVertical}>Treino (1-10)</Text>
             </View>
           </View>
         </Card.Content>
@@ -193,6 +472,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
     padding: 16,
+    paddingBottom: 32, // Espaço extra no final para evitar corte
   },
   correlationCard: {
     marginBottom: 16,
@@ -202,20 +482,84 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 16,
+  },
+  drawerContainer: {
     marginBottom: 12,
   },
-  correlationGrid: {
+  drawerButton: {
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  drawerButtonContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16, // Aumentado para melhor toque
+    paddingHorizontal: 16,
+    minHeight: 56, // Altura mínima para toque
+  },
+  drawerButtonLabel: {
+    fontSize: 14,
+    color: '#333',
+  },
+  drawerButtonTextContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap', // Permite quebra de linha
+  },
+  drawerButtonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  drawerButtonRight: {
+    alignItems: 'flex-end',
+    flexShrink: 1,
+  },
+  drawerButtonText: {
+    fontSize: 16, // Aumentado para melhor legibilidade
+    fontWeight: 'bold',
+    color: '#333',
+    marginLeft: 8,
+  },
+  selectedMetricText: {
+    fontSize: 13, // Aumentado ligeiramente
+    color: '#666',
+    fontStyle: 'italic',
+    flexShrink: 1, // Permite encolher se necessário
+    maxWidth: '40%', // Limita largura para evitar corte
+  },
+  drawerContent: {
+    backgroundColor: '#f8f9fa',
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: '#e0e0e0',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    padding: 16, // Aumentado para melhor espaçamento
+    marginTop: -2,
+  },
+  metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 8, // Aumentado para melhor espaçamento
   },
-  correlationChip: {
-    marginBottom: 8,
+  metricChip: {
+    marginBottom: 8, // Aumentado para melhor espaçamento
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    minHeight: 40, // Altura mínima para toque
+    paddingVertical: 8, // Padding vertical para melhor toque
   },
-  correlationChipText: {
+  metricChipText: {
     color: '#333',
+    fontSize: 14, // Aumentado para melhor legibilidade
   },
   descriptionCard: {
     marginBottom: 16,

@@ -1,0 +1,5 @@
+[33m1a8eec2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Removidas métricas específicas da aba análise para treinos planejados: elevação positiva, elevação negativa, frequência cardíaca e esforço percebido
+[33mf966b02[m Corrigido nome da métrica 'Sensação Geral' para 'Esforço' na aba análise para ficar consistente com aba treinos
+[33maa239e0[m Atualizados nomes das métricas na aba análise para ficarem consistentes com a aba treinos
+[33m10d66be[m Simplificada interface de análise: métricas dinâmicas baseadas no tipo de análise selecionado
+[33m9829644[m Implementada aba de análise de treinos completa com todas as métricas organizadas por categoria
