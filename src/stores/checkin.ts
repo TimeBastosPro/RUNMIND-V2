@@ -253,16 +253,33 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
+      
+      // Preparar dados para salvamento
       const upsertData = {
         user_id: user.id,
         ...trainingData,
+        // Garantir que campos de array sejam salvos como JSON
+        sensacoes: trainingData.sensacoes ? JSON.stringify(trainingData.sensacoes) : null,
+        clima: trainingData.clima ? JSON.stringify(trainingData.clima) : null,
       };
+      
+      console.log('Salvando treino:', upsertData);
+      
       const { data, error } = await supabase
         .from('training_sessions')
         .upsert([upsertData], { onConflict: 'id' })
         .select()
         .single();
+        
       if (error) throw error;
+      
+      // Atualizar o store local
+      set(state => ({
+        trainingSessions: state.trainingSessions.map(t => 
+          t.id === data.id ? data : t
+        ).concat(data.id ? [] : [data])
+      }));
+      
       set({ isLoading: false, error: null });
       return data;
     } catch (error: unknown) {
@@ -316,6 +333,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { throw new Error('Usuário não autenticado'); }
+      
       // Calcular intervalo amplo se não fornecido
       let _startDate = startDate;
       let _endDate = endDate;
@@ -328,6 +346,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         _startDate = start.toISOString().split('T')[0];
         _endDate = end.toISOString().split('T')[0];
       }
+      
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
@@ -335,8 +354,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .gte('training_date', _startDate)
         .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
+        
       if (error) throw error;
-      set({ trainingSessions: data || [], isLoading: false, error: null });
+      
+      // Processar campos JSON
+      const processedData = (data || []).map(session => ({
+        ...session,
+        sensacoes: session.sensacoes ? JSON.parse(session.sensacoes) : [],
+        clima: session.clima ? JSON.parse(session.clima) : [],
+      }));
+      
+      set({ trainingSessions: processedData, isLoading: false, error: null });
     } catch (error: unknown) {
       console.error('Erro ao buscar treinos:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao buscar treinos.';
