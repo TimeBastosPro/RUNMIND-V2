@@ -63,7 +63,7 @@ const TRAINING_METRICS = [
     completed: 'perceived_effort',
   },
   { 
-    label: 'Sensação Geral', 
+    label: 'Esforço', 
     value: 'effort_level',
     icon: 'gauge',
     color: '#FF9800',
