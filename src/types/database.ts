@@ -64,28 +64,59 @@ export interface Profile {
     training_date: string;
     title: string;
     training_type: string;
-    distance_km?: number | null;
-    duration_minutes?: number | null;
-    elevation_gain_meters?: number | null;
-    avg_heart_rate?: number | null;
-    perceived_effort?: number;
-    session_satisfaction?: number;
-    notes?: string;
     status: 'planned' | 'completed';
     created_at?: string;
-    // Campos extras customizados
-    modalidade?: string;
-    effort_level?: number;
-    percurso?: string;
-    terreno?: string;
-    treino_tipo?: string;
-    duracao_tipo?: string;
+    
+    // === DADOS PLANEJADOS (quando status = 'planned') ===
+    // Informações básicas do planejamento
+    modalidade?: string; // corrida, forca, educativo, flexibilidade, bike
+    treino_tipo?: string; // continuo, intervalado, longo, fartlek, tiro, ritmo, regenerativo
+    terreno?: string; // asfalto, esteira, trilha/montanha, pista, outro
+    percurso?: string; // plano, ligeira inclinação, moderada, forte, muita inclinação
+    esforco?: string; // 1-5 (muito leve a muito forte)
+    intensidade?: string | number; // Z1, Z2, Z3, Z4, Z5 ou 1-10
+    
+    // Métricas planejadas
+    planned_distance_km?: number | null;
+    planned_distance_m?: string;
+    planned_duration_hours?: string;
+    planned_duration_minutes?: string;
+    planned_elevation_gain_meters?: number | null;
+    planned_elevation_loss_meters?: number | null;
+    planned_perceived_effort?: number; // 1-10
+    planned_avg_heart_rate?: number | null;
+    
+    // Observações do planejamento
+    planned_notes?: string;
+    
+    // === DADOS REALIZADOS (quando status = 'completed') ===
+    // Métricas realizadas
+    distance_km?: number | null;
+    distance_m?: string;
+    duration_hours?: string;
+    duration_minutes?: string;
+    elevation_gain_meters?: number | null;
+    elevation_loss_meters?: number | null;
+    avg_heart_rate?: number | null;
+    max_heart_rate?: number | null;
+    perceived_effort?: number; // 1-10 (PSE)
+    session_satisfaction?: number; // 1-5
+    
+    // Sensações e clima
+    sensacoes?: string[]; // Array com as sensações selecionadas
+    clima?: string[]; // Array com as condições climáticas
+    
+    // Observações do treino realizado
+    observacoes?: string;
+    
+    // === CAMPOS LEGACY (mantidos para compatibilidade) ===
+    notes?: string;
+    duration_minutes?: number | null;
     duracao_horas?: string;
     duracao_minutos?: string;
     distancia_m?: string;
-    intensidade?: string | number;
-    esforco?: string;
-    observacoes?: string;
+    effort_level?: number;
+    duracao_tipo?: string;
   }
   
   export interface Insight {

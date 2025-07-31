@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { generateInsight } from '../services/gemini';
-import type { DailyCheckin, Insight, Race } from '../types/database';
+import type { DailyCheckin, Insight, Race, TrainingSession } from '../types/database';
 
 interface RecentCheckin {
   sleep_quality: number;
@@ -22,26 +22,7 @@ interface WeeklyReflection {
   created_at?: string;
 }
 
-interface TrainingSession {
-  id: number;
-  user_id: string;
-  training_date: string;
-  training_type: string;
-  status: string;
-  perceived_effort?: number;
-  satisfaction?: number;
-  notes?: string;
-  avg_heart_rate?: number;
-  elevation_gain_meters?: number;
-  distance_km?: number;
-  duration_minutes?: number;
-  created_at?: string;
-  // Propriedades dinâmicas para métricas planejadas
-  planned_perceived_effort?: number;
-  planned_distance_km?: number;
-  planned_duration_minutes?: number;
-  planned_elevation_gain_meters?: number;
-}
+
 
 interface CheckinState {
   todayCheckin: DailyCheckin | null;
@@ -61,10 +42,13 @@ interface CheckinState {
   loadRecentCheckins: (days?: number) => Promise<void>;
   submitCheckin: (checkinData: Omit<DailyCheckin, 'id' | 'user_id' | 'created_at'>) => Promise<void>;
   calculateAnalytics: () => {
-    trainingLoad: { id: string | number; date: string; duration: number; perceivedEffort: number; load: number }[];
+    trainingLoad: { id: number | undefined; date: string; duration: number; perceivedEffort: number; load: number; distance: number; elevation: number }[];
     acuteLoad: { date: string; value: number }[];
     chronicLoad: { date: string; value: number }[];
-    runningEfficiency: { pace: number; pse: number; date: string }[];
+    runningEfficiency: { pace: number; pse: number; date: string; distance: number; duration: number }[];
+    plannedVsCompleted: { date: string; plannedDistance: number; actualDistance: number; plannedDuration: number; actualDuration: number; plannedEffort: number; actualEffort: number; completionRate: number }[];
+    metricsByModality: Record<string, { count: number; totalDistance: number; totalDuration: number; avgEffort: number; avgSatisfaction: number }>;
+    summary: { totalPlanned: number; totalCompleted: number; completionRate: number };
   } | null;
   submitParqAnswers: (answers: {
     q1: boolean;
@@ -364,18 +348,30 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     const { trainingSessions } = get();
     if (!trainingSessions || trainingSessions.length === 0) return null;
 
-    // 1. Carga de Treino (trainingLoad)
-    const trainingLoad = trainingSessions.map((t: TrainingSession) => ({
-      id: t.id,
-      date: t.training_date,
-      duration: t.duration_minutes || 0,
-      perceivedEffort: t.perceived_effort || 0,
-      load: (t.duration_minutes || 0) * (t.perceived_effort || 0),
-    }));
+    // Separar treinos planejados e realizados
+    const plannedSessions = trainingSessions.filter(t => t.status === 'planned');
+    const completedSessions = trainingSessions.filter(t => t.status === 'completed');
+
+    // 1. Carga de Treino (trainingLoad) - apenas treinos realizados
+    const trainingLoad = completedSessions.map((t: TrainingSession) => {
+      const duration = t.duration_minutes || 
+        (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
+        (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+      
+      return {
+        id: t.id,
+        date: t.training_date,
+        duration: duration,
+        perceivedEffort: t.perceived_effort || 0,
+        load: duration * (t.perceived_effort || 0),
+        distance: t.distance_km || 0,
+        elevation: t.elevation_gain_meters || 0,
+      };
+    });
 
     // 2. Carga Aguda (acuteLoad) - média dos últimos 7 dias para cada dia
     const acuteLoad: { date: string; value: number }[] = [];
-    const allDates = trainingSessions.map((t: TrainingSession) => t.training_date).sort();
+    const allDates = completedSessions.map((t: TrainingSession) => t.training_date).sort();
     allDates.forEach((date: string) => {
       const dateObj = new Date(date);
       const past7 = trainingLoad.filter((tl) => {
@@ -398,20 +394,97 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       chronicLoad.push({ date, value: avg });
     });
 
-    // 4. Eficiência de Corrida (runningEfficiency): para treinos do tipo 'Rodagem'
-    const runningEfficiency = trainingSessions
-      .filter((t: TrainingSession) => t.training_type && t.training_type.toLowerCase().includes('rodagem'))
-      .map((t: TrainingSession) => ({
-        pace: t.duration_minutes && t.distance_km ? t.duration_minutes / t.distance_km : 0,
-        pse: t.perceived_effort || 0,
-        date: t.training_date,
-      }));
+    // 4. Eficiência de Corrida (runningEfficiency): para treinos de corrida realizados
+    const runningEfficiency = completedSessions
+      .filter((t: TrainingSession) => t.modalidade === 'corrida' && t.distance_km && t.distance_km > 0)
+      .map((t: TrainingSession) => {
+        const duration = t.duration_minutes || 
+          (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
+          (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+        
+        return {
+          pace: duration && t.distance_km ? duration / t.distance_km : 0,
+          pse: t.perceived_effort || 0,
+          date: t.training_date,
+          distance: t.distance_km,
+          duration: duration,
+        };
+      });
+
+    // 5. Comparação Planejado vs Realizado
+    const plannedVsCompleted = completedSessions
+      .filter(t => {
+        // Buscar treino planejado correspondente
+        const planned = plannedSessions.find(p => p.training_date === t.training_date);
+        return planned && t.distance_km && planned.planned_distance_km;
+      })
+      .map(t => {
+        const planned = plannedSessions.find(p => p.training_date === t.training_date)!;
+        const plannedDuration = (planned.planned_duration_hours ? parseInt(planned.planned_duration_hours) * 60 : 0) + 
+                               (planned.planned_duration_minutes ? parseInt(planned.planned_duration_minutes) : 0);
+        const actualDuration = t.duration_minutes || 
+          (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
+          (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+        
+        return {
+          date: t.training_date,
+          plannedDistance: planned.planned_distance_km || 0,
+          actualDistance: t.distance_km || 0,
+          plannedDuration: plannedDuration,
+          actualDuration: actualDuration,
+          plannedEffort: planned.planned_perceived_effort || 0,
+          actualEffort: t.perceived_effort || 0,
+          completionRate: planned.planned_distance_km && t.distance_km ? 
+            (t.distance_km / planned.planned_distance_km) * 100 : 0,
+        };
+      });
+
+    // 6. Métricas por Modalidade
+    const metricsByModality = completedSessions.reduce((acc, t) => {
+      const modality = t.modalidade || 'outro';
+      if (!acc[modality]) {
+        acc[modality] = {
+          count: 0,
+          totalDistance: 0,
+          totalDuration: 0,
+          avgEffort: 0,
+          avgSatisfaction: 0,
+        };
+      }
+      
+      const duration = t.duration_minutes || 
+        (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
+        (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+      
+      acc[modality].count++;
+      acc[modality].totalDistance += t.distance_km || 0;
+      acc[modality].totalDuration += duration;
+      acc[modality].avgEffort += t.perceived_effort || 0;
+      acc[modality].avgSatisfaction += t.session_satisfaction || 0;
+      
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Calcular médias
+    Object.keys(metricsByModality).forEach(modality => {
+      const data = metricsByModality[modality];
+      data.avgEffort = data.count > 0 ? data.avgEffort / data.count : 0;
+      data.avgSatisfaction = data.count > 0 ? data.avgSatisfaction / data.count : 0;
+    });
 
     return {
       trainingLoad,
       acuteLoad,
       chronicLoad,
       runningEfficiency,
+      plannedVsCompleted,
+      metricsByModality,
+      summary: {
+        totalPlanned: plannedSessions.length,
+        totalCompleted: completedSessions.length,
+        completionRate: plannedSessions.length > 0 ? 
+          (completedSessions.length / plannedSessions.length) * 100 : 0,
+      }
     };
   },
 
