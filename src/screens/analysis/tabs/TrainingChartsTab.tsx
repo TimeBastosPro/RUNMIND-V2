@@ -30,7 +30,7 @@ const TRAINING_METRICS = [
     icon: 'elevation-rise',
     color: '#795548',
     unit: 'm',
-    planned: 'planned_elevation_gain_meters',
+    planned: null, // Removido do planejado
     completed: 'elevation_gain_meters',
   },
   { 
@@ -39,7 +39,7 @@ const TRAINING_METRICS = [
     icon: 'elevation-fall',
     color: '#8D6E63',
     unit: 'm',
-    planned: 'planned_elevation_loss_meters',
+    planned: null, // Removido do planejado
     completed: 'elevation_loss_meters',
   },
   { 
@@ -48,7 +48,7 @@ const TRAINING_METRICS = [
     icon: 'heart-pulse',
     color: '#E91E63',
     unit: 'bpm',
-    planned: 'planned_avg_heart_rate',
+    planned: null, // Removido do planejado
     completed: 'avg_heart_rate',
   },
   
@@ -59,7 +59,7 @@ const TRAINING_METRICS = [
     icon: 'lightning-bolt',
     color: '#FF5722',
     unit: '/10',
-    planned: 'planned_perceived_effort',
+    planned: null, // Removido do planejado
     completed: 'perceived_effort',
   },
   { 
