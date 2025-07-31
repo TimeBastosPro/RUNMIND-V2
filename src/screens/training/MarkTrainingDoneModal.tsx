@@ -80,6 +80,7 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
     
     if (!plannedData || !plannedData.id) {
       console.error('Não é possível excluir: treino sem ID válido');
+      alert('Erro: Treino sem ID válido para exclusão');
       return;
     }
     
@@ -90,12 +91,20 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
     
     try {
       console.log('Excluindo treino com ID:', plannedData.id);
-      await deleteTrainingSession(plannedData.id);
-      await fetchTrainingSessions();
-      onCancel();
+      const result = await deleteTrainingSession(plannedData.id);
+      console.log('Resultado da exclusão:', result);
+      
+      if (result) {
+        console.log('Recarregando dados...');
+        await fetchTrainingSessions();
+        onCancel();
+        alert('✅ Treino excluído com sucesso!');
+      } else {
+        alert('❌ Falha ao excluir treino');
+      }
     } catch (error) {
       console.error('Erro ao excluir treino:', error);
-      alert('Erro ao excluir treino: ' + (error instanceof Error ? error.message : String(error)));
+      alert('❌ Erro ao excluir treino: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 

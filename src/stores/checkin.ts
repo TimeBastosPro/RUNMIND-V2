@@ -289,15 +289,34 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     }
   },
   deleteTrainingSession: async (sessionId: number | string) => {
+    console.log('deleteTrainingSession chamada com sessionId:', sessionId);
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
-      const { error } = await supabase
+      
+      console.log('Usuário autenticado:', user.id);
+      console.log('Tentando excluir treino com ID:', sessionId);
+      
+      const { data, error } = await supabase
         .from('training_sessions')
         .delete()
-        .eq('id', sessionId);
-      if (error) throw error;
+        .eq('id', sessionId)
+        .select(); // Adicionar select para ver o que foi excluído
+      
+      console.log('Resultado da exclusão:', { data, error });
+      
+      if (error) {
+        console.error('Erro do Supabase:', error);
+        throw error;
+      }
+      
+      if (!data || data.length === 0) {
+        console.warn('Nenhum registro foi excluído. Verifique se o ID existe.');
+        throw new Error('Treino não encontrado ou já foi excluído');
+      }
+      
+      console.log('Treino excluído com sucesso:', data);
       set({ isLoading: false, error: null });
       return true;
     } catch (error: unknown) {
