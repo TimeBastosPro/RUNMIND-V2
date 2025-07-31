@@ -144,7 +144,9 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                         )}
                     </>
                 ) : (
-                    <MaterialCommunityIcons name="run" size={28} color="#e0e0e0" style={{ marginTop: 16 }} />
+                    <View style={{ marginTop: 16 }}>
+                        <MaterialCommunityIcons name="run" size={28} color="#e0e0e0" />
+                    </View>
                 )}
             </View>
             <View style={styles.cardButtonRow}>
@@ -158,7 +160,14 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                 </Button>
                 <Button
                     mode="contained"
-                    style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                    style={[
+                        styles.actionButton, 
+                        { 
+                            backgroundColor: '#4CAF50',
+                            // Destacar o botão quando não há treino planejado
+                            elevation: training && training.status === 'completed' ? 0 : 3,
+                        }
+                    ]}
                     labelStyle={styles.actionButtonLabelContained}
                     onPress={() => onOpenRealizadoModal(day, training || null)}
                 >
@@ -217,11 +226,11 @@ export default function TrainingScreen() {
 
     useEffect(() => {
         setLoading(true);
-        // Modo teste: simular carregamento
-        setTimeout(() => {
+        // Carregar dados reais do store
+        fetchTrainingSessions().finally(() => {
             setLoading(false);
-        }, 500);
-    }, []);
+        });
+    }, [fetchTrainingSessions]);
 
     // Função para obter o início da semana (domingo)
     function getWeekStart(date: Date) {
@@ -280,7 +289,7 @@ export default function TrainingScreen() {
             session = {
                 user_id: userId || '', // Preencher com o user_id correto se disponível
                 training_date: formatDate(day),
-                title: '',
+                title: 'Treino Realizado',
                 training_type: '',
                 status: 'completed',
                 modalidade: '',
@@ -327,7 +336,10 @@ export default function TrainingScreen() {
             return;
         }
         const trainingData: Partial<TrainingSession> = {
+            user_id: userId || '',
             training_date: formatDate(selectedDay),
+            title: 'Treino Planejado',
+            training_type: 'planned',
             status: 'planned',
             modalidade: planningState.modalidade || undefined,
             esforco: planningState.esforco || undefined,
@@ -342,31 +354,45 @@ export default function TrainingScreen() {
             observacoes: planningState.observacoes || undefined,
         };
         try {
-            // Temporariamente: simular salvamento local
-            console.log('Treino planejado (simulado):', trainingData);
+            console.log('Salvando treino planejado:', trainingData);
+            
+            // Usar a função real do store para salvar
+            await saveTrainingSession(trainingData);
+            
+            // Recarregar os dados para atualizar a interface
+            await fetchTrainingSessions();
+            
             setModalPlanVisible(false);
-            Alert.alert("Sucesso", "Treino planejado! (Modo teste - não salvo no servidor)");
+            Alert.alert("✅ Sucesso", "Treino planejado salvo com sucesso!");
         } catch (err) {
             console.error('Erro ao salvar treino:', err);
-            Alert.alert("Erro", "Não foi possível salvar o treino. Tente novamente.");
+            Alert.alert("❌ Erro", "Não foi possível salvar o treino. Tente novamente.");
         }
     };
 
     const handleSaveDone = async (completedData: Partial<TrainingSession>) => {
         if (!editingSession) return;
         try {
-            // Temporariamente: simular salvamento local
             const treinoParaSalvar: Partial<TrainingSession> = {
                 ...completedData,
+                user_id: userId || '',
                 training_date: editingSession.training_date,
                 status: 'completed',
                 title: completedData.title || 'Treino Realizado',
                 training_type: completedData.training_type || 'manual',
             };
-            console.log('Treino realizado (simulado):', treinoParaSalvar);
-            Alert.alert('Sucesso', 'Treino realizado! (Modo teste - não salvo no servidor)');
+            
+            console.log('Salvando treino realizado:', treinoParaSalvar);
+            
+            // Usar a função real do store para salvar
+            await saveTrainingSession(treinoParaSalvar);
+            
+            // Recarregar os dados para atualizar a interface
+            await fetchTrainingSessions();
+            
+            Alert.alert('✅ Sucesso', 'Treino realizado salvo com sucesso!');
         } catch (err: any) {
-            Alert.alert('Erro ao salvar treino', err.message || String(err));
+            Alert.alert('❌ Erro', 'Erro ao salvar treino: ' + (err.message || String(err)));
             console.error('Erro ao salvar treino realizado:', err);
         }
         setModalDoneVisible(false);
@@ -449,7 +475,7 @@ export default function TrainingScreen() {
                                     displayMonth={displayDate.getMonth()}
                                     training={training}
                                     onOpenPlanModal={handleOpenPlanModal}
-                                    onOpenRealizadoModal={handleOpenDoneModal}
+                                    onOpenRealizadoModal={handleOpenRealizadoModal}
                                 />
                             </View>
                         );
@@ -468,7 +494,7 @@ export default function TrainingScreen() {
                                         displayMonth={displayDate.getMonth()}
                                         training={training}
                                         onOpenPlanModal={handleOpenPlanModal}
-                                        onOpenRealizadoModal={handleOpenDoneModal}
+                                        onOpenRealizadoModal={handleOpenRealizadoModal}
                                     />
                                 </View>
                             );
