@@ -43,7 +43,7 @@ const TRAINING_METRICS = [
     completed: 'elevation_loss_meters',
   },
   { 
-    label: 'FC Média', 
+    label: 'Frequência Cardíaca', 
     value: 'avg_heart_rate',
     icon: 'heart-pulse',
     color: '#E91E63',
@@ -63,7 +63,7 @@ const TRAINING_METRICS = [
     completed: 'perceived_effort',
   },
   { 
-    label: 'Nível de Esforço', 
+    label: 'Sensação Geral', 
     value: 'effort_level',
     icon: 'gauge',
     color: '#FF9800',
@@ -92,11 +92,11 @@ const TRAINING_METRICS = [
     completed: 'session_satisfaction',
   },
   { 
-    label: 'FC Máxima', 
+    label: 'Clima', 
     value: 'max_heart_rate',
-    icon: 'heart-plus',
+    icon: 'weather-partly-cloudy',
     color: '#D32F2F',
-    unit: 'bpm',
+    unit: 'condições',
     planned: null, // Não existe no planejado
     completed: 'max_heart_rate',
   },
