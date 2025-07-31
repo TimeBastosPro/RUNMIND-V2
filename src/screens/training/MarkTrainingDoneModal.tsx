@@ -28,6 +28,8 @@ interface MarkTrainingDoneModalProps {
 }
 
 export default function MarkTrainingDoneModal({ visible, plannedData, onSave, onCancel }: MarkTrainingDoneModalProps) {
+  console.log('MarkTrainingDoneModal - plannedData:', plannedData);
+  console.log('MarkTrainingDoneModal - plannedData.id:', plannedData?.id);
   // --- Estados do Componente ---
   const [distanceKm, setDistanceKm] = useState('');
   const [distanceM, setDistanceM] = useState('');
@@ -72,10 +74,28 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
   };
 
   const handleDelete = async () => {
-    if (plannedData && plannedData.id) {
+    console.log('handleDelete chamado!');
+    console.log('plannedData:', plannedData);
+    console.log('plannedData.id:', plannedData?.id);
+    
+    if (!plannedData || !plannedData.id) {
+      console.error('Não é possível excluir: treino sem ID válido');
+      return;
+    }
+    
+    // Confirmar exclusão com o usuário
+    if (!confirm('Tem certeza que deseja excluir este treino?')) {
+      return;
+    }
+    
+    try {
+      console.log('Excluindo treino com ID:', plannedData.id);
       await deleteTrainingSession(plannedData.id);
       await fetchTrainingSessions();
       onCancel();
+    } catch (error) {
+      console.error('Erro ao excluir treino:', error);
+      alert('Erro ao excluir treino: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -190,8 +210,20 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
             <Button mode="contained" onPress={handleSave} style={{ marginLeft: 8 }}>
               Salvar Alterações
             </Button>
-            {plannedData && plannedData.id && (
-              <Button onPress={handleDelete} textColor="red" style={{ marginLeft: 8 }}>
+            {(() => {
+              console.log('Renderizando botão excluir - plannedData:', plannedData);
+              console.log('Renderizando botão excluir - plannedData.id:', plannedData?.id);
+              return plannedData && plannedData.id;
+            })() && (
+              <Button 
+                onPress={() => {
+                  console.log('Botão Excluir clicado!');
+                  handleDelete();
+                }} 
+                textColor="red" 
+                style={{ marginLeft: 8 }}
+                mode="outlined"
+              >
                 Excluir Treino
               </Button>
             )}
