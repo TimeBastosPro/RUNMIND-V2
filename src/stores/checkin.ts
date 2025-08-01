@@ -112,12 +112,19 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   races: [],
 
   loadTodayCheckin: async () => {
+    console.log('🔄 loadTodayCheckin chamada');
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ Usuário não autenticado');
+        return;
+      }
 
       const today = new Date().toISOString().split('T')[0];
+      console.log('📅 Buscando check-in para a data:', today);
+      console.log('👤 User ID:', user.id);
+      
       // Buscar o check-in mais recente do dia
       const { data, error } = await supabase
         .from('daily_checkins')
@@ -128,6 +135,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .limit(1)
         .single();
 
+      console.log('🔍 Resultado da busca:', { data, error });
+
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
@@ -136,16 +145,21 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       let readiness = null;
       if (data) {
         readiness = get().calculateReadinessScore(data);
+        console.log('📊 Readiness score calculado:', readiness);
       }
-      set({ 
+      
+      const newState = { 
         todayCheckin: data,
         hasCheckedInToday: !!data,
         isLoading: false,
         todayReadinessScore: readiness,
         error: null
-      });
+      };
+      
+      console.log('✅ Estado atualizado:', newState);
+      set(newState);
     } catch (error: unknown) {
-      console.error('Error loading today checkin:', error);
+      console.error('❌ Error loading today checkin:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar check-in de hoje.';
       set({ isLoading: false, error: errorMessage });
     }

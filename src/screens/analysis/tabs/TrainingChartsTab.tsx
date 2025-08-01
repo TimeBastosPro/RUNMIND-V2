@@ -38,7 +38,7 @@ const TRAINING_METRICS = [
   { 
     label: 'Elevação Negativa', 
     value: 'elevation_loss',
-    icon: 'elevation-fall',
+    icon: 'trending-down',
     color: '#8D6E63',
     unit: 'm',
     planned: null, // Removido do planejado
@@ -162,7 +162,9 @@ const ANALYSIS_TYPES = [
 export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
+  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
   const { trainingSessions, fetchTrainingSessions, calculateAnalytics } = useCheckinStore();
 
   useEffect(() => {
@@ -171,6 +173,11 @@ export default function TrainingChartsTab() {
 
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
   const analytics = calculateAnalytics();
+  
+  const handleCustomDateChange = (startDate: Date, endDate: Date) => {
+    setCustomStartDate(startDate);
+    setCustomEndDate(endDate);
+  };
   
   // Separar dados por status
   const completedSessions = trainingSessions.filter(t => t.status === 'completed');
@@ -207,7 +214,7 @@ export default function TrainingChartsTab() {
                    completedSessions; // Para comparação, usar realizados como base
 
     // Filtrar dados por período
-    const filteredSessions = filterDataByPeriod(sessions, selectedPeriod);
+    const filteredSessions = filterDataByPeriod(sessions, selectedPeriod, customStartDate, customEndDate);
 
     return filteredSessions.map(session => {
       let value = 0;
@@ -360,8 +367,8 @@ export default function TrainingChartsTab() {
   // Calcular resumo
   const getSummary = () => {
     // Filtrar dados por período para o resumo
-    const filteredCompletedSessions = filterDataByPeriod(completedSessions, selectedPeriod);
-    const filteredPlannedSessions = filterDataByPeriod(plannedSessions, selectedPeriod);
+    const filteredCompletedSessions = filterDataByPeriod(completedSessions, selectedPeriod, customStartDate, customEndDate);
+    const filteredPlannedSessions = filterDataByPeriod(plannedSessions, selectedPeriod, customStartDate, customEndDate);
     
     const totalSessions = filteredCompletedSessions.length;
     const totalPlanned = filteredPlannedSessions.length;
@@ -393,6 +400,9 @@ export default function TrainingChartsTab() {
       <PeriodSelector
         selectedPeriod={selectedPeriod}
         onPeriodChange={setSelectedPeriod}
+        onCustomDateChange={handleCustomDateChange}
+        customStartDate={customStartDate}
+        customEndDate={customEndDate}
       />
       
       {/* Tipo de Análise */}
@@ -538,7 +548,7 @@ export default function TrainingChartsTab() {
       {/* Resumo Detalhado */}
       <Card style={styles.summaryCard}>
         <Card.Content>
-          <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel(selectedPeriod)}</Text>
+          <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel(selectedPeriod, customStartDate, customEndDate)}</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Treinos Realizados</Text>

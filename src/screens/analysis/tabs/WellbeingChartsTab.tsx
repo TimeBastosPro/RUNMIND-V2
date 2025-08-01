@@ -53,7 +53,9 @@ const METRICS = [
 
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('sleep_quality');
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
+  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
   const { recentCheckins, loadRecentCheckins } = useCheckinStore();
 
   useEffect(() => {
@@ -61,6 +63,11 @@ export default function WellbeingChartsTab() {
   }, [loadRecentCheckins]);
 
   const selectedMetricInfo = METRICS.find(m => m.value === selectedMetric);
+
+  const handleCustomDateChange = (startDate: Date, endDate: Date) => {
+    setCustomStartDate(startDate);
+    setCustomEndDate(endDate);
+  };
 
   // Processar dados reais dos checkins
   const getMetricData = () => {
@@ -72,7 +79,7 @@ export default function WellbeingChartsTab() {
     if (!field) return [];
 
     // Filtrar dados por período
-    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod);
+    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod, customStartDate, customEndDate);
 
     return filteredCheckins
       .map(checkin => {
@@ -136,6 +143,9 @@ export default function WellbeingChartsTab() {
       <PeriodSelector
         selectedPeriod={selectedPeriod}
         onPeriodChange={setSelectedPeriod}
+        customStartDate={customStartDate}
+        customEndDate={customEndDate}
+        onCustomDateChange={handleCustomDateChange}
       />
       
       {/* Seleção de Métricas */}
@@ -217,7 +227,7 @@ export default function WellbeingChartsTab() {
       {metricData.length > 0 && (
         <Card style={styles.statsCard}>
                   <Card.Content>
-          <Text style={styles.statsTitle}>Estatísticas - {getPeriodLabel(selectedPeriod)}</Text>
+          <Text style={styles.statsTitle}>Estatísticas - {getPeriodLabel(selectedPeriod, customStartDate, customEndDate)}</Text>
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Média</Text>

@@ -121,7 +121,7 @@ const COMPLETED_TRAINING_METRICS = [
   { 
     label: 'Elevação Negativa', 
     value: 'elevation_loss',
-    icon: 'elevation-fall',
+    icon: 'trending-down',
     color: '#8D6E63',
   },
   { 
@@ -165,7 +165,9 @@ export default function CrossAnalysisTab() {
   const [wellbeingDrawerOpen, setWellbeingDrawerOpen] = useState(false);
   const [plannedDrawerOpen, setPlannedDrawerOpen] = useState(false);
   const [completedDrawerOpen, setCompletedDrawerOpen] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
+  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
   
   const { recentCheckins, loadRecentCheckins, trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
@@ -178,6 +180,11 @@ export default function CrossAnalysisTab() {
   const selectedPlannedInfo = PLANNED_TRAINING_METRICS.find(m => m.value === selectedPlannedMetric);
   const selectedCompletedInfo = COMPLETED_TRAINING_METRICS.find(m => m.value === selectedCompletedMetric);
 
+  const handleCustomDateChange = (startDate: Date, endDate: Date) => {
+    setCustomStartDate(startDate);
+    setCustomEndDate(endDate);
+  };
+
   // Processar dados reais para correlação
   const getCorrelationData = () => {
     if (!recentCheckins || !trainingSessions || recentCheckins.length === 0 || trainingSessions.length === 0) {
@@ -185,8 +192,8 @@ export default function CrossAnalysisTab() {
     }
 
     // Filtrar dados por período
-    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod);
-    const filteredSessions = filterDataByPeriod(trainingSessions, selectedPeriod);
+    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod, customStartDate, customEndDate);
+    const filteredSessions = filterDataByPeriod(trainingSessions, selectedPeriod, customStartDate, customEndDate);
 
     // Obter dados de bem-estar do período selecionado
     const wellbeingData = filteredCheckins
@@ -304,6 +311,9 @@ export default function CrossAnalysisTab() {
       <PeriodSelector
         selectedPeriod={selectedPeriod}
         onPeriodChange={setSelectedPeriod}
+        onCustomDateChange={handleCustomDateChange}
+        customStartDate={customStartDate}
+        customEndDate={customEndDate}
       />
       
       {/* Card de Análise de Correlação com Três Gavetas */}

@@ -86,6 +86,7 @@ export default function HomeScreen() {
     trainingSessions,
     races,
     loadRecentCheckins,
+    loadTodayCheckin,
     fetchTrainingSessions,
     fetchRaces
   } = useCheckinStore();
@@ -95,13 +96,14 @@ export default function HomeScreen() {
   const [dailyCuriosity, setDailyCuriosity] = useState(sportCuriosities[0]);
 
   useEffect(() => {
+    loadTodayCheckin();
     loadRecentCheckins();
     fetchTrainingSessions();
     fetchRaces();
     
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
-  }, [loadRecentCheckins, fetchTrainingSessions, fetchRaces]);
+  }, [loadTodayCheckin, loadRecentCheckins, fetchTrainingSessions, fetchRaces]);
 
   useEffect(() => {
     // Usar o dia do ano para selecionar a frase e curiosidade do dia
@@ -164,6 +166,8 @@ export default function HomeScreen() {
   // Debug logs
   console.log('DEBUG - trainingSessions:', trainingSessions);
   console.log('DEBUG - todayDateString:', todayDateString);
+  console.log('DEBUG - hasCheckedInToday:', hasCheckedInToday);
+  console.log('DEBUG - todayReadinessScore:', todayReadinessScore);
   
   const todayTraining = trainingSessions?.find(session => 
     session.training_date === todayDateString

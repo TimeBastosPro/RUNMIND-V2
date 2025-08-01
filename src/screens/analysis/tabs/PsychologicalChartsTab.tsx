@@ -43,7 +43,9 @@ const TRAINING_METRICS = [
 
 export default function PsychologicalChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
+  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
   const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
@@ -51,6 +53,11 @@ export default function PsychologicalChartsTab() {
   }, [fetchTrainingSessions]);
 
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
+
+  const handleCustomDateChange = (startDate: Date, endDate: Date) => {
+    setCustomStartDate(startDate);
+    setCustomEndDate(endDate);
+  };
 
   // Processar dados reais das sessões de treino
   const getMetricData = () => {
@@ -65,7 +72,7 @@ export default function PsychologicalChartsTab() {
     const completedSessions = trainingSessions.filter(session => session.status === 'completed');
     
     // Filtrar dados por período
-    const filteredSessions = filterDataByPeriod(completedSessions, selectedPeriod);
+    const filteredSessions = filterDataByPeriod(completedSessions, selectedPeriod, customStartDate, customEndDate);
     
     return filteredSessions
       .map(session => {
@@ -137,6 +144,9 @@ export default function PsychologicalChartsTab() {
       <PeriodSelector
         selectedPeriod={selectedPeriod}
         onPeriodChange={setSelectedPeriod}
+        onCustomDateChange={handleCustomDateChange}
+        customStartDate={customStartDate}
+        customEndDate={customEndDate}
       />
       
       {/* Seleção de Métricas de Treino */}
@@ -223,7 +233,7 @@ export default function PsychologicalChartsTab() {
       {/* Resumo de Treinos */}
       <Card style={styles.summaryCard}>
         <Card.Content>
-          <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel(selectedPeriod)}</Text>
+                      <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel(selectedPeriod, customStartDate, customEndDate)}</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Total de Treinos</Text>

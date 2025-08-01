@@ -14,60 +14,32 @@ export function filterDataByPeriod<T extends DateFilterable>(
 ): T[] {
   if (!data || data.length === 0) return [];
 
-  const now = new Date();
+  // Para o novo sistema, sempre usar datas customizadas
   let startDate: Date;
+  let endDate: Date;
 
-  switch (period) {
-    case '7d':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    case '30d':
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    case '90d':
-      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      break;
-    case '180d':
-      startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-      break;
-    case '365d':
-      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-      break;
-    case 'custom':
-      if (customStartDate && customEndDate) {
-        return data.filter(item => {
-          const itemDate = new Date(item.date || item.training_date || '');
-          return itemDate >= customStartDate && itemDate <= customEndDate;
-        });
-      }
-      // Se não há datas customizadas, usar 30 dias como padrão
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    default:
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  if (customStartDate && customEndDate) {
+    startDate = customStartDate;
+    endDate = customEndDate;
+  } else {
+    // Datas padrão: últimos 30 dias
+    endDate = new Date();
+    startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
   return data.filter(item => {
     const itemDate = new Date(item.date || item.training_date || '');
-    return itemDate >= startDate && itemDate <= now;
+    return itemDate >= startDate && itemDate <= endDate;
   });
 }
 
-export function getPeriodLabel(period: PeriodType): string {
-  switch (period) {
-    case '7d':
-      return 'Últimos 7 dias';
-    case '30d':
-      return 'Últimos 30 dias';
-    case '90d':
-      return 'Últimos 90 dias';
-    case '180d':
-      return 'Últimos 180 dias';
-    case '365d':
-      return 'Último ano';
-    case 'custom':
-      return 'Período personalizado';
-    default:
-      return 'Últimos 30 dias';
+export function getPeriodLabel(period: PeriodType, customStartDate?: Date, customEndDate?: Date): string {
+  if (customStartDate && customEndDate) {
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+    return `${formatDate(customStartDate)} a ${formatDate(customEndDate)}`;
   }
+  
+  return 'Período personalizado';
 } 
