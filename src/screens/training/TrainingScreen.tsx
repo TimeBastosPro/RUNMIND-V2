@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert, useWindowDimensions } from 'react-native';
-// LINHA CORRIGIDA: Adicionados 'RadioButton' e outros componentes que estavam em falta.
 import { Portal, Modal, TextInput, Button, Text, Checkbox, RadioButton, List, Chip } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 import type { TrainingSession } from '../../types/database';
@@ -25,9 +24,7 @@ function getFirstDayOfMonth(date: Date): Date {
 
 function generateCalendarDays(date: Date): Date[] {
   const startOfMonth = getFirstDayOfMonth(date);
-  // Segunda-feira = 1, Domingo = 0
   let dayOfWeek = startOfMonth.getDay();
-  // Ajuste: se domingo (0), queremos -6, se segunda (1), queremos 0, etc.
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   const startDate = new Date(startOfMonth);
   startDate.setDate(startOfMonth.getDate() + diff);
@@ -54,7 +51,6 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Função utilitária para agrupar dias em semanas
 function groupDaysByWeek(days: Date[]): Date[][] {
   const weeks: Date[][] = [];
   for (let i = 0; i < days.length; i += 7) {
@@ -63,9 +59,7 @@ function groupDaysByWeek(days: Date[]): Date[][] {
   return weeks;
 }
 
-// Função utilitária para garantir data YYYY-MM-DD
 function getDateKey(dateString: string): string {
-  // Remove qualquer parte de hora/timezone
   return dateString.split('T')[0];
 }
 
@@ -78,11 +72,10 @@ interface CustomDayProps {
   onLongPress: (day: Date, training: TrainingSession) => void;
 }
 
-function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealizadoModal }: CustomDayProps & { onOpenPlanModal: (day: Date, training?: TrainingSession | null) => void, onOpenRealizadoModal: (day: Date, training?: TrainingSession | null) => void }) {
+function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealizadoModal, onLongPress }: CustomDayProps & { onOpenPlanModal: (day: Date, training?: TrainingSession | null) => void, onOpenRealizadoModal: (day: Date, training?: TrainingSession | null) => void, onLongPress: (day: Date, training: TrainingSession) => void }) {
     const isOtherMonth = day.getMonth() !== displayMonth;
     const isToday = isSameDay(day, new Date());
 
-    // Lógica de cor/status
     let dynamicStyle: any = { backgroundColor: '#fff', borderColor: '#e0e0e0' };
     let status = '';
     if (training) {
@@ -90,7 +83,6 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
             dynamicStyle = { ...dynamicStyle, borderColor: '#4CAF50', boxShadow: '0 0 8px #4CAF50' };
             status = 'realizado';
         } else if (training.status === 'planned') {
-            // Verificar se o dia já passou
             const now = new Date();
             const cardDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
             const isPast = cardDate < now && !isSameDay(day, now);
@@ -108,12 +100,27 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
         dynamicStyle.backgroundColor = '#f5f5f5';
     }
 
-    // Determinar se existe treino planejado
     const hasPlanned = training && training.status === 'planned';
     const treinoButtonTitle = hasPlanned ? 'Editar' : 'Criar';
 
     return (
-        <View style={[styles.dayContainer, dynamicStyle]}>
+        <Pressable 
+            style={[styles.dayContainer, dynamicStyle]}
+            onLongPress={() => {
+              console.log('👆 Long press detectado no card:', { 
+                day: day.getDate(), 
+                training: training ? {
+                  id: training.id,
+                  title: training.title,
+                  status: training.status,
+                  training_date: training.training_date
+                } : null
+              });
+              if (training) {
+                onLongPress(day, training);
+              }
+            }}
+        >
             <Text
                 style={[
                     styles.dayText,
@@ -164,7 +171,6 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                         styles.actionButton, 
                         { 
                             backgroundColor: '#4CAF50',
-                            // Destacar o botão quando não há treino planejado
                             elevation: training && training.status === 'completed' ? 0 : 3,
                         }
                     ]}
@@ -174,7 +180,7 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                     Realizado
                 </Button>
             </View>
-        </View>
+        </Pressable>
     );
 }
 
@@ -201,7 +207,6 @@ export default function TrainingScreen() {
     const [importModalVisible, setImportModalVisible] = useState(false);
     const [importing, setImporting] = useState(false);
 
-    // Atualize o useState planningState:
     const [planningState, setPlanningState] = useState({
       modalidade: 'corrida',
       esforco: '',
@@ -226,13 +231,21 @@ export default function TrainingScreen() {
 
     useEffect(() => {
         setLoading(true);
-        // Carregar dados reais do store
         fetchTrainingSessions().finally(() => {
             setLoading(false);
+            console.log('📊 Todos os treinos carregados:', trainingSessions.map(t => ({
+                id: t.id,
+                title: t.title,
+                status: t.status,
+                date: t.training_date,
+                modalidade: t.modalidade,
+                terreno: t.terreno,
+                treino_tipo: t.treino_tipo,
+                intensidade: t.intensidade
+            })));
         });
     }, [fetchTrainingSessions]);
 
-    // Função para obter o início da semana (domingo)
     function getWeekStart(date: Date) {
       const d = new Date(date);
       d.setHours(0,0,0,0);
@@ -240,18 +253,15 @@ export default function TrainingScreen() {
       return d.toISOString().split('T')[0];
     }
 
-    // useEffect para sugerir a reflexão semanal ao abrir o app no domingo
     useEffect(() => {
       const today = new Date();
       const weekStart = getWeekStart(today);
-      // Aqui você pode buscar na base se já respondeu essa semana (exemplo simplificado: sempre mostra no domingo)
       if (today.getDay() === 0) {
         setWeeklyReflectionVisible(true);
       }
     }, []);
 
     const handleSaveWeeklyReflection = async (answers: any) => {
-      // Modo teste: simular salvamento
       console.log('Reflexão semanal (modo teste):', answers);
       setWeeklyReflectionVisible(false);
     };
@@ -261,19 +271,15 @@ export default function TrainingScreen() {
     const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
 
     useEffect(() => {
-      // Sempre que mudar o mês, resetar para a semana atual
       setCurrentWeekIndex(0);
     }, [displayDate]);
 
-    // Agrupar treinos por data, priorizando o realizado
     const trainingSessionsByDate = useMemo(() => {
         const map: Record<string, TrainingSession> = {};
-        // Primeiro, pegar todos os realizados
         trainingSessions.filter(t => t.status === 'completed').forEach(t => {
             const dateKey = getDateKey(t.training_date);
             map[dateKey] = t;
         });
-        // Depois, preencher os planejados só se não houver realizado
         trainingSessions.filter(t => t.status === 'planned').forEach(t => {
             const dateKey = getDateKey(t.training_date);
             if (!map[dateKey]) map[dateKey] = t;
@@ -281,13 +287,12 @@ export default function TrainingScreen() {
         return map;
     }, [trainingSessions]);
 
-    // Handler para abrir SEMPRE o modal de treino realizado (editável)
     const handleOpenRealizadoModal = (day: Date, training?: TrainingSession | null) => {
         console.log('Abrindo modal de treino realizado', { day, training });
         let session = training;
         if (!session) {
             session = {
-                user_id: userId || '', // Preencher com o user_id correto se disponível
+                user_id: userId || '',
                 training_date: formatDate(day),
                 title: 'Treino Realizado',
                 training_type: '',
@@ -306,22 +311,66 @@ export default function TrainingScreen() {
         setModalDoneVisible(true);
     };
 
-    // Handler do card e dos botões
     const handleDayPress = handleOpenRealizadoModal;
     const handleEditTraining = handleOpenRealizadoModal;
     const handleMarkCompleted = handleOpenRealizadoModal;
 
     const handleDayLongPress = async (day: Date, training: TrainingSession) => {
+      console.log('🔍 handleDayLongPress chamado:', { 
+        day: day.getDate(), 
+        training: {
+          id: training.id,
+          title: training.title,
+          status: training.status,
+          training_date: training.training_date,
+          modalidade: training.modalidade,
+          terreno: training.terreno,
+          treino_tipo: training.treino_tipo,
+          intensidade: training.intensidade
+        }
+      });
+      
       return new Promise<void>((resolve) => {
         Alert.alert(
           "Excluir Treino",
-          `Deseja realmente excluir o treino "${training.title}"?`,
+          `Deseja realmente excluir o treino "${training.title}"?\n\nData: ${training.training_date}\nModalidade: ${training.modalidade || 'N/A'}\nStatus: ${training.status}`,
           [
-            { text: "Cancelar", style: "cancel", onPress: () => resolve() },
+            { text: "Cancelar", style: "cancel", onPress: () => {
+              console.log('❌ Usuário cancelou a exclusão');
+              resolve();
+            }},
             { text: "Excluir", style: "destructive", onPress: async () => {
-                // Modo teste: simular exclusão
-                console.log('Treino excluído (modo teste):', training);
-                Alert.alert('✅ Sucesso', 'Treino excluído! (Modo teste)');
+                try {
+                  console.log('🚀 Iniciando exclusão do treino:', {
+                    id: training.id,
+                    title: training.title,
+                    status: training.status,
+                    date: training.training_date
+                  });
+                  
+                  if (!training.id) {
+                    console.error('❌ ID do treino é null/undefined');
+                    throw new Error('ID do treino não encontrado');
+                  }
+                  
+                  console.log('📋 Tipo do ID:', typeof training.id);
+                  console.log('📋 Valor do ID:', training.id);
+                  
+                  const result = await deleteTrainingSession(training.id);
+                  console.log('✅ Resultado da exclusão:', result);
+                  
+                  await fetchTrainingSessions();
+                  console.log('🔄 Dados recarregados após exclusão');
+                  
+                  Alert.alert('✅ Sucesso', 'Treino excluído com sucesso!');
+                } catch (error) {
+                  console.error('❌ Erro ao excluir treino:', error);
+                  console.error('❌ Detalhes do erro:', {
+                    message: error instanceof Error ? error.message : 'Erro desconhecido',
+                    stack: error instanceof Error ? error.stack : 'N/A'
+                  });
+                  Alert.alert('❌ Erro', `Não foi possível excluir o treino.\n\nErro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+                }
                 resolve();
               }
             }
@@ -355,13 +404,8 @@ export default function TrainingScreen() {
         };
         try {
             console.log('Salvando treino planejado:', trainingData);
-            
-            // Usar a função real do store para salvar
             await saveTrainingSession(trainingData);
-            
-            // Recarregar os dados para atualizar a interface
             await fetchTrainingSessions();
-            
             setModalPlanVisible(false);
             Alert.alert("✅ Sucesso", "Treino planejado salvo com sucesso!");
         } catch (err) {
@@ -383,13 +427,8 @@ export default function TrainingScreen() {
             };
             
             console.log('Salvando treino realizado:', treinoParaSalvar);
-            
-            // Usar a função real do store para salvar
             await saveTrainingSession(treinoParaSalvar);
-            
-            // Recarregar os dados para atualizar a interface
             await fetchTrainingSessions();
-            
             Alert.alert('✅ Sucesso', 'Treino realizado salvo com sucesso!');
         } catch (err: any) {
             Alert.alert('❌ Erro', 'Erro ao salvar treino: ' + (err.message || String(err)));
@@ -413,14 +452,12 @@ export default function TrainingScreen() {
       setModalDoneVisible(true);
     };
 
-    // Função para importar CSV
     const handleImportCSV = async (file: File | Blob) => {
         setImporting(true);
         try {
-            Papa.parse(file, {
+            Papa.parse(file as any, {
                 header: true,
                 complete: async (results: any) => {
-                    // Modo teste: simular importação
                     console.log('CSV importado (modo teste):', results.data);
                     Alert.alert('✅ Sucesso', 'CSV processado! (Modo teste - não salvo no servidor)');
                     setImportModalVisible(false);
@@ -436,10 +473,8 @@ export default function TrainingScreen() {
         }
     };
 
-    // Renderização condicional
     return (
         <ScrollView style={{ flex: 1 }}>
-            {/* Navegação de semana/mês */}
             <View style={[styles.headerContainer, isMobile && styles.headerContainerMobile]}>
                 <Button onPress={() => isMobile ? setCurrentWeekIndex(i => Math.max(i - 1, 0)) : setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1))}>
                     Anterior
@@ -454,7 +489,6 @@ export default function TrainingScreen() {
                     Importar Planilha (.csv)
                 </Button>
             </View>
-            {/* Dias da semana - apenas no desktop */}
             {!isMobile && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 12 }}>
                     {WEEKDAYS.map((d, i) => (
@@ -462,7 +496,6 @@ export default function TrainingScreen() {
                     ))}
                 </View>
             )}
-            {/* Renderização semanal (mobile) ou mensal (desktop) */}
             {isMobile ? (
                 <View style={{ flexDirection: 'column', margin: 8 }}>
                     {weeks[currentWeekIndex]?.map((day, idx) => {
@@ -476,6 +509,8 @@ export default function TrainingScreen() {
                                     training={training}
                                     onOpenPlanModal={handleOpenPlanModal}
                                     onOpenRealizadoModal={handleOpenRealizadoModal}
+                                    onPress={() => {}}
+                                    onLongPress={handleDayLongPress}
                                 />
                             </View>
                         );
@@ -495,6 +530,8 @@ export default function TrainingScreen() {
                                         training={training}
                                         onOpenPlanModal={handleOpenPlanModal}
                                         onOpenRealizadoModal={handleOpenRealizadoModal}
+                                        onPress={() => {}}
+                                        onLongPress={handleDayLongPress}
                                     />
                                 </View>
                             );
@@ -503,14 +540,12 @@ export default function TrainingScreen() {
                 ))
             )}
 
-            {/* Modais permanecem iguais */}
             <Portal>
                 <Modal visible={modalPlanVisible} onDismiss={() => setModalPlanVisible(false)} contentContainerStyle={{ width: '95%', alignSelf: 'center', marginVertical: 10, borderRadius: 12, padding: 16, backgroundColor: 'white', maxHeight: '90%' }}>
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <Text variant="titleLarge" style={{ marginBottom: 10, textAlign: 'left', fontWeight: 'bold' }}>
                           {editingSession ? 'Editar Treino Planejado' : 'Planejar Novo Treino'}
                         </Text>
-                        {/* Modalidade */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Modalidade</Text>
                         <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, modalidade: val}))} value={planningState.modalidade}>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -522,7 +557,6 @@ export default function TrainingScreen() {
                             ))}
                           </View>
                         </RadioButton.Group>
-                        {/* Esforço */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Esforço</Text>
                         <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, esforco: val}))} value={planningState.esforco}>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -534,7 +568,6 @@ export default function TrainingScreen() {
                             ))}
                           </View>
                         </RadioButton.Group>
-                        {/* Percurso */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Percurso</Text>
                         <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, percurso: val}))} value={planningState.percurso}>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -546,7 +579,6 @@ export default function TrainingScreen() {
                             ))}
                           </View>
                         </RadioButton.Group>
-                        {/* Terreno */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Terreno</Text>
                         <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, terreno: val}))} value={planningState.terreno}>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -558,7 +590,6 @@ export default function TrainingScreen() {
                             ))}
                           </View>
                         </RadioButton.Group>
-                        {/* Tipo de Treino */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Tipo de Treino</Text>
                         <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, treino_tipo: val}))} value={planningState.treino_tipo}>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -570,7 +601,6 @@ export default function TrainingScreen() {
                             ))}
                           </View>
                         </RadioButton.Group>
-                        {/* Duração/Distância */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Duração / Distância</Text>
                         <View style={{marginBottom: 12}}>
                           <View style={{flexDirection: 'row', marginBottom: 8}}>
@@ -582,7 +612,6 @@ export default function TrainingScreen() {
                             <TextInput label="Minutos" value={planningState.duracao_minutos} onChangeText={val => setPlanningState(p => ({...p, duracao_minutos: val}))} keyboardType="numeric" style={{flex: 1}} mode="outlined" dense />
                           </View>
                         </View>
-                        {/* Intensidade */}
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Intensidade</Text>
                         <RadioButton.Group onValueChange={val => setPlanningState(p => ({...p, intensidade: val}))} value={planningState.intensidade}>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -593,7 +622,6 @@ export default function TrainingScreen() {
                                 <RadioButton.Item label="Z5" value="Z5" style={{flex:1}}/>
                             </View>
                         </RadioButton.Group>
-                        {/* Observações */}
                         <TextInput label="Observações" value={planningState.observacoes} onChangeText={val => setPlanningState(p => ({...p, observacoes: val}))} multiline numberOfLines={3} mode="outlined" style={{marginBottom: 12}}/>
                         <View style={{ marginTop: 10 }}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -602,22 +630,51 @@ export default function TrainingScreen() {
                               {editingSession ? 'Salvar Alterações' : 'Salvar Treino'}
                             </Button>
                           </View>
-                                                     {editingSession && (
-                             <Button 
-                               textColor='red' 
-                               onPress={async () => {
-                                 // Modo teste: simular exclusão
-                                 console.log('Treino excluído via modal (modo teste):', editingSession);
-                                 Alert.alert('✅ Sucesso', 'Treino excluído! (Modo teste)');
-                                 setEditingSession(null);
-                                 setSelectedDay(null);
-                                 setModalPlanVisible(false);
-                               }} 
-                               style={{ alignSelf: 'center' }}
-                             >
-                               Excluir Treino
-                             </Button>
-                           )}
+                          {editingSession && (
+                            <Button 
+                              textColor='red' 
+                              onPress={async () => {
+                                try {
+                                  console.log('🚀 Excluindo treino via modal:', {
+                                    id: editingSession?.id,
+                                    title: editingSession?.title,
+                                    status: editingSession?.status,
+                                    date: editingSession?.training_date,
+                                    modalidade: editingSession?.modalidade
+                                  });
+                                  
+                                  if (!editingSession?.id) {
+                                    console.error('❌ ID do treino é null/undefined no modal');
+                                    throw new Error('ID do treino não encontrado');
+                                  }
+                                  
+                                  console.log('📋 Tipo do ID (modal):', typeof editingSession.id);
+                                  console.log('📋 Valor do ID (modal):', editingSession.id);
+                                  
+                                  const result = await deleteTrainingSession(editingSession.id);
+                                  console.log('✅ Resultado da exclusão via modal:', result);
+                                  
+                                  await fetchTrainingSessions();
+                                  console.log('🔄 Dados recarregados após exclusão via modal');
+                                  
+                                  Alert.alert('✅ Sucesso', 'Treino excluído com sucesso!');
+                                  setEditingSession(null);
+                                  setSelectedDay(null);
+                                  setModalPlanVisible(false);
+                                } catch (error) {
+                                  console.error('❌ Erro ao excluir treino via modal:', error);
+                                  console.error('❌ Detalhes do erro (modal):', {
+                                    message: error instanceof Error ? error.message : 'Erro desconhecido',
+                                    stack: error instanceof Error ? error.stack : 'N/A'
+                                  });
+                                  Alert.alert('❌ Erro', `Não foi possível excluir o treino.\n\nErro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+                                }
+                              }} 
+                              style={{ alignSelf: 'center' }}
+                            >
+                              Excluir Treino
+                            </Button>
+                          )}
                         </View>
                     </ScrollView>
                 </Modal>
@@ -689,30 +746,30 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     justifyContent: 'space-between',
     alignItems: 'stretch',
-    gap: 16, // aumentar o espaçamento entre as células
-    paddingHorizontal: 8, // garantir espaçamento lateral
+    gap: 16,
+    paddingHorizontal: 8,
   },
   dayContainer: {
     flex: 1,
     minWidth: 0,
     backgroundColor: '#fff',
-    borderRadius: 18, // mais arredondado
+    borderRadius: 18,
     borderWidth: 2,
     borderColor: '#e0e0e0',
-    padding: 14, // mais espaço interno
-    minHeight: 170, // levemente menor para responsividade
+    padding: 14,
+    minHeight: 170,
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 0, // removido para usar gap
+    marginHorizontal: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, // sombra um pouco mais visível
+    shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
   },
   dayText: {
     fontWeight: 'bold',
-    fontSize: 24, // ainda maior para destaque
+    fontSize: 24,
     marginBottom: 6,
     color: '#222',
     textAlign: 'center',
@@ -811,7 +868,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.5,
   },
-  // Adicionar estilos padronizados para os textos dos cards
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -824,13 +880,11 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     flexShrink: 1,
   },
-  // Novo estilo para o título do campo
   cardLabel: {
     fontWeight: 'bold',
     fontSize: 11,
     color: '#222',
   },
-  // Novo estilo para a linha dos botões
   cardButtonRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -839,7 +893,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     gap: 4,
   },
-  // Estilos para mobile
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -847,7 +900,7 @@ const styles = StyleSheet.create({
     margin: 12,
   },
   headerContainerMobile: {
-    marginTop: 50, // Espaço para evitar conflito com status bar
+    marginTop: 50,
     marginHorizontal: 8,
     marginBottom: 8,
   },

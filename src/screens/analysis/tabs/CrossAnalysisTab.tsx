@@ -3,6 +3,8 @@ import { View, ScrollView, StyleSheet } from 'react-native';
 import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
+import PeriodSelector, { PeriodType } from '../../../components/ui/PeriodSelector';
+import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
 
 // Métricas de Bem-estar
 const WELLBEING_METRICS = [
@@ -163,6 +165,7 @@ export default function CrossAnalysisTab() {
   const [wellbeingDrawerOpen, setWellbeingDrawerOpen] = useState(false);
   const [plannedDrawerOpen, setPlannedDrawerOpen] = useState(false);
   const [completedDrawerOpen, setCompletedDrawerOpen] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
   
   const { recentCheckins, loadRecentCheckins, trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
@@ -175,17 +178,96 @@ export default function CrossAnalysisTab() {
   const selectedPlannedInfo = PLANNED_TRAINING_METRICS.find(m => m.value === selectedPlannedMetric);
   const selectedCompletedInfo = COMPLETED_TRAINING_METRICS.find(m => m.value === selectedCompletedMetric);
 
-  // Dados de exemplo para correlação
-  const correlationData = [
-    { wellbeing: 8, training: 9, date: '2024-01-01' },
-    { wellbeing: 6, training: 6, date: '2024-01-02' },
-    { wellbeing: 7, training: 8, date: '2024-01-03' },
-    { wellbeing: 5, training: 5, date: '2024-01-04' },
-    { wellbeing: 9, training: 9, date: '2024-01-05' },
-  ];
+  // Processar dados reais para correlação
+  const getCorrelationData = () => {
+    if (!recentCheckins || !trainingSessions || recentCheckins.length === 0 || trainingSessions.length === 0) {
+      return [];
+    }
+
+    // Filtrar dados por período
+    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod);
+    const filteredSessions = filterDataByPeriod(trainingSessions, selectedPeriod);
+
+    // Obter dados de bem-estar do período selecionado
+    const wellbeingData = filteredCheckins
+      .map(checkin => {
+        const wellbeingValue = checkin[selectedWellbeingMetric === 'sleep_quality' ? 'sleep_quality_score' : 
+                                     selectedWellbeingMetric === 'soreness' ? 'soreness_score' : 
+                                     selectedWellbeingMetric === 'motivation' ? 'mood_score' : 
+                                     selectedWellbeingMetric === 'confidence' ? 'confidence_score' : 
+                                     selectedWellbeingMetric === 'focus' ? 'focus_score' : 
+                                     'energy_score' as keyof typeof checkin];
+        
+        return {
+          date: checkin.date,
+          wellbeing: typeof wellbeingValue === 'number' ? wellbeingValue : 0,
+        };
+      })
+      .filter(item => item.wellbeing > 0);
+
+    // Obter dados de treino do período selecionado
+    const trainingData = filteredSessions
+      .filter(session => session.status === 'completed')
+      .map(session => {
+        let trainingValue = 0;
+        
+        if (selectedPlannedMetric === 'planned_distance' || selectedCompletedMetric === 'completed_distance') {
+          trainingValue = session.distance_km || 0;
+        } else if (selectedPlannedMetric === 'planned_duration' || selectedCompletedMetric === 'completed_duration') {
+          const hours = session.duration_hours ? parseInt(session.duration_hours) : 0;
+          const minutes = session.duration_minutes ? parseInt(session.duration_minutes) : 0;
+          trainingValue = hours * 60 + minutes;
+        } else if (selectedPlannedMetric === 'planned_effort' || selectedCompletedMetric === 'perceived_effort') {
+          trainingValue = session.perceived_effort || 0;
+        } else {
+          trainingValue = session.session_satisfaction || 0;
+        }
+        
+        return {
+          date: session.training_date,
+          training: trainingValue,
+        };
+      })
+      .filter(item => item.training > 0);
+
+    // Combinar dados por data
+    const combinedData: Array<{date: string, wellbeing: number, training: number}> = [];
+    const dateMap = new Map();
+
+    // Adicionar dados de bem-estar
+    wellbeingData.forEach(item => {
+      dateMap.set(item.date, { ...dateMap.get(item.date), wellbeing: item.wellbeing });
+    });
+
+    // Adicionar dados de treino
+    trainingData.forEach(item => {
+      dateMap.set(item.date, { ...dateMap.get(item.date), training: item.training });
+    });
+
+    // Converter para array e filtrar apenas datas com ambos os dados
+    dateMap.forEach((value, date) => {
+      if (value.wellbeing && value.training) {
+        combinedData.push({
+          date,
+          wellbeing: value.wellbeing,
+          training: value.training,
+        });
+      }
+    });
+
+    return combinedData
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-7); // Últimos 7 dias com dados
+  };
+
+  const correlationData = getCorrelationData();
 
   const calculateCorrelation = () => {
-    // Cálculo simples de correlação (exemplo)
+    if (correlationData.length < 2) {
+      return '0.00';
+    }
+
+    // Cálculo de correlação de Pearson
     const n = correlationData.length;
     const sumX = correlationData.reduce((sum, d) => sum + d.wellbeing, 0);
     const sumY = correlationData.reduce((sum, d) => sum + d.training, 0);
@@ -218,6 +300,12 @@ export default function CrossAnalysisTab() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Seletor de Período */}
+      <PeriodSelector
+        selectedPeriod={selectedPeriod}
+        onPeriodChange={setSelectedPeriod}
+      />
+      
       {/* Card de Análise de Correlação com Três Gavetas */}
       <Card style={styles.correlationCard}>
         <Card.Content>
@@ -404,7 +492,10 @@ export default function CrossAnalysisTab() {
             </Text>
           </View>
           <Text style={styles.descriptionText}>
-            Análise de correlação entre bem-estar, treinos planejados e treinos realizados
+            {correlationData.length > 0 
+              ? `Analisando correlação entre ${selectedWellbeingInfo?.label} e ${selectedCompletedInfo?.label} com ${correlationData.length} pontos de dados do período selecionado.`
+              : 'Nenhum dado suficiente para análise. Faça check-ins e treinos para ver correlações.'
+            }
           </Text>
         </Card.Content>
       </Card>
@@ -441,25 +532,42 @@ export default function CrossAnalysisTab() {
         <Card.Content>
           <Text style={styles.scatterTitle}>Gráfico de Dispersão</Text>
           <View style={styles.scatterContainer}>
-            <View style={styles.scatterPlot}>
-              {correlationData.map((point, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.scatterPoint,
-                    {
-                      left: (point.wellbeing / 10) * 200,
-                      bottom: (point.training / 10) * 150,
-                      backgroundColor: '#2196F3',
-                    }
-                  ]}
-                />
-              ))}
-            </View>
-            <View style={styles.axisLabels}>
-              <Text style={styles.axisLabel}>Bem-estar (1-10)</Text>
-              <Text style={styles.axisLabelVertical}>Treino (1-10)</Text>
-            </View>
+            {correlationData.length > 0 ? (
+              <>
+                <View style={styles.scatterPlot}>
+                  {correlationData.map((point, index) => {
+                    const maxWellbeing = Math.max(...correlationData.map(p => p.wellbeing), 1);
+                    const maxTraining = Math.max(...correlationData.map(p => p.training), 1);
+                    
+                    return (
+                      <View
+                        key={index}
+                        style={[
+                          styles.scatterPoint,
+                          {
+                            left: (point.wellbeing / maxWellbeing) * 200,
+                            bottom: (point.training / maxTraining) * 150,
+                            backgroundColor: '#2196F3',
+                          }
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+                <View style={styles.axisLabels}>
+                  <Text style={styles.axisLabel}>{selectedWellbeingInfo?.label}</Text>
+                  <Text style={styles.axisLabelVertical}>{selectedCompletedInfo?.label}</Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.noDataContainer}>
+                <MaterialCommunityIcons name="chart-scatter-plot" size={48} color="#ccc" />
+                <Text style={styles.noDataText}>Nenhum dado para correlação</Text>
+                <Text style={styles.noDataSubtext}>
+                  Faça check-ins e treinos no mesmo dia para ver correlações
+                </Text>
+              </View>
+            )}
           </View>
         </Card.Content>
       </Card>
@@ -681,5 +789,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: -40,
     top: 80,
+  },
+  noDataContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 8,
+  },
+  noDataSubtext: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 4,
   },
 }); 

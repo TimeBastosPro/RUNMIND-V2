@@ -311,8 +311,8 @@ export default function HomeScreen() {
               )}
               
               {(() => {
-                const horas = nextTraining.duracao_horas || 0;
-                const minutos = nextTraining.duracao_minutos || 0;
+                const horas = Number(nextTraining.duracao_horas) || 0;
+                const minutos = Number(nextTraining.duracao_minutos) || 0;
                 if (horas > 0 || minutos > 0) {
                   return <Text style={styles.trainingDetails}>⏱️ Duração: {horas}h {minutos}min</Text>;
                 }

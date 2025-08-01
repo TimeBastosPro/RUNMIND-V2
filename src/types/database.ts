@@ -111,7 +111,6 @@ export interface Profile {
     
     // === CAMPOS LEGACY (mantidos para compatibilidade) ===
     notes?: string;
-    duration_minutes?: number | null;
     duracao_horas?: string;
     duracao_minutos?: string;
     distancia_m?: string;

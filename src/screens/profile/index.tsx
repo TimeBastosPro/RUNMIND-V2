@@ -381,7 +381,7 @@ export default function ProfileScreen() {
                   maximumValue={5}
                   step={1}
                   value={preferences.workIntensity}
-                  onValueChange={value => setPreferences(p => ({ ...p, workIntensity: value }))}
+                  onValueChange={(value: number) => setPreferences(p => ({ ...p, workIntensity: value }))}
                   style={{ width: '100%', marginBottom: 8 }}
                 />
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>

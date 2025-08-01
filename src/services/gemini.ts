@@ -110,6 +110,6 @@ Gere um insight motivacional e prático que ajude o atleta a aproveitar melhor s
   }
 }
 
-export async function generateChatResponse(): Promise<string> {
-  return Promise.resolve("Modo de desenvolvimento: O chat com IA está desativado para economizar custos.");
+export async function generateChatResponse(message: string): Promise<string> {
+  return Promise.resolve(`Modo de desenvolvimento: O chat com IA está desativado para economizar custos. Sua mensagem foi: "${message}"`);
 }

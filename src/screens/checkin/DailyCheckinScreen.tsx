@@ -172,8 +172,8 @@ export default function DailyCheckinScreen() {
     try {
       await submitWeeklyReflection({
         enjoyment: answers.enjoyment,
-        progress: answers.progress,
-        confidence: answers.confidence,
+        progress: String(answers.progress),
+        confidence: String(answers.confidence),
         week_start: weekStart,
       });
       setWeeklyReflectionVisible(false);

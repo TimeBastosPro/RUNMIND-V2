@@ -3,6 +3,8 @@ import { View, ScrollView, StyleSheet } from 'react-native';
 import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
+import PeriodSelector, { PeriodType } from '../../../components/ui/PeriodSelector';
+import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
 
 const TRAINING_METRICS = [
   // Métricas Básicas (comuns a planejado e realizado)
@@ -160,6 +162,7 @@ const ANALYSIS_TYPES = [
 export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
   const { trainingSessions, fetchTrainingSessions, calculateAnalytics } = useCheckinStore();
 
   useEffect(() => {
@@ -203,7 +206,10 @@ export default function TrainingChartsTab() {
                    selectedAnalysis === 'planned' ? plannedSessions : 
                    completedSessions; // Para comparação, usar realizados como base
 
-    return sessions.map(session => {
+    // Filtrar dados por período
+    const filteredSessions = filterDataByPeriod(sessions, selectedPeriod);
+
+    return filteredSessions.map(session => {
       let value = 0;
       let plannedValue = null;
       let actualValue = null;
@@ -288,10 +294,10 @@ export default function TrainingChartsTab() {
           
         case 'effort_level':
           value = selectedAnalysis === 'planned' ? 
-            (parseInt(session.esforco) || 0) : 
+            (parseInt(session.esforco || '0') || 0) : 
             (session.effort_level || 0);
           if (selectedAnalysis === 'comparison') {
-            plannedValue = parseInt(session.esforco) || 0;
+            plannedValue = parseInt(session.esforco || '0') || 0;
             actualValue = session.effort_level || 0;
           }
           break;
@@ -349,20 +355,24 @@ export default function TrainingChartsTab() {
   };
 
   const metricData = getMetricData();
-  const maxValue = Math.max(...metricData.map(d => d.value), 1);
+  const maxValue = Math.max(...metricData.map(d => d?.value || 0), 1);
 
   // Calcular resumo
   const getSummary = () => {
-    const totalSessions = completedSessions.length;
-    const totalPlanned = plannedSessions.length;
-    const totalDistance = completedSessions.reduce((sum, s) => sum + (s.distance_km || 0), 0);
-    const totalDuration = completedSessions.reduce((sum, s) => {
+    // Filtrar dados por período para o resumo
+    const filteredCompletedSessions = filterDataByPeriod(completedSessions, selectedPeriod);
+    const filteredPlannedSessions = filterDataByPeriod(plannedSessions, selectedPeriod);
+    
+    const totalSessions = filteredCompletedSessions.length;
+    const totalPlanned = filteredPlannedSessions.length;
+    const totalDistance = filteredCompletedSessions.reduce((sum, s) => sum + (s.distance_km || 0), 0);
+    const totalDuration = filteredCompletedSessions.reduce((sum, s) => {
       const hours = s.duration_hours ? parseInt(s.duration_hours) : 0;
       const minutes = s.duration_minutes ? parseInt(s.duration_minutes) : 0;
       return sum + hours * 60 + minutes;
     }, 0);
-    const avgIntensity = completedSessions.length > 0 ? 
-      completedSessions.reduce((sum, s) => sum + (s.perceived_effort || 0), 0) / completedSessions.length : 0;
+    const avgIntensity = filteredCompletedSessions.length > 0 ? 
+      filteredCompletedSessions.reduce((sum, s) => sum + (s.perceived_effort || 0), 0) / filteredCompletedSessions.length : 0;
     const completionRate = totalPlanned > 0 ? (totalSessions / totalPlanned) * 100 : 0;
 
     return {
@@ -379,6 +389,12 @@ export default function TrainingChartsTab() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Seletor de Período */}
+      <PeriodSelector
+        selectedPeriod={selectedPeriod}
+        onPeriodChange={setSelectedPeriod}
+      />
+      
       {/* Tipo de Análise */}
       <Card style={styles.analysisCard}>
         <Card.Content>
@@ -467,7 +483,7 @@ export default function TrainingChartsTab() {
                             styles.bar,
                             styles.plannedBar,
                             {
-                              height: (item.plannedValue / maxValue) * 100,
+                              height: ((item?.plannedValue || 0) / maxValue) * 100,
                             }
                           ]}
                         />
@@ -477,7 +493,7 @@ export default function TrainingChartsTab() {
                             styles.bar,
                             styles.completedBar,
                             {
-                              height: (item.actualValue / maxValue) * 100,
+                              height: ((item?.actualValue || 0) / maxValue) * 100,
                             }
                           ]}
                         />
@@ -487,19 +503,19 @@ export default function TrainingChartsTab() {
                         style={[
                           styles.bar,
                           {
-                            height: (item.value / maxValue) * 100,
+                            height: ((item?.value || 0) / maxValue) * 100,
                             backgroundColor: selectedMetricInfo?.color
                           }
                         ]}
                       />
                     )}
                     <Text style={styles.barLabel}>
-                      {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      {new Date(item?.date || '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                     </Text>
                     <Text style={styles.barValue}>
                       {selectedAnalysis === 'comparison' ? 
-                        `${item.actualValue}/${item.plannedValue}` : 
-                        item.value.toFixed(1)}
+                        `${item?.actualValue || 0}/${item?.plannedValue || 0}` : 
+                        (item?.value || 0).toFixed(1)}
                     </Text>
                   </View>
                 ))}
@@ -522,7 +538,7 @@ export default function TrainingChartsTab() {
       {/* Resumo Detalhado */}
       <Card style={styles.summaryCard}>
         <Card.Content>
-          <Text style={styles.summaryTitle}>Resumo dos Últimos 30 Dias</Text>
+          <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel(selectedPeriod)}</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Treinos Realizados</Text>

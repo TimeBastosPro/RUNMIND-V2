@@ -4,12 +4,12 @@ import { generateInsight } from '../services/gemini';
 import type { DailyCheckin, Insight, Race, TrainingSession } from '../types/database';
 
 interface RecentCheckin {
-  sleep_quality: number;
-  soreness: number;
-  motivation: number;
-  confidence: number;
-  focus: number;
-  emocional: number;
+  sleep_quality_score: number;
+  soreness_score: number;
+  mood_score: number;
+  confidence_score: number;
+  focus_score: number;
+  energy_score: number;
   notes?: string;
   date: string;
 }
@@ -160,7 +160,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       startDate.setDate(startDate.getDate() - days);
       const { data, error } = await supabase
         .from('daily_checkins')
-        .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
+        .select('sleep_quality_score, soreness_score, mood_score, confidence_score, focus_score, energy_score, notes, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
@@ -382,9 +382,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
     // 1. Carga de Treino (trainingLoad) - apenas treinos realizados
     const trainingLoad = completedSessions.map((t: TrainingSession) => {
-      const duration = t.duration_minutes || 
-        (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
-        (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+      let duration = 0;
+      if (typeof t.duration_minutes === 'number') {
+        duration = t.duration_minutes;
+      } else if (t.duration_hours || t.duration_minutes) {
+        const hours = t.duration_hours ? parseInt(t.duration_hours) : 0;
+        const minutes = t.duration_minutes ? parseInt(t.duration_minutes) : 0;
+        duration = hours * 60 + minutes;
+      }
       
       return {
         id: t.id,
@@ -426,15 +431,20 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     const runningEfficiency = completedSessions
       .filter((t: TrainingSession) => t.modalidade === 'corrida' && t.distance_km && t.distance_km > 0)
       .map((t: TrainingSession) => {
-        const duration = t.duration_minutes || 
-          (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
-          (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+        let duration = 0;
+        if (typeof t.duration_minutes === 'number') {
+          duration = t.duration_minutes;
+        } else if (t.duration_hours || t.duration_minutes) {
+          const hours = t.duration_hours ? parseInt(t.duration_hours) : 0;
+          const minutes = t.duration_minutes ? parseInt(t.duration_minutes) : 0;
+          duration = hours * 60 + minutes;
+        }
         
         return {
           pace: duration && t.distance_km ? duration / t.distance_km : 0,
           pse: t.perceived_effort || 0,
           date: t.training_date,
-          distance: t.distance_km,
+          distance: t.distance_km || 0,
           duration: duration,
         };
       });
@@ -450,9 +460,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         const planned = plannedSessions.find(p => p.training_date === t.training_date)!;
         const plannedDuration = (planned.planned_duration_hours ? parseInt(planned.planned_duration_hours) * 60 : 0) + 
                                (planned.planned_duration_minutes ? parseInt(planned.planned_duration_minutes) : 0);
-        const actualDuration = t.duration_minutes || 
-          (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
-          (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+        let actualDuration = 0;
+        if (typeof t.duration_minutes === 'number') {
+          actualDuration = t.duration_minutes;
+        } else if (t.duration_hours || t.duration_minutes) {
+          const hours = t.duration_hours ? parseInt(t.duration_hours) : 0;
+          const minutes = t.duration_minutes ? parseInt(t.duration_minutes) : 0;
+          actualDuration = hours * 60 + minutes;
+        }
         
         return {
           date: t.training_date,
@@ -551,7 +566,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       if (error) throw error;
       // Atualiza o store local
       set(state => ({
-        trainingSessions: state.trainingSessions.map(t => t.id === id ? { ...t, ...updateData } : t)
+        trainingSessions: state.trainingSessions.map(t => t.id === id ? { ...t, ...updateData } as TrainingSession : t)
       }));
       set({ isLoading: false, error: null });
       return data;

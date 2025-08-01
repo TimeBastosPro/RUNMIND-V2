@@ -16,16 +16,16 @@ export interface WeeklyReflectionAnswers {
 
 export default function WeeklyReflectionModal({ visible, onSave, onCancel }: WeeklyReflectionModalProps) {
   const [enjoyment, setEnjoyment] = useState<number>(5);
-  const [progress, setProgress] = useState<WeeklyReflectionAnswers['progress']>('Mais ou menos');
-  const [confidence, setConfidence] = useState<WeeklyReflectionAnswers['confidence']>('Média');
+  const [progress, setProgress] = useState<string>('Mais ou menos');
+  const [confidence, setConfidence] = useState<string>('Média');
 
   const handleSave = () => {
-    const progressMap = {
+    const progressMap: { [key: string]: number } = {
       'Sim, claramente': 3,
       'Mais ou menos': 2,
       'Não, senti-me estagnado(a)': 1,
     };
-    const confidenceMap = {
+    const confidenceMap: { [key: string]: number } = {
       'Alta': 3,
       'Média': 2,
       'Baixa': 1,
@@ -57,7 +57,7 @@ export default function WeeklyReflectionModal({ visible, onSave, onCancel }: Wee
 
           {/* Pergunta 2 */}
           <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>2. Esta semana, você sentiu que progrediu em direção aos seus objetivos?</Text>
-          <RadioButton.Group onValueChange={val => setProgress(val as WeeklyReflectionAnswers['progress'])} value={progress}>
+          <RadioButton.Group onValueChange={val => setProgress(val)} value={progress}>
             <RadioButton.Item label="Sim, claramente" value="Sim, claramente" />
             <RadioButton.Item label="Mais ou menos" value="Mais ou menos" />
             <RadioButton.Item label="Não, senti-me estagnado(a)" value="Não, senti-me estagnado(a)" />
@@ -67,7 +67,7 @@ export default function WeeklyReflectionModal({ visible, onSave, onCancel }: Wee
 
           {/* Pergunta 3 */}
           <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>3. Como está a sua confiança para cumprir os treinos da próxima semana?</Text>
-          <RadioButton.Group onValueChange={val => setConfidence(val as WeeklyReflectionAnswers['confidence'])} value={confidence}>
+          <RadioButton.Group onValueChange={val => setConfidence(val)} value={confidence}>
             <RadioButton.Item label="Baixa" value="Baixa" />
             <RadioButton.Item label="Média" value="Média" />
             <RadioButton.Item label="Alta" value="Alta" />

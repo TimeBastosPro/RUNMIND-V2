@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
-import { Database } from '../types/database';
+import { DailyCheckin } from '../types/database';
 
-type Checkin = Database['public']['Tables']['checkins']['Row'];
+type Checkin = DailyCheckin;
 
 /**
  * Busca todos os registros de check-in para um usuário específico.
