@@ -348,6 +348,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { throw new Error('Usuário não autenticado'); }
       
+      console.log('🔍 fetchTrainingSessions - user:', user.id);
+      
       // Calcular intervalo amplo se não fornecido
       let _startDate = startDate;
       let _endDate = endDate;
@@ -361,6 +363,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         _endDate = end.toISOString().split('T')[0];
       }
       
+      console.log('🔍 fetchTrainingSessions - _startDate:', _startDate);
+      console.log('🔍 fetchTrainingSessions - _endDate:', _endDate);
+      
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
@@ -368,6 +373,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .gte('training_date', _startDate)
         .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
+        
+      console.log('🔍 fetchTrainingSessions - data bruta:', data);
+      console.log('🔍 fetchTrainingSessions - error:', error);
         
       if (error) throw error;
       
@@ -377,6 +385,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         sensacoes: session.sensacoes ? JSON.parse(session.sensacoes) : [],
         clima: session.clima ? JSON.parse(session.clima) : [],
       }));
+      
+      console.log('🔍 fetchTrainingSessions - processedData:', processedData);
       
       set({ trainingSessions: processedData, isLoading: false, error: null });
     } catch (error: unknown) {

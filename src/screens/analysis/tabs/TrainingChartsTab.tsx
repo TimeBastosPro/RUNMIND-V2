@@ -171,6 +171,17 @@ export default function TrainingChartsTab() {
     fetchTrainingSessions();
   }, [fetchTrainingSessions]);
 
+  // Logs de debug
+  useEffect(() => {
+    console.log('🔍 TrainingChartsTab - trainingSessions:', trainingSessions);
+    console.log('🔍 TrainingChartsTab - selectedAnalysis:', selectedAnalysis);
+    console.log('🔍 TrainingChartsTab - customStartDate:', customStartDate);
+    console.log('🔍 TrainingChartsTab - customEndDate:', customEndDate);
+    console.log('🔍 TrainingChartsTab - data atual:', new Date());
+    console.log('🔍 TrainingChartsTab - completedSessions:', trainingSessions.filter(t => t.status === 'completed'));
+    console.log('🔍 TrainingChartsTab - plannedSessions:', trainingSessions.filter(t => t.status === 'planned'));
+  }, [trainingSessions, selectedAnalysis, customStartDate, customEndDate]);
+
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
   const analytics = calculateAnalytics();
   
@@ -213,8 +224,15 @@ export default function TrainingChartsTab() {
                    selectedAnalysis === 'planned' ? plannedSessions : 
                    completedSessions; // Para comparação, usar realizados como base
 
+    console.log('🔍 getMetricData - sessions antes do filtro:', sessions);
+    console.log('🔍 getMetricData - selectedPeriod:', selectedPeriod);
+    console.log('🔍 getMetricData - customStartDate:', customStartDate);
+    console.log('🔍 getMetricData - customEndDate:', customEndDate);
+
     // Filtrar dados por período
     const filteredSessions = filterDataByPeriod(sessions, selectedPeriod, customStartDate, customEndDate);
+
+    console.log('🔍 getMetricData - filteredSessions:', filteredSessions);
 
     return filteredSessions.map(session => {
       let value = 0;

@@ -33,6 +33,11 @@ export default function PeriodSelector({
   const startDate = customStartDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const endDate = customEndDate || new Date();
 
+  // Calcular limites de data (30 dias antes e 30 dias após a data atual)
+  const today = new Date();
+  const minAllowedDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const maxAllowedDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+
   const handleStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartPicker(Platform.OS === 'ios');
     if (selectedDate && onCustomDateChange) {
@@ -138,6 +143,7 @@ export default function PeriodSelector({
                         minHeight: Platform.OS === 'web' ? 36 : 32,
                         boxSizing: 'border-box',
                       }}
+                      min={formatDateForInput(minAllowedDate)}
                       max={formatDateForInput(tempEndDate)}
                     />
                   </View>
@@ -163,8 +169,8 @@ export default function PeriodSelector({
                         boxSizing: 'border-box',
                       }}
                       min={formatDateForInput(tempStartDate)}
-                      max={formatDateForInput(new Date())}
-                                         />
+                      max={formatDateForInput(maxAllowedDate)}
+                    />
                    </View>
                 </View>
                 
@@ -196,6 +202,7 @@ export default function PeriodSelector({
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={handleStartDateChange}
+            minimumDate={minAllowedDate}
             maximumDate={endDate}
           />
         )}
@@ -207,7 +214,7 @@ export default function PeriodSelector({
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={handleEndDateChange}
             minimumDate={startDate}
-            maximumDate={new Date()}
+            maximumDate={maxAllowedDate}
           />
         )}
       </Card.Content>
