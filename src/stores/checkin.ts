@@ -179,6 +179,19 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
       if (error) throw error;
+      
+      console.log('🔍 DEBUG - Checkins carregados:', {
+        total: data?.length || 0,
+        startDate: startDate.toISOString().split('T')[0],
+        days: days,
+        sampleData: data?.slice(0, 3)?.map(c => ({
+          date: c.date,
+          sleep_quality_score: c.sleep_quality_score,
+          mood_score: c.mood_score,
+          energy_score: c.energy_score
+        }))
+      });
+      
       set({ recentCheckins: (data as RecentCheckin[]) || [], isLoading: false, error: null });
     } catch (error: unknown) {
       console.error('Error loading recent checkins:', error);
@@ -277,7 +290,13 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         clima: trainingData.clima ? JSON.stringify(trainingData.clima) : null,
       };
       
-      console.log('Salvando treino:', upsertData);
+      console.log('🔍 DEBUG - saveTrainingSession - Dados sendo enviados para o banco:', {
+        ...upsertData,
+        'planned_distance_km': upsertData.planned_distance_km,
+        'planned_duration_hours': upsertData.planned_duration_hours,
+        'planned_duration_minutes': upsertData.planned_duration_minutes,
+        'trainingData original': trainingData
+      });
       
       const { data, error } = await supabase
         .from('training_sessions')
@@ -286,6 +305,18 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .single();
         
       if (error) throw error;
+      
+      console.log('🔍 DEBUG - saveTrainingSession - Dados retornados do banco:', {
+        id: data.id,
+        title: data.title,
+        status: data.status,
+        'planned_distance_km': data.planned_distance_km,
+        'planned_duration_hours': data.planned_duration_hours,
+        'planned_duration_minutes': data.planned_duration_minutes,
+        'distance_km': data.distance_km,
+        'duracao_horas': data.duracao_horas,
+        'duracao_minutos': data.duracao_minutos
+      });
       
       // Atualizar o store local
       set(state => ({
@@ -348,8 +379,6 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { throw new Error('Usuário não autenticado'); }
       
-      console.log('🔍 fetchTrainingSessions - user:', user.id);
-      
       // Calcular intervalo amplo se não fornecido
       let _startDate = startDate;
       let _endDate = endDate;
@@ -363,9 +392,6 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         _endDate = end.toISOString().split('T')[0];
       }
       
-      console.log('🔍 fetchTrainingSessions - _startDate:', _startDate);
-      console.log('🔍 fetchTrainingSessions - _endDate:', _endDate);
-      
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
@@ -374,10 +400,20 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
         
-      console.log('🔍 fetchTrainingSessions - data bruta:', data);
-      console.log('🔍 fetchTrainingSessions - error:', error);
-        
       if (error) throw error;
+      
+      console.log('🔍 DEBUG - Treinos carregados do banco:', data?.map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        date: t.training_date,
+        'planned_distance_km': t.planned_distance_km,
+        'planned_duration_hours': t.planned_duration_hours,
+        'planned_duration_minutes': t.planned_duration_minutes,
+        'distance_km': t.distance_km,
+        'duracao_horas': t.duracao_horas,
+        'duracao_minutos': t.duracao_minutos
+      })));
       
       // Processar campos JSON
       const processedData = (data || []).map(session => ({
@@ -385,8 +421,6 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         sensacoes: session.sensacoes ? JSON.parse(session.sensacoes) : [],
         clima: session.clima ? JSON.parse(session.clima) : [],
       }));
-      
-      console.log('🔍 fetchTrainingSessions - processedData:', processedData);
       
       set({ trainingSessions: processedData, isLoading: false, error: null });
     } catch (error: unknown) {
@@ -410,8 +444,10 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       if (typeof t.duration_minutes === 'number') {
         duration = t.duration_minutes;
       } else if (t.duration_hours || t.duration_minutes) {
-        const hours = t.duration_hours ? parseInt(t.duration_hours) : 0;
-        const minutes = t.duration_minutes ? parseInt(t.duration_minutes) : 0;
+        const hours = t.duration_hours && t.duration_hours !== '' ? 
+          (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
+        const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
+          (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
         duration = hours * 60 + minutes;
       }
       
@@ -459,8 +495,10 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         if (typeof t.duration_minutes === 'number') {
           duration = t.duration_minutes;
         } else if (t.duration_hours || t.duration_minutes) {
-          const hours = t.duration_hours ? parseInt(t.duration_hours) : 0;
-          const minutes = t.duration_minutes ? parseInt(t.duration_minutes) : 0;
+          const hours = t.duration_hours && t.duration_hours !== '' ? 
+            (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
+          const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
+            (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
           duration = hours * 60 + minutes;
         }
         
@@ -482,14 +520,18 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       })
       .map(t => {
         const planned = plannedSessions.find(p => p.training_date === t.training_date)!;
-        const plannedDuration = (planned.planned_duration_hours ? parseInt(planned.planned_duration_hours) * 60 : 0) + 
-                               (planned.planned_duration_minutes ? parseInt(planned.planned_duration_minutes) : 0);
+        const plannedDuration = (planned.planned_duration_hours && planned.planned_duration_hours !== '' ? 
+          (isNaN(parseInt(planned.planned_duration_hours)) ? 0 : parseInt(planned.planned_duration_hours)) * 60 : 0) + 
+          (planned.planned_duration_minutes && planned.planned_duration_minutes !== '' ? 
+          (isNaN(parseInt(planned.planned_duration_minutes)) ? 0 : parseInt(planned.planned_duration_minutes)) : 0);
         let actualDuration = 0;
         if (typeof t.duration_minutes === 'number') {
           actualDuration = t.duration_minutes;
         } else if (t.duration_hours || t.duration_minutes) {
-          const hours = t.duration_hours ? parseInt(t.duration_hours) : 0;
-          const minutes = t.duration_minutes ? parseInt(t.duration_minutes) : 0;
+          const hours = t.duration_hours && t.duration_hours !== '' ? 
+            (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
+          const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
+            (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
           actualDuration = hours * 60 + minutes;
         }
         
@@ -519,9 +561,16 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         };
       }
       
-      const duration = t.duration_minutes || 
-        (t.duration_hours ? parseInt(t.duration_hours) * 60 : 0) + 
-        (t.duration_minutes ? parseInt(t.duration_minutes) : 0);
+      let duration = 0;
+      if (typeof t.duration_minutes === 'number') {
+        duration = t.duration_minutes;
+      } else if (t.duration_hours || t.duration_minutes) {
+        const hours = t.duration_hours && t.duration_hours !== '' ? 
+          (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
+        const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
+          (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
+        duration = hours * 60 + minutes;
+      }
       
       acc[modality].count++;
       acc[modality].totalDistance += t.distance_km || 0;

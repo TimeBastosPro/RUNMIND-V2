@@ -54,13 +54,39 @@ const METRICS = [
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('sleep_quality');
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
-  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+  
+  // Calcular datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
+  
+  const defaultStartDate = new Date(currentWeekStart);
+  defaultStartDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
+  
+  const defaultEndDate = new Date(currentWeekStart);
+  defaultEndDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
+  
+  const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
+  const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
   const { recentCheckins, loadRecentCheckins } = useCheckinStore();
 
   useEffect(() => {
+    console.log('🔍 DEBUG - WellbeingChartsTab montada, carregando checkins...');
     loadRecentCheckins(30);
   }, [loadRecentCheckins]);
+
+  // Log quando os dados mudarem
+  useEffect(() => {
+    console.log('🔍 DEBUG - recentCheckins atualizado:', {
+      total: recentCheckins.length,
+      sample: recentCheckins.slice(0, 3).map(c => ({
+        date: c.date,
+        sleep_quality: c.sleep_quality_score,
+        mood: c.mood_score,
+        energy: c.energy_score
+      }))
+    });
+  }, [recentCheckins]);
 
   const selectedMetricInfo = METRICS.find(m => m.value === selectedMetric);
 
@@ -71,15 +97,34 @@ export default function WellbeingChartsTab() {
 
   // Processar dados reais dos checkins
   const getMetricData = () => {
+    console.log('🔍 DEBUG - Wellbeing getMetricData:', {
+      recentCheckins: recentCheckins?.length || 0,
+      selectedMetric: selectedMetric,
+      selectedMetricInfo: selectedMetricInfo,
+      field: selectedMetricInfo?.field
+    });
+
     if (!recentCheckins || recentCheckins.length === 0) {
+      console.log('🔍 DEBUG - Nenhum checkin encontrado');
       return [];
     }
 
     const field = selectedMetricInfo?.field;
-    if (!field) return [];
+    if (!field) {
+      console.log('🔍 DEBUG - Campo não encontrado para métrica:', selectedMetric);
+      return [];
+    }
 
     // Filtrar dados por período
     const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod, customStartDate, customEndDate);
+    
+    console.log('🔍 DEBUG - Checkins filtrados:', {
+      total: filteredCheckins.length,
+      sampleData: filteredCheckins.slice(0, 3).map(c => ({
+        date: c.date,
+        [field]: c[field as keyof typeof c]
+      }))
+    });
 
     return filteredCheckins
       .map(checkin => {

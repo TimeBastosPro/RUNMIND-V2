@@ -30,9 +30,16 @@ export function filterDataByPeriod<T extends DateFilterable>(
     startDate = customStartDate;
     endDate = customEndDate;
   } else {
-    // Datas padrão: últimos 30 dias
-    endDate = new Date();
-    startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // Datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+    const today = new Date();
+    const currentWeekStart = new Date(today);
+    currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
+    
+    endDate = new Date(currentWeekStart);
+    endDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
+    
+    startDate = new Date(currentWeekStart);
+    startDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
   }
 
   // Normalizar as datas para início e fim do dia
@@ -59,7 +66,12 @@ export function filterDataByPeriod<T extends DateFilterable>(
     itemDate.setHours(0, 0, 0, 0);
     
     const isInRange = itemDate >= startDate && itemDate <= endDate;
-    console.log('🔍 filterDataByPeriod - item:', item, 'itemDate:', itemDate, 'isInRange:', isInRange);
+    console.log('🔍 filterDataByPeriod - item:', {
+      id: item.id,
+      date: dateString,
+      itemDate: itemDate.toISOString(),
+      isInRange: isInRange
+    });
     return isInRange;
   });
 

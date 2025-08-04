@@ -14,7 +14,7 @@ const TRAINING_METRICS = [
     icon: 'map-marker-distance',
     color: '#4CAF50',
     unit: 'km',
-    planned: 'planned_distance_km',
+    planned: 'distance_km',
     completed: 'distance_km',
   },
   { 
@@ -23,8 +23,8 @@ const TRAINING_METRICS = [
     icon: 'clock-outline',
     color: '#2196F3',
     unit: 'min',
-    planned: 'planned_duration',
-    completed: 'duration',
+    planned: 'duracao',
+    completed: 'duracao',
   },
   { 
     label: 'Elevação Positiva', 
@@ -78,7 +78,7 @@ const TRAINING_METRICS = [
     value: 'intensity',
     icon: 'speedometer',
     color: '#F44336',
-    unit: 'Z1-Z5',
+    unit: '1-5',
     planned: 'intensidade',
     completed: null, // Não existe no realizado
   },
@@ -163,24 +163,44 @@ export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
-  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+  
+  // Calcular datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
+  
+  const defaultStartDate = new Date(currentWeekStart);
+  defaultStartDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
+  
+  const defaultEndDate = new Date(currentWeekStart);
+  defaultEndDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
+  
+  const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
+  const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
   const { trainingSessions, fetchTrainingSessions, calculateAnalytics } = useCheckinStore();
 
   useEffect(() => {
+    console.log('🔍 DEBUG - TrainingChartsTab montada, carregando treinos...');
     fetchTrainingSessions();
   }, [fetchTrainingSessions]);
 
-  // Logs de debug
+  // Log quando os dados mudarem
   useEffect(() => {
-    console.log('🔍 TrainingChartsTab - trainingSessions:', trainingSessions);
-    console.log('🔍 TrainingChartsTab - selectedAnalysis:', selectedAnalysis);
-    console.log('🔍 TrainingChartsTab - customStartDate:', customStartDate);
-    console.log('🔍 TrainingChartsTab - customEndDate:', customEndDate);
-    console.log('🔍 TrainingChartsTab - data atual:', new Date());
-    console.log('🔍 TrainingChartsTab - completedSessions:', trainingSessions.filter(t => t.status === 'completed'));
-    console.log('🔍 TrainingChartsTab - plannedSessions:', trainingSessions.filter(t => t.status === 'planned'));
-  }, [trainingSessions, selectedAnalysis, customStartDate, customEndDate]);
+    console.log('🔍 DEBUG - trainingSessions atualizado:', {
+      total: trainingSessions.length,
+      planned: trainingSessions.filter(t => t.status === 'planned').length,
+      completed: trainingSessions.filter(t => t.status === 'completed').length,
+      sample: trainingSessions.slice(0, 2).map(t => ({
+        id: t.id,
+        status: t.status,
+        date: t.training_date,
+        planned_distance: t.distance_km,
+        actual_distance: t.distance_km
+      }))
+    });
+  }, [trainingSessions]);
+
+
 
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
   const analytics = calculateAnalytics();
@@ -220,116 +240,208 @@ export default function TrainingChartsTab() {
 
   // Calcular dados para a métrica selecionada
   const getMetricData = () => {
-    const sessions = selectedAnalysis === 'completed' ? completedSessions : 
-                   selectedAnalysis === 'planned' ? plannedSessions : 
-                   completedSessions; // Para comparação, usar realizados como base
+    console.log('🔍 DEBUG - getMetricData INÍCIO:', {
+      trainingSessionsTotal: trainingSessions.length,
+      selectedPeriod: selectedPeriod,
+      customStartDate: customStartDate?.toISOString(),
+      customEndDate: customEndDate?.toISOString(),
+      selectedMetric: selectedMetric,
+      selectedAnalysis: selectedAnalysis,
+      sampleTrainingSessions: trainingSessions.slice(0, 3).map(t => ({
+        id: t.id,
+        status: t.status,
+        date: t.training_date,
+        planned_distance: t.distance_km,
+        actual_distance: t.distance_km,
+        planned_duration_hours: t.duracao_horas,
+        planned_duration_minutes: t.duracao_minutos,
+        duration_hours: t.duracao_horas,
+        duration_minutes: t.duracao_minutos
+      }))
+    });
 
-    console.log('🔍 getMetricData - sessions antes do filtro:', sessions);
-    console.log('🔍 getMetricData - selectedPeriod:', selectedPeriod);
-    console.log('🔍 getMetricData - customStartDate:', customStartDate);
-    console.log('🔍 getMetricData - customEndDate:', customEndDate);
+    // Filtrar dados por período primeiro
+    const allFilteredSessions = filterDataByPeriod(trainingSessions, selectedPeriod, customStartDate, customEndDate);
+    
+    // Depois separar por tipo de análise
+    const sessions = selectedAnalysis === 'completed' ? 
+      allFilteredSessions.filter(s => s.status === 'completed') : 
+      selectedAnalysis === 'planned' ? 
+      allFilteredSessions.filter(s => s.status === 'planned') : 
+      allFilteredSessions; // Para comparação, usar todos os dados
+    
+    console.log('🔍 DEBUG - getMetricData:', {
+      selectedMetric,
+      selectedAnalysis,
+      'trainingSessions total': trainingSessions.length,
+      'allFilteredSessions': allFilteredSessions.length,
+      'sessions filtrados por tipo': sessions.length,
+      'primeiro treino planejado': allFilteredSessions.find(s => s.status === 'planned') ? {
+        id: allFilteredSessions.find(s => s.status === 'planned')?.id,
+        status: allFilteredSessions.find(s => s.status === 'planned')?.status,
+        planned_distance_km: allFilteredSessions.find(s => s.status === 'planned')?.distance_km,
+        planned_duration_hours: allFilteredSessions.find(s => s.status === 'planned')?.duracao_horas,
+        planned_duration_minutes: allFilteredSessions.find(s => s.status === 'planned')?.duracao_minutos
+      } : null
+    });
 
-    // Filtrar dados por período
-    const filteredSessions = filterDataByPeriod(sessions, selectedPeriod, customStartDate, customEndDate);
-
-    console.log('🔍 getMetricData - filteredSessions:', filteredSessions);
-
-    return filteredSessions.map(session => {
+    const result = sessions.map(session => {
       let value = 0;
       let plannedValue = null;
       let actualValue = null;
       
       // Verificar se a métrica está disponível para o tipo de análise
       const metricInfo = selectedMetricInfo;
-      if (!metricInfo) return null;
+      if (!metricInfo) {
+        return null;
+      }
       
-      if (selectedAnalysis === 'planned' && !metricInfo.planned) return null;
-      if (selectedAnalysis === 'completed' && !metricInfo.completed) return null;
-      
+      if (selectedAnalysis === 'planned' && !metricInfo.planned) {
+        return null;
+      }
+      if (selectedAnalysis === 'completed' && !metricInfo.completed) {
+        return null;
+      }
+
       switch (selectedMetric) {
         case 'distance':
-          value = selectedAnalysis === 'planned' ? 
-            (session.planned_distance_km || 0) : 
-            (session.distance_km || 0);
-          if (selectedAnalysis === 'comparison') {
-            plannedValue = session.planned_distance_km || 0;
-            actualValue = session.distance_km || 0;
+          if (selectedAnalysis === 'planned') {
+            // Para treinos planejados, usar distance_km
+            value = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
+          } else if (selectedAnalysis === 'completed') {
+            value = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
+          } else if (selectedAnalysis === 'comparison') {
+            plannedValue = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
+            actualValue = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
+            value = actualValue; // Para comparação, usar o valor realizado como principal
           }
+          console.log('🔍 DEBUG - Distance calculation:', {
+            sessionId: session.id,
+            selectedAnalysis,
+            'session.distance_km': session.distance_km,
+            'calculated value': value,
+            'plannedValue': plannedValue,
+            'actualValue': actualValue
+          });
           break;
           
         case 'duration':
           if (selectedAnalysis === 'planned') {
-            const plannedHours = session.planned_duration_hours ? parseInt(session.planned_duration_hours) : 0;
-            const plannedMinutes = session.planned_duration_minutes ? parseInt(session.planned_duration_minutes) : 0;
+            // Para treinos planejados, usar duracao_horas e duracao_minutos
+            const plannedHours = session.duracao_horas && session.duracao_horas !== '' ? 
+              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
+            const plannedMinutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
+              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
             value = plannedHours * 60 + plannedMinutes;
+            console.log('🔍 DEBUG - Duration calculation (planned):', {
+              sessionId: session.id,
+              'session.duracao_horas': session.duracao_horas,
+              'session.duracao_minutos': session.duracao_minutos,
+              'plannedHours': plannedHours,
+              'plannedMinutes': plannedMinutes,
+              'calculated value': value
+            });
           } else {
-            const hours = session.duration_hours ? parseInt(session.duration_hours) : 0;
-            const minutes = session.duration_minutes ? parseInt(session.duration_minutes) : 0;
+            const hours = session.duracao_horas && session.duracao_horas !== '' ? 
+              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
+            const minutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
+              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
             value = hours * 60 + minutes;
           }
           if (selectedAnalysis === 'comparison') {
-            const plannedHours = session.planned_duration_hours ? parseInt(session.planned_duration_hours) : 0;
-            const plannedMinutes = session.planned_duration_minutes ? parseInt(session.planned_duration_minutes) : 0;
+            const plannedHours = session.duracao_horas && session.duracao_horas !== '' ? 
+              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
+            const plannedMinutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
+              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
             plannedValue = plannedHours * 60 + plannedMinutes;
-            const hours = session.duration_hours ? parseInt(session.duration_hours) : 0;
-            const minutes = session.duration_minutes ? parseInt(session.duration_minutes) : 0;
+            const hours = session.duracao_horas && session.duracao_horas !== '' ? 
+              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
+            const minutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
+              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
             actualValue = hours * 60 + minutes;
           }
           break;
           
         case 'elevation_gain':
           value = selectedAnalysis === 'planned' ? 
-            (session.planned_elevation_gain_meters || 0) : 
+            (session.elevation_gain_meters || 0) : 
             (session.elevation_gain_meters || 0);
           if (selectedAnalysis === 'comparison') {
-            plannedValue = session.planned_elevation_gain_meters || 0;
+            plannedValue = session.elevation_gain_meters || 0;
             actualValue = session.elevation_gain_meters || 0;
           }
           break;
           
         case 'elevation_loss':
           value = selectedAnalysis === 'planned' ? 
-            (session.planned_elevation_loss_meters || 0) : 
+            (session.elevation_loss_meters || 0) : 
             (session.elevation_loss_meters || 0);
           if (selectedAnalysis === 'comparison') {
-            plannedValue = session.planned_elevation_loss_meters || 0;
+            plannedValue = session.elevation_loss_meters || 0;
             actualValue = session.elevation_loss_meters || 0;
           }
           break;
           
         case 'avg_heart_rate':
           value = selectedAnalysis === 'planned' ? 
-            (session.planned_avg_heart_rate || 0) : 
+            (session.avg_heart_rate || 0) : 
             (session.avg_heart_rate || 0);
           if (selectedAnalysis === 'comparison') {
-            plannedValue = session.planned_avg_heart_rate || 0;
+            plannedValue = session.avg_heart_rate || 0;
             actualValue = session.avg_heart_rate || 0;
           }
           break;
           
         case 'perceived_effort':
           value = selectedAnalysis === 'planned' ? 
-            (session.planned_perceived_effort || 0) : 
+            (session.perceived_effort || 0) : 
             (session.perceived_effort || 0);
           if (selectedAnalysis === 'comparison') {
-            plannedValue = session.planned_perceived_effort || 0;
+            plannedValue = session.perceived_effort || 0;
             actualValue = session.perceived_effort || 0;
           }
           break;
           
         case 'effort_level':
-          value = selectedAnalysis === 'planned' ? 
-            (parseInt(session.esforco || '0') || 0) : 
-            (session.effort_level || 0);
+          if (selectedAnalysis === 'planned') {
+            // Para treinos planejados, verificar se esforco existe, senão usar effort_level
+            value = session.esforco ? 
+              (parseInt(session.esforco) || 0) : 
+              (session.effort_level || 0);
+          } else {
+            value = session.effort_level || 0;
+          }
           if (selectedAnalysis === 'comparison') {
-            plannedValue = parseInt(session.esforco || '0') || 0;
+            plannedValue = session.esforco ? 
+              (parseInt(session.esforco) || 0) : 
+              (session.effort_level || 0);
             actualValue = session.effort_level || 0;
           }
           break;
           
         case 'intensity':
-          value = selectedAnalysis === 'planned' ? 
-            (parseInt(session.intensidade as string) || 0) : 0;
+          if (selectedAnalysis === 'planned') {
+            // Converter zonas Z1-Z5 para valores numéricos 1-5
+            if (session.intensidade) {
+              const intensityStr = session.intensidade.toString().toUpperCase();
+              if (intensityStr.startsWith('Z')) {
+                const zoneNumber = parseInt(intensityStr.substring(1));
+                value = zoneNumber >= 1 && zoneNumber <= 5 ? zoneNumber : 0;
+              } else {
+                // Se não for formato Z1-Z5, tentar converter diretamente
+                value = parseInt(intensityStr) || 0;
+              }
+            } else {
+              value = 0;
+            }
+            console.log('🔍 DEBUG - Intensity calculation (planned):', {
+              sessionId: session.id,
+              'session.intensidade': session.intensidade,
+              'calculated value': value
+            });
+          } else {
+            value = 0; // Intensidade só existe para treinos planejados
+          }
           break;
           
         case 'session_satisfaction':
@@ -370,17 +482,45 @@ export default function TrainingChartsTab() {
           break;
       }
       
+      // Para treinos planejados, sempre retornar um item mesmo se o valor for 0
+      // Para treinos realizados, só retornar se houver valor
+      if (selectedAnalysis === 'completed' && value === 0) {
+        return null;
+      }
+
       return {
         date: session.training_date,
         value: value,
         plannedValue: plannedValue,
         actualValue: actualValue,
       };
-    }).filter(item => item && item.value > 0);
+    }).filter(item => item !== null); // Remover apenas itens null, não itens com value 0
+    
+    return result;
   };
 
   const metricData = getMetricData();
   const maxValue = Math.max(...metricData.map(d => d?.value || 0), 1);
+
+  // Log detalhado dos dados processados
+  console.log('🔍 DEBUG - Dados finais do gráfico:', {
+    metricDataLength: metricData.length,
+    maxValue: maxValue,
+    selectedMetric: selectedMetric,
+    selectedAnalysis: selectedAnalysis,
+    sampleData: metricData.slice(0, 3).map(d => ({
+      date: d?.date,
+      value: d?.value,
+      plannedValue: d?.plannedValue,
+      actualValue: d?.actualValue
+    })),
+    allData: metricData.map(d => ({
+      date: d?.date,
+      value: d?.value,
+      plannedValue: d?.plannedValue,
+      actualValue: d?.actualValue
+    }))
+  });
 
   // Calcular resumo
   const getSummary = () => {
@@ -392,8 +532,8 @@ export default function TrainingChartsTab() {
     const totalPlanned = filteredPlannedSessions.length;
     const totalDistance = filteredCompletedSessions.reduce((sum, s) => sum + (s.distance_km || 0), 0);
     const totalDuration = filteredCompletedSessions.reduce((sum, s) => {
-      const hours = s.duration_hours ? parseInt(s.duration_hours) : 0;
-      const minutes = s.duration_minutes ? parseInt(s.duration_minutes) : 0;
+      const hours = s.duracao_horas ? parseInt(s.duracao_horas) : 0;
+      const minutes = s.duracao_minutos ? parseInt(s.duracao_minutos) : 0;
       return sum + hours * 60 + minutes;
     }, 0);
     const avgIntensity = filteredCompletedSessions.length > 0 ? 
@@ -411,6 +551,15 @@ export default function TrainingChartsTab() {
   };
 
   const summary = getSummary();
+
+  // Log antes da renderização
+  console.log('🔍 DEBUG - Antes da renderização:', {
+    metricDataLength: metricData.length,
+    maxValue: maxValue,
+    selectedAnalysis: selectedAnalysis,
+    selectedMetric: selectedMetric,
+    summary: summary
+  });
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -495,59 +644,63 @@ export default function TrainingChartsTab() {
                 <Text style={styles.comparisonText}> (Planejado vs Realizado)</Text>
               )}
             </View>
-            <Text style={styles.unitText}>{selectedMetricInfo?.unit}</Text>
+            <Text style={styles.unitText}>
+              {selectedMetric === 'intensity' && selectedAnalysis === 'planned' ? 'Z1-Z5' : selectedMetricInfo?.unit}
+            </Text>
           </View>
           
           <View style={styles.chartContainer}>
             {metricData.length > 0 ? (
-              <View style={styles.chartBars}>
-                {metricData.slice(-7).map((item, index) => (
-                  <View key={index} style={styles.barWrapper}>
-                    {selectedAnalysis === 'comparison' ? (
-                      <>
-                        {/* Barra planejada */}
+                <View style={styles.chartBars}>
+                  {metricData.slice(-7).map((item, index) => (
+                    <View key={index} style={styles.barWrapper}>
+                      {selectedAnalysis === 'comparison' ? (
+                        <>
+                          {/* Barra planejada */}
+                          <View 
+                            style={[
+                              styles.bar,
+                              styles.plannedBar,
+                              {
+                                height: ((item?.plannedValue || 0) / maxValue) * 100,
+                              }
+                            ]}
+                          />
+                          {/* Barra realizada */}
+                          <View 
+                            style={[
+                              styles.bar,
+                              styles.completedBar,
+                              {
+                                height: ((item?.actualValue || 0) / maxValue) * 100,
+                              }
+                            ]}
+                          />
+                        </>
+                      ) : (
                         <View 
                           style={[
                             styles.bar,
-                            styles.plannedBar,
                             {
-                              height: ((item?.plannedValue || 0) / maxValue) * 100,
+                              height: ((item?.value || 0) / maxValue) * 100,
+                              backgroundColor: selectedMetricInfo?.color
                             }
                           ]}
                         />
-                        {/* Barra realizada */}
-                        <View 
-                          style={[
-                            styles.bar,
-                            styles.completedBar,
-                            {
-                              height: ((item?.actualValue || 0) / maxValue) * 100,
-                            }
-                          ]}
-                        />
-                      </>
-                    ) : (
-                      <View 
-                        style={[
-                          styles.bar,
-                          {
-                            height: ((item?.value || 0) / maxValue) * 100,
-                            backgroundColor: selectedMetricInfo?.color
-                          }
-                        ]}
-                      />
-                    )}
-                    <Text style={styles.barLabel}>
-                      {new Date(item?.date || '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                    </Text>
-                    <Text style={styles.barValue}>
-                      {selectedAnalysis === 'comparison' ? 
-                        `${item?.actualValue || 0}/${item?.plannedValue || 0}` : 
-                        (item?.value || 0).toFixed(1)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+                      )}
+                      <Text style={styles.barLabel}>
+                        {new Date(item?.date || '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      </Text>
+                      <Text style={styles.barValue}>
+                        {selectedAnalysis === 'comparison' ? 
+                          `${item?.actualValue || 0}/${item?.plannedValue || 0}` : 
+                          selectedMetric === 'intensity' && selectedAnalysis === 'planned' ?
+                          `Z${item?.value || 0}` :
+                          (item?.value || 0).toFixed(1)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
             ) : (
               <View style={styles.noDataContainer}>
                 <MaterialCommunityIcons name="chart-line" size={48} color="#ccc" />

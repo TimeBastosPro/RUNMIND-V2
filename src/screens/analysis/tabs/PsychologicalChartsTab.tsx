@@ -42,10 +42,22 @@ const TRAINING_METRICS = [
 ];
 
 export default function PsychologicalChartsTab() {
-  const [selectedMetric, setSelectedMetric] = useState('distance');
+  const [selectedMetric, setSelectedMetric] = useState('confidence');
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
-  const [customStartDate, setCustomStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+  
+  // Calcular datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
+  
+  const defaultStartDate = new Date(currentWeekStart);
+  defaultStartDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
+  
+  const defaultEndDate = new Date(currentWeekStart);
+  defaultEndDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
+  
+  const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
+  const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
   const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {

@@ -26,17 +26,28 @@ export default function PeriodSelector({
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
-  const [tempStartDate, setTempStartDate] = useState<Date>(customStartDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const [tempEndDate, setTempEndDate] = useState<Date>(customEndDate || new Date());
+  
+  // Calcular datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
+  
+  const defaultStartDate = new Date(currentWeekStart);
+  defaultStartDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
+  
+  const defaultEndDate = new Date(currentWeekStart);
+  defaultEndDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
+  
+  const [tempStartDate, setTempStartDate] = useState<Date>(customStartDate || defaultStartDate);
+  const [tempEndDate, setTempEndDate] = useState<Date>(customEndDate || defaultEndDate);
   
   // Usar datas padrão se não fornecidas
-  const startDate = customStartDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const endDate = customEndDate || new Date();
+  const startDate = customStartDate || defaultStartDate;
+  const endDate = customEndDate || defaultEndDate;
 
-  // Calcular limites de data (30 dias antes e 30 dias após a data atual)
-  const today = new Date();
-  const minAllowedDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const maxAllowedDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  // Calcular limites de data (5 semanas antes e 5 semanas depois da semana atual)
+  const minAllowedDate = new Date(currentWeekStart.getTime() - (5 * 7 * 24 * 60 * 60 * 1000));
+  const maxAllowedDate = new Date(currentWeekStart.getTime() + (5 * 7 * 24 * 60 * 60 * 1000) + (6 * 24 * 60 * 60 * 1000));
 
   const handleStartDateChange = (event: any, selectedDate?: Date) => {
     setShowStartPicker(Platform.OS === 'ios');

@@ -76,25 +76,17 @@ export interface Profile {
     esforco?: string; // 1-5 (muito leve a muito forte)
     intensidade?: string | number; // Z1, Z2, Z3, Z4, Z5 ou 1-10
     
-    // Métricas planejadas
-    planned_distance_km?: number | null;
-    planned_distance_m?: string;
-    planned_duration_hours?: string;
-    planned_duration_minutes?: string;
-    planned_elevation_gain_meters?: number | null;
-    planned_elevation_loss_meters?: number | null;
-    planned_perceived_effort?: number; // 1-10
-    planned_avg_heart_rate?: number | null;
+    // Métricas planejadas (usando os campos que existem no banco)
+    distance_km?: number | null; // Usado tanto para planejado quanto realizado
+    distance_m?: string;
+    duracao_horas?: string; // Usado tanto para planejado quanto realizado
+    duracao_minutos?: string; // Usado tanto para planejado quanto realizado
     
     // Observações do planejamento
-    planned_notes?: string;
+    observacoes?: string;
     
     // === DADOS REALIZADOS (quando status = 'completed') ===
     // Métricas realizadas
-    distance_km?: number | null;
-    distance_m?: string;
-    duration_hours?: string;
-    duration_minutes?: string;
     elevation_gain_meters?: number | null;
     elevation_loss_meters?: number | null;
     avg_heart_rate?: number | null;
@@ -106,14 +98,8 @@ export interface Profile {
     sensacoes?: string[]; // Array com as sensações selecionadas
     clima?: string[]; // Array com as condições climáticas
     
-    // Observações do treino realizado
-    observacoes?: string;
-    
     // === CAMPOS LEGACY (mantidos para compatibilidade) ===
     notes?: string;
-    duracao_horas?: string;
-    duracao_minutos?: string;
-    distancia_m?: string;
     effort_level?: number;
     duracao_tipo?: string;
   }

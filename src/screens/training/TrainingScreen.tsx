@@ -396,15 +396,37 @@ export default function TrainingScreen() {
             terreno: planningState.terreno || undefined,
             treino_tipo: planningState.treino_tipo || undefined,
             intensidade: planningState.intensidade || undefined,
-            duracao_horas: planningState.duracao_horas || undefined,
-            duracao_minutos: planningState.duracao_minutos || undefined,
-            distance_km: planningState.distance_km ? Number(planningState.distance_km) : undefined,
+            // CORREÇÃO: Usar os campos que realmente existem no banco
+            distance_km: planningState.distance_km && planningState.distance_km !== '' ? 
+              (isNaN(Number(planningState.distance_km)) ? 0 : Number(planningState.distance_km)) : 
+              undefined,
+            duracao_horas: planningState.duracao_horas && planningState.duracao_horas !== '' ? 
+              planningState.duracao_horas : undefined,
+            duracao_minutos: planningState.duracao_minutos && planningState.duracao_minutos !== '' ? 
+              planningState.duracao_minutos : undefined,
             distancia_m: planningState.distancia_m || undefined,
             observacoes: planningState.observacoes || undefined,
         };
         try {
-            console.log('Salvando treino planejado:', trainingData);
+            console.log('🔍 DEBUG - Salvando treino planejado:', {
+                ...trainingData,
+                'distance_km': trainingData.distance_km,
+                'duracao_horas': trainingData.duracao_horas,
+                'duracao_minutos': trainingData.duracao_minutos,
+                'planningState.distance_km': planningState.distance_km,
+                'planningState.duracao_horas': planningState.duracao_horas,
+                'planningState.duracao_minutos': planningState.duracao_minutos,
+                'tipos dos dados': {
+                    'distance_km type': typeof trainingData.distance_km,
+                    'duracao_horas type': typeof trainingData.duracao_horas,
+                    'duracao_minutos type': typeof trainingData.duracao_minutos,
+                    'planningState.distance_km type': typeof planningState.distance_km,
+                    'planningState.duracao_horas type': typeof planningState.duracao_horas,
+                    'planningState.duracao_minutos type': typeof planningState.duracao_minutos
+                }
+            });
             await saveTrainingSession(trainingData);
+            console.log('✅ Treino planejado salvo com sucesso no banco');
             await fetchTrainingSessions();
             setModalPlanVisible(false);
             Alert.alert("✅ Sucesso", "Treino planejado salvo com sucesso!");
