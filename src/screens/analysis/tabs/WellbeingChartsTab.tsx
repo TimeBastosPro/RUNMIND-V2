@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Card, Text, Chip } from 'react-native-paper';
+import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
-import PeriodSelector, { PeriodType } from '../../../components/ui/PeriodSelector';
 import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
 
 const METRICS = [
@@ -53,18 +52,15 @@ const METRICS = [
 
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('sleep_quality');
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
   
-  // Calcular datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+  // Calcular datas padrão: semana atual (segunda a domingo)
   const today = new Date();
   const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
+  currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
   
   const defaultStartDate = new Date(currentWeekStart);
-  defaultStartDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
-  
   const defaultEndDate = new Date(currentWeekStart);
-  defaultEndDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
+  defaultEndDate.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
   
   const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
   const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
@@ -72,7 +68,7 @@ export default function WellbeingChartsTab() {
 
   useEffect(() => {
     console.log('🔍 DEBUG - WellbeingChartsTab montada, carregando checkins...');
-    loadRecentCheckins(30);
+    loadRecentCheckins();
   }, [loadRecentCheckins]);
 
   // Log quando os dados mudarem
@@ -81,63 +77,88 @@ export default function WellbeingChartsTab() {
       total: recentCheckins.length,
       sample: recentCheckins.slice(0, 3).map(c => ({
         date: c.date,
-        sleep_quality: c.sleep_quality_score,
-        mood: c.mood_score,
-        energy: c.energy_score
+        sleep_quality_score: c.sleep_quality_score,
+        mood_score: c.mood_score,
+        energy_score: c.energy_score
       }))
     });
   }, [recentCheckins]);
 
   const selectedMetricInfo = METRICS.find(m => m.value === selectedMetric);
 
-  const handleCustomDateChange = (startDate: Date, endDate: Date) => {
-    setCustomStartDate(startDate);
-    setCustomEndDate(endDate);
+  // Função para navegar entre semanas
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    const currentStart = new Date(customStartDate);
+    if (direction === 'prev') {
+      currentStart.setDate(currentStart.getDate() - 7);
+    } else {
+      currentStart.setDate(currentStart.getDate() + 7);
+    }
+    
+    const newEnd = new Date(currentStart);
+    newEnd.setDate(currentStart.getDate() + 6);
+    
+    setCustomStartDate(currentStart);
+    setCustomEndDate(newEnd);
   };
 
   // Processar dados reais dos checkins
   const getMetricData = () => {
     console.log('🔍 DEBUG - Wellbeing getMetricData:', {
-      recentCheckins: recentCheckins?.length || 0,
+      recentCheckinsTotal: recentCheckins.length,
+      customStartDate: customStartDate?.toISOString(),
+      customEndDate: customEndDate?.toISOString(),
       selectedMetric: selectedMetric,
-      selectedMetricInfo: selectedMetricInfo,
-      field: selectedMetricInfo?.field
-    });
-
-    if (!recentCheckins || recentCheckins.length === 0) {
-      console.log('🔍 DEBUG - Nenhum checkin encontrado');
-      return [];
-    }
-
-    const field = selectedMetricInfo?.field;
-    if (!field) {
-      console.log('🔍 DEBUG - Campo não encontrado para métrica:', selectedMetric);
-      return [];
-    }
-
-    // Filtrar dados por período
-    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod, customStartDate, customEndDate);
-    
-    console.log('🔍 DEBUG - Checkins filtrados:', {
-      total: filteredCheckins.length,
-      sampleData: filteredCheckins.slice(0, 3).map(c => ({
+      selectedMetricField: selectedMetricInfo?.field,
+      sampleCheckins: recentCheckins.slice(0, 3).map(c => ({
         date: c.date,
-        [field]: c[field as keyof typeof c]
+        [selectedMetricInfo?.field || '']: c[selectedMetricInfo?.field as keyof typeof c]
       }))
     });
 
-    return filteredCheckins
-      .map(checkin => {
-        const value = checkin[field as keyof typeof checkin];
-        if (value === undefined || value === null) return null;
-        
-        return {
-          date: checkin.date,
-          value: typeof value === 'number' ? value : parseFloat(value as string) || 0,
-        };
-      })
-      .filter(item => item !== null)
-      .sort((a, b) => new Date(a!.date).getTime() - new Date(b!.date).getTime());
+    // Filtrar dados por período
+    const filteredCheckins = filterDataByPeriod(recentCheckins, 'custom', customStartDate, customEndDate);
+    
+    console.log('🔍 DEBUG - Checkins filtrados:', {
+      total: filteredCheckins.length,
+      sample: filteredCheckins.slice(0, 3).map(c => ({
+        date: c.date,
+        [selectedMetricInfo?.field || '']: c[selectedMetricInfo?.field as keyof typeof c]
+      }))
+    });
+
+    // Sempre retornar 7 dias (segunda a domingo) para consistência visual
+    const weekStart = new Date(customStartDate);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Segunda-feira
+    
+    const weekDays = [];
+    for (let i = 0; i < 7; i++) {
+      const currentDate = new Date(weekStart);
+      currentDate.setDate(weekStart.getDate() + i);
+      
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const checkinForDay = filteredCheckins.find(c => c.date === dateStr);
+      
+      let value = 0;
+      if (checkinForDay && selectedMetricInfo?.field) {
+        const fieldValue = checkinForDay[selectedMetricInfo.field as keyof typeof checkinForDay];
+        value = typeof fieldValue === 'number' ? fieldValue : 0;
+      }
+      
+      weekDays.push({
+        date: dateStr,
+        value: value,
+      });
+    }
+    
+    console.log('🔍 DEBUG - Dados finais do gráfico de bem-estar:', {
+      weekDaysLength: weekDays.length,
+      sampleData: weekDays.slice(0, 3),
+      selectedMetric: selectedMetric,
+      selectedField: selectedMetricInfo?.field
+    });
+    
+    return weekDays;
   };
 
   const metricData = getMetricData();
@@ -184,14 +205,35 @@ export default function WellbeingChartsTab() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Seletor de Período */}
-      <PeriodSelector
-        selectedPeriod={selectedPeriod}
-        onPeriodChange={setSelectedPeriod}
-        customStartDate={customStartDate}
-        customEndDate={customEndDate}
-        onCustomDateChange={handleCustomDateChange}
-      />
+      {/* Navegação Semanal */}
+      <Card style={styles.navigationCard}>
+        <Card.Content>
+          <Text style={styles.sectionTitle}>Período de Análise:</Text>
+          <View style={styles.navigationContainer}>
+            <Button
+              mode="outlined"
+              onPress={() => navigateWeek('prev')}
+              icon="chevron-left"
+              style={styles.navButton}
+            >
+              Semana Anterior
+            </Button>
+            <View style={styles.weekInfo}>
+              <Text style={styles.weekLabel}>
+                {customStartDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} - {customEndDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              </Text>
+            </View>
+            <Button
+              mode="outlined"
+              onPress={() => navigateWeek('next')}
+              icon="chevron-right"
+              style={styles.navButton}
+            >
+              Próxima Semana
+            </Button>
+          </View>
+        </Card.Content>
+      </Card>
       
       {/* Seleção de Métricas */}
       <Card style={styles.metricsCard}>
@@ -249,7 +291,7 @@ export default function WellbeingChartsTab() {
                       ]}
                     />
                     <Text style={styles.barLabel}>
-                      {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][index]}
                     </Text>
                     <Text style={styles.barValue}>{item.value.toFixed(1)}</Text>
                   </View>
@@ -272,7 +314,7 @@ export default function WellbeingChartsTab() {
       {metricData.length > 0 && (
         <Card style={styles.statsCard}>
                   <Card.Content>
-          <Text style={styles.statsTitle}>Estatísticas - {getPeriodLabel(selectedPeriod, customStartDate, customEndDate)}</Text>
+          <Text style={styles.statsTitle}>Estatísticas - {getPeriodLabel('custom', customStartDate, customEndDate)}</Text>
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Média</Text>
@@ -325,6 +367,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
     padding: 16,
+  },
+  navigationCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+  },
+  navigationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  navButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  weekInfo: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  weekLabel: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: 'bold',
+    marginHorizontal: 10,
   },
   metricsCard: {
     marginBottom: 16,

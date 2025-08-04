@@ -3,7 +3,6 @@ import { View, ScrollView, StyleSheet } from 'react-native';
 import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
-import PeriodSelector, { PeriodType } from '../../../components/ui/PeriodSelector';
 import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
 
 const TRAINING_METRICS = [
@@ -69,7 +68,7 @@ const TRAINING_METRICS = [
     value: 'effort_level',
     icon: 'gauge',
     color: '#FF9800',
-    unit: '1-5',
+    unit: 'muito leve - muito forte',
     planned: 'esforco',
     completed: 'effort_level',
   },
@@ -120,7 +119,7 @@ const TRAINING_METRICS = [
     value: 'modalidade',
     icon: 'run',
     color: '#4CAF50',
-    unit: 'tipo',
+    unit: 'corrida, força, educativo, flexibilidade, bike',
     planned: 'modalidade',
     completed: null, // Não existe no realizado
   },
@@ -129,7 +128,7 @@ const TRAINING_METRICS = [
     value: 'treino_tipo',
     icon: 'format-list-bulleted',
     color: '#2196F3',
-    unit: 'tipo',
+    unit: 'contínuo, intervalado, longo, fartlek, tiro, ritmo, regenerativo',
     planned: 'treino_tipo',
     completed: null, // Não existe no realizado
   },
@@ -138,7 +137,7 @@ const TRAINING_METRICS = [
     value: 'terreno',
     icon: 'terrain',
     color: '#795548',
-    unit: 'tipo',
+    unit: 'asfalto, esteira, trilha, pista, outro',
     planned: 'terreno',
     completed: null, // Não existe no realizado
   },
@@ -147,7 +146,7 @@ const TRAINING_METRICS = [
     value: 'percurso',
     icon: 'map',
     color: '#607D8B',
-    unit: 'tipo',
+    unit: 'plano, ligeira, moderada, forte, muita inclinação',
     planned: 'percurso',
     completed: null, // Não existe no realizado
   },
@@ -162,22 +161,19 @@ const ANALYSIS_TYPES = [
 export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('custom');
-  
-  // Calcular datas padrão: 5 semanas antes e 5 semanas depois da semana atual
+   
+  // Calcular datas padrão: semana atual (segunda a domingo)
   const today = new Date();
   const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() - today.getDay()); // Início da semana atual (domingo)
-  
+  currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
+   
   const defaultStartDate = new Date(currentWeekStart);
-  defaultStartDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
-  
   const defaultEndDate = new Date(currentWeekStart);
-  defaultEndDate.setDate(currentWeekStart.getDate() + (5 * 7) + 6); // 5 semanas depois (incluindo o domingo)
-  
+  defaultEndDate.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
+   
   const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
   const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
-  const { trainingSessions, fetchTrainingSessions, calculateAnalytics } = useCheckinStore();
+  const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
     console.log('🔍 DEBUG - TrainingChartsTab montada, carregando treinos...');
@@ -200,19 +196,40 @@ export default function TrainingChartsTab() {
     });
   }, [trainingSessions]);
 
+  // Resetar para semana atual quando mudar o tipo de análise
+  useEffect(() => {
+    const today = new Date();
+    const currentWeekStart = new Date(today);
+    currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
+    
+    const currentWeekEnd = new Date(currentWeekStart);
+    currentWeekEnd.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
+    
+    setCustomStartDate(currentWeekStart);
+    setCustomEndDate(currentWeekEnd);
+  }, [selectedAnalysis]);
 
+  // Função para navegar entre semanas
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    const currentStart = new Date(customStartDate);
+    if (direction === 'prev') {
+      currentStart.setDate(currentStart.getDate() - 7);
+    } else {
+      currentStart.setDate(currentStart.getDate() + 7);
+    }
+    
+    const newEnd = new Date(currentStart);
+    newEnd.setDate(currentStart.getDate() + 6);
+    
+    setCustomStartDate(currentStart);
+    setCustomEndDate(newEnd);
+  };
 
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
-  const analytics = calculateAnalytics();
-  
-  const handleCustomDateChange = (startDate: Date, endDate: Date) => {
-    setCustomStartDate(startDate);
-    setCustomEndDate(endDate);
-  };
-  
-  // Separar dados por status
-  const completedSessions = trainingSessions.filter(t => t.status === 'completed');
-  const plannedSessions = trainingSessions.filter(t => t.status === 'planned');
+   
+   // Separar dados por status
+   const completedSessions = trainingSessions.filter(t => t.status === 'completed');
+   const plannedSessions = trainingSessions.filter(t => t.status === 'planned');
 
   // Filtrar métricas disponíveis baseado no tipo de análise
   const getAvailableMetrics = () => {
@@ -242,7 +259,7 @@ export default function TrainingChartsTab() {
   const getMetricData = () => {
     console.log('🔍 DEBUG - getMetricData INÍCIO:', {
       trainingSessionsTotal: trainingSessions.length,
-      selectedPeriod: selectedPeriod,
+      selectedPeriod: 'custom', // PeriodSelector foi removido, então sempre 'custom'
       customStartDate: customStartDate?.toISOString(),
       customEndDate: customEndDate?.toISOString(),
       selectedMetric: selectedMetric,
@@ -251,17 +268,20 @@ export default function TrainingChartsTab() {
         id: t.id,
         status: t.status,
         date: t.training_date,
-        planned_distance: t.distance_km,
-        actual_distance: t.distance_km,
-        planned_duration_hours: t.duracao_horas,
-        planned_duration_minutes: t.duracao_minutos,
-        duration_hours: t.duracao_horas,
-        duration_minutes: t.duracao_minutos
+        distance_km: t.distance_km,
+        duracao_horas: t.duracao_horas,
+        duracao_minutos: t.duracao_minutos,
+        esforco: t.esforco,
+        intensidade: t.intensidade,
+        modalidade: t.modalidade,
+        treino_tipo: t.treino_tipo,
+        terreno: t.terreno,
+        percurso: t.percurso
       }))
     });
 
     // Filtrar dados por período primeiro
-    const allFilteredSessions = filterDataByPeriod(trainingSessions, selectedPeriod, customStartDate, customEndDate);
+    const allFilteredSessions = filterDataByPeriod(trainingSessions, 'custom', customStartDate, customEndDate);
     
     // Depois separar por tipo de análise
     const sessions = selectedAnalysis === 'completed' ? 
@@ -270,7 +290,7 @@ export default function TrainingChartsTab() {
       allFilteredSessions.filter(s => s.status === 'planned') : 
       allFilteredSessions; // Para comparação, usar todos os dados
     
-    console.log('🔍 DEBUG - getMetricData:', {
+    console.log('🔍 DEBUG - getMetricData FILTRADO:', {
       selectedMetric,
       selectedAnalysis,
       'trainingSessions total': trainingSessions.length,
@@ -279,228 +299,232 @@ export default function TrainingChartsTab() {
       'primeiro treino planejado': allFilteredSessions.find(s => s.status === 'planned') ? {
         id: allFilteredSessions.find(s => s.status === 'planned')?.id,
         status: allFilteredSessions.find(s => s.status === 'planned')?.status,
-        planned_distance_km: allFilteredSessions.find(s => s.status === 'planned')?.distance_km,
-        planned_duration_hours: allFilteredSessions.find(s => s.status === 'planned')?.duracao_horas,
-        planned_duration_minutes: allFilteredSessions.find(s => s.status === 'planned')?.duracao_minutos
+        distance_km: allFilteredSessions.find(s => s.status === 'planned')?.distance_km,
+        duracao_horas: allFilteredSessions.find(s => s.status === 'planned')?.duracao_horas,
+        duracao_minutos: allFilteredSessions.find(s => s.status === 'planned')?.duracao_minutos,
+        esforco: allFilteredSessions.find(s => s.status === 'planned')?.esforco,
+        intensidade: allFilteredSessions.find(s => s.status === 'planned')?.intensidade
+      } : null,
+      'primeiro treino realizado': allFilteredSessions.find(s => s.status === 'completed') ? {
+        id: allFilteredSessions.find(s => s.status === 'completed')?.id,
+        status: allFilteredSessions.find(s => s.status === 'completed')?.status,
+        distance_km: allFilteredSessions.find(s => s.status === 'completed')?.distance_km,
+        duracao_horas: allFilteredSessions.find(s => s.status === 'completed')?.duracao_horas,
+        duracao_minutos: allFilteredSessions.find(s => s.status === 'completed')?.duracao_minutos,
+        effort_level: allFilteredSessions.find(s => s.status === 'completed')?.effort_level
       } : null
     });
 
-    const result = sessions.map(session => {
+    // Sempre retornar 7 dias (segunda a domingo) para consistência visual
+    const weekStart = new Date(customStartDate);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Segunda-feira
+    
+    const weekDays = [];
+    for (let i = 0; i < 7; i++) {
+      const currentDate = new Date(weekStart);
+      currentDate.setDate(weekStart.getDate() + i);
+      
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const sessionForDay = sessions.find(s => s.training_date === dateStr);
+      
       let value = 0;
-      let plannedValue = null;
-      let actualValue = null;
-      
-      // Verificar se a métrica está disponível para o tipo de análise
-      const metricInfo = selectedMetricInfo;
-      if (!metricInfo) {
-        return null;
-      }
-      
-      if (selectedAnalysis === 'planned' && !metricInfo.planned) {
-        return null;
-      }
-      if (selectedAnalysis === 'completed' && !metricInfo.completed) {
-        return null;
-      }
-
-      switch (selectedMetric) {
-        case 'distance':
-          if (selectedAnalysis === 'planned') {
-            // Para treinos planejados, usar distance_km
-            value = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
-          } else if (selectedAnalysis === 'completed') {
-            value = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
-          } else if (selectedAnalysis === 'comparison') {
-            plannedValue = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
-            actualValue = session.distance_km !== null && session.distance_km !== undefined ? session.distance_km : 0;
-            value = actualValue; // Para comparação, usar o valor realizado como principal
+      if (sessionForDay) {
+        console.log('🔍 DEBUG - Processando sessão para dia:', {
+          date: dateStr,
+          sessionId: sessionForDay.id,
+          status: sessionForDay.status,
+          selectedMetric: selectedMetric,
+          sessionData: {
+            distance_km: sessionForDay.distance_km,
+            duracao_horas: sessionForDay.duracao_horas,
+            duracao_minutos: sessionForDay.duracao_minutos,
+            esforco: sessionForDay.esforco,
+            intensidade: sessionForDay.intensidade,
+            effort_level: sessionForDay.effort_level
           }
-          console.log('🔍 DEBUG - Distance calculation:', {
-            sessionId: session.id,
-            selectedAnalysis,
-            'session.distance_km': session.distance_km,
-            'calculated value': value,
-            'plannedValue': plannedValue,
-            'actualValue': actualValue
-          });
-          break;
-          
-        case 'duration':
-          if (selectedAnalysis === 'planned') {
-            // Para treinos planejados, usar duracao_horas e duracao_minutos
-            const plannedHours = session.duracao_horas && session.duracao_horas !== '' ? 
-              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
-            const plannedMinutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
-              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
-            value = plannedHours * 60 + plannedMinutes;
-            console.log('🔍 DEBUG - Duration calculation (planned):', {
-              sessionId: session.id,
-              'session.duracao_horas': session.duracao_horas,
-              'session.duracao_minutos': session.duracao_minutos,
-              'plannedHours': plannedHours,
-              'plannedMinutes': plannedMinutes,
-              'calculated value': value
-            });
-          } else {
-            const hours = session.duracao_horas && session.duracao_horas !== '' ? 
-              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
-            const minutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
-              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
+        });
+        
+        switch (selectedMetric) {
+          case 'distance':
+            value = sessionForDay.distance_km !== null && sessionForDay.distance_km !== undefined ? sessionForDay.distance_km : 0;
+            break;
+          case 'duration':
+            const hours = sessionForDay.duracao_horas && sessionForDay.duracao_horas !== '' ? 
+              (isNaN(parseInt(sessionForDay.duracao_horas)) ? 0 : parseInt(sessionForDay.duracao_horas)) : 0;
+            const minutes = sessionForDay.duracao_minutos && sessionForDay.duracao_minutos !== '' ? 
+              (isNaN(parseInt(sessionForDay.duracao_minutos)) ? 0 : parseInt(sessionForDay.duracao_minutos)) : 0;
             value = hours * 60 + minutes;
-          }
-          if (selectedAnalysis === 'comparison') {
-            const plannedHours = session.duracao_horas && session.duracao_horas !== '' ? 
-              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
-            const plannedMinutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
-              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
-            plannedValue = plannedHours * 60 + plannedMinutes;
-            const hours = session.duracao_horas && session.duracao_horas !== '' ? 
-              (isNaN(parseInt(session.duracao_horas)) ? 0 : parseInt(session.duracao_horas)) : 0;
-            const minutes = session.duracao_minutos && session.duracao_minutos !== '' ? 
-              (isNaN(parseInt(session.duracao_minutos)) ? 0 : parseInt(session.duracao_minutos)) : 0;
-            actualValue = hours * 60 + minutes;
-          }
-          break;
-          
-        case 'elevation_gain':
-          value = selectedAnalysis === 'planned' ? 
-            (session.elevation_gain_meters || 0) : 
-            (session.elevation_gain_meters || 0);
-          if (selectedAnalysis === 'comparison') {
-            plannedValue = session.elevation_gain_meters || 0;
-            actualValue = session.elevation_gain_meters || 0;
-          }
-          break;
-          
-        case 'elevation_loss':
-          value = selectedAnalysis === 'planned' ? 
-            (session.elevation_loss_meters || 0) : 
-            (session.elevation_loss_meters || 0);
-          if (selectedAnalysis === 'comparison') {
-            plannedValue = session.elevation_loss_meters || 0;
-            actualValue = session.elevation_loss_meters || 0;
-          }
-          break;
-          
-        case 'avg_heart_rate':
-          value = selectedAnalysis === 'planned' ? 
-            (session.avg_heart_rate || 0) : 
-            (session.avg_heart_rate || 0);
-          if (selectedAnalysis === 'comparison') {
-            plannedValue = session.avg_heart_rate || 0;
-            actualValue = session.avg_heart_rate || 0;
-          }
-          break;
-          
-        case 'perceived_effort':
-          value = selectedAnalysis === 'planned' ? 
-            (session.perceived_effort || 0) : 
-            (session.perceived_effort || 0);
-          if (selectedAnalysis === 'comparison') {
-            plannedValue = session.perceived_effort || 0;
-            actualValue = session.perceived_effort || 0;
-          }
-          break;
-          
-        case 'effort_level':
-          if (selectedAnalysis === 'planned') {
-            // Para treinos planejados, verificar se esforco existe, senão usar effort_level
-            value = session.esforco ? 
-              (parseInt(session.esforco) || 0) : 
-              (session.effort_level || 0);
-          } else {
-            value = session.effort_level || 0;
-          }
-          if (selectedAnalysis === 'comparison') {
-            plannedValue = session.esforco ? 
-              (parseInt(session.esforco) || 0) : 
-              (session.effort_level || 0);
-            actualValue = session.effort_level || 0;
-          }
-          break;
-          
-        case 'intensity':
-          if (selectedAnalysis === 'planned') {
-            // Converter zonas Z1-Z5 para valores numéricos 1-5
-            if (session.intensidade) {
-              const intensityStr = session.intensidade.toString().toUpperCase();
+            break;
+          case 'elevation_gain':
+            value = sessionForDay.elevation_gain_meters || 0;
+            break;
+          case 'elevation_loss':
+            value = sessionForDay.elevation_loss_meters || 0;
+            break;
+          case 'avg_heart_rate':
+            value = sessionForDay.avg_heart_rate || 0;
+            break;
+          case 'perceived_effort':
+            value = sessionForDay.perceived_effort || 0;
+            break;
+          case 'effort_level':
+            if (selectedAnalysis === 'planned') {
+              // Para treinos planejados, usar esforco
+              value = sessionForDay.esforco ? parseInt(sessionForDay.esforco) || 0 : 0;
+            } else {
+              // Para treinos realizados, usar effort_level
+              value = sessionForDay.effort_level || 0;
+            }
+            break;
+          case 'session_satisfaction':
+            value = sessionForDay.session_satisfaction || 0;
+            break;
+          case 'max_heart_rate':
+            value = sessionForDay.max_heart_rate || 0;
+            break;
+          case 'intensity':
+            if (sessionForDay.intensidade) {
+              const intensityStr = sessionForDay.intensidade.toString().toUpperCase();
               if (intensityStr.startsWith('Z')) {
                 const zoneNumber = parseInt(intensityStr.substring(1));
                 value = zoneNumber >= 1 && zoneNumber <= 5 ? zoneNumber : 0;
               } else {
-                // Se não for formato Z1-Z5, tentar converter diretamente
                 value = parseInt(intensityStr) || 0;
               }
-            } else {
-              value = 0;
             }
-            console.log('🔍 DEBUG - Intensity calculation (planned):', {
-              sessionId: session.id,
-              'session.intensidade': session.intensidade,
-              'calculated value': value
-            });
-          } else {
-            value = 0; // Intensidade só existe para treinos planejados
-          }
-          break;
-          
-        case 'session_satisfaction':
-          value = session.session_satisfaction || 0;
-          break;
-          
-        case 'max_heart_rate':
-          value = session.max_heart_rate || 0;
-          break;
-          
-        case 'modalidade':
-          value = session.modalidade ? 1 : 0; // Contar se existe
-          break;
-          
-        case 'treino_tipo':
-          value = session.treino_tipo ? 1 : 0; // Contar se existe
-          break;
-          
-        case 'terreno':
-          value = session.terreno ? 1 : 0; // Contar se existe
-          break;
-          
-        case 'percurso':
-          value = session.percurso ? 1 : 0; // Contar se existe
-          break;
-          
-        case 'frequency':
-          // Contar treinos por semana
-          const weekStart = new Date(session.training_date);
-          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-          const weekKey = weekStart.toISOString().split('T')[0];
-          const weekSessions = sessions.filter(s => {
-            const sWeekStart = new Date(s.training_date);
-            sWeekStart.setDate(sWeekStart.getDate() - sWeekStart.getDay());
-            return sWeekStart.toISOString().split('T')[0] === weekKey;
-          });
-          value = weekSessions.length;
-          break;
+            break;
+          case 'modalidade':
+            if (sessionForDay.modalidade) {
+              switch (sessionForDay.modalidade.toLowerCase()) {
+                case 'corrida': value = 1; break;
+                case 'forca': value = 2; break;
+                case 'educativo': value = 3; break;
+                case 'flexibilidade': value = 4; break;
+                case 'bike': value = 5; break;
+                default: value = 1;
+              }
+            }
+            break;
+          case 'treino_tipo':
+            if (sessionForDay.treino_tipo) {
+              switch (sessionForDay.treino_tipo.toLowerCase()) {
+                case 'continuo': value = 1; break;
+                case 'intervalado': value = 2; break;
+                case 'longo': value = 3; break;
+                case 'fartlek': value = 4; break;
+                case 'tiro': value = 5; break;
+                case 'ritmo': value = 6; break;
+                case 'regenerativo': value = 7; break;
+                default: value = 1;
+              }
+            }
+            break;
+          case 'terreno':
+            if (sessionForDay.terreno) {
+              if (!isNaN(Number(sessionForDay.terreno))) {
+                value = parseInt(sessionForDay.terreno);
+              } else {
+                switch (sessionForDay.terreno.toLowerCase()) {
+                  case 'asfalto': value = 1; break;
+                  case 'esteira': value = 2; break;
+                  case 'trilha/montanha': value = 3; break;
+                  case 'pista': value = 4; break;
+                  case 'outro': value = 5; break;
+                  default: value = 1;
+                }
+              }
+            }
+            break;
+          case 'percurso':
+            if (sessionForDay.percurso) {
+              if (!isNaN(Number(sessionForDay.percurso))) {
+                value = parseInt(sessionForDay.percurso);
+              } else {
+                switch (sessionForDay.percurso.toLowerCase()) {
+                  case 'plano': value = 1; break;
+                  case 'ligeira inclinação': value = 2; break;
+                  case 'moderada': value = 3; break;
+                  case 'forte': value = 4; break;
+                  case 'muita inclinação': value = 5; break;
+                  default: value = 1;
+                }
+              }
+            }
+            break;
+          default:
+            value = 0;
+        }
       }
       
-      // Para treinos planejados, sempre retornar um item mesmo se o valor for 0
-      // Para treinos realizados, só retornar se houver valor
-      if (selectedAnalysis === 'completed' && value === 0) {
-        return null;
-      }
-
-      return {
-        date: session.training_date,
+      console.log('🔍 DEBUG - Valor calculado para dia:', {
+        date: dateStr,
         value: value,
-        plannedValue: plannedValue,
-        actualValue: actualValue,
-      };
-    }).filter(item => item !== null); // Remover apenas itens null, não itens com value 0
+        selectedMetric: selectedMetric,
+        selectedAnalysis: selectedAnalysis
+      });
+      
+      weekDays.push({
+        date: dateStr,
+        value: value,
+        plannedValue: selectedAnalysis === 'comparison' ? 
+          (() => {
+            const plannedSession = allFilteredSessions.find(s => s.status === 'planned' && s.training_date === dateStr);
+            if (!plannedSession) return 0;
+            
+            switch (selectedMetric) {
+              case 'distance':
+                return plannedSession.distance_km || 0;
+              case 'duration':
+                const plannedHours = plannedSession.duracao_horas ? parseInt(plannedSession.duracao_horas) : 0;
+                const plannedMinutes = plannedSession.duracao_minutos ? parseInt(plannedSession.duracao_minutos) : 0;
+                return plannedHours * 60 + plannedMinutes;
+              case 'effort_level':
+                return plannedSession.esforco ? parseInt(plannedSession.esforco) : 0;
+              case 'intensity':
+                if (plannedSession.intensidade) {
+                  const intensityStr = plannedSession.intensidade.toString().toUpperCase();
+                  if (intensityStr.startsWith('Z')) {
+                    const zoneNumber = parseInt(intensityStr.substring(1));
+                    return zoneNumber >= 1 && zoneNumber <= 5 ? zoneNumber : 0;
+                  }
+                  return parseInt(intensityStr) || 0;
+                }
+                return 0;
+              default:
+                return 0;
+            }
+          })() : null,
+        actualValue: selectedAnalysis === 'comparison' ? 
+          (() => {
+            const completedSession = allFilteredSessions.find(s => s.status === 'completed' && s.training_date === dateStr);
+            if (!completedSession) return 0;
+            
+            switch (selectedMetric) {
+              case 'distance':
+                return completedSession.distance_km || 0;
+              case 'duration':
+                const completedHours = completedSession.duracao_horas ? parseInt(completedSession.duracao_horas) : 0;
+                const completedMinutes = completedSession.duracao_minutos ? parseInt(completedSession.duracao_minutos) : 0;
+                return completedHours * 60 + completedMinutes;
+              case 'effort_level':
+                return completedSession.effort_level || 0;
+              default:
+                return 0;
+            }
+          })() : null,
+      });
+    }
     
-    return result;
+    return weekDays;
   };
 
   const metricData = getMetricData();
-  const maxValue = Math.max(...metricData.map(d => d?.value || 0), 1);
+  const maxValue = Math.max(
+    ...metricData.map(d => d?.value || 0),
+    ...metricData.map(d => d?.plannedValue || 0),
+    ...metricData.map(d => d?.actualValue || 0),
+    1
+  );
 
   // Log detalhado dos dados processados
   console.log('🔍 DEBUG - Dados finais do gráfico:', {
@@ -525,8 +549,8 @@ export default function TrainingChartsTab() {
   // Calcular resumo
   const getSummary = () => {
     // Filtrar dados por período para o resumo
-    const filteredCompletedSessions = filterDataByPeriod(completedSessions, selectedPeriod, customStartDate, customEndDate);
-    const filteredPlannedSessions = filterDataByPeriod(plannedSessions, selectedPeriod, customStartDate, customEndDate);
+    const filteredCompletedSessions = filterDataByPeriod(completedSessions, 'custom', customStartDate, customEndDate);
+    const filteredPlannedSessions = filterDataByPeriod(plannedSessions, 'custom', customStartDate, customEndDate);
     
     const totalSessions = filteredCompletedSessions.length;
     const totalPlanned = filteredPlannedSessions.length;
@@ -563,14 +587,35 @@ export default function TrainingChartsTab() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Seletor de Período */}
-      <PeriodSelector
-        selectedPeriod={selectedPeriod}
-        onPeriodChange={setSelectedPeriod}
-        onCustomDateChange={handleCustomDateChange}
-        customStartDate={customStartDate}
-        customEndDate={customEndDate}
-      />
+      {/* Navegação Semanal */}
+      <Card style={styles.navigationCard}>
+        <Card.Content>
+          <Text style={styles.sectionTitle}>Período de Análise:</Text>
+          <View style={styles.navigationContainer}>
+            <Button
+              mode="outlined"
+              onPress={() => navigateWeek('prev')}
+              icon="chevron-left"
+              style={styles.navButton}
+            >
+              Semana Anterior
+            </Button>
+            <View style={styles.weekInfo}>
+              <Text style={styles.weekLabel}>
+                {customStartDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} - {customEndDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              </Text>
+            </View>
+            <Button
+              mode="outlined"
+              onPress={() => navigateWeek('next')}
+              icon="chevron-right"
+              style={styles.navButton}
+            >
+              Próxima Semana
+            </Button>
+          </View>
+        </Card.Content>
+      </Card>
       
       {/* Tipo de Análise */}
       <Card style={styles.analysisCard}>
@@ -645,14 +690,20 @@ export default function TrainingChartsTab() {
               )}
             </View>
             <Text style={styles.unitText}>
-              {selectedMetric === 'intensity' && selectedAnalysis === 'planned' ? 'Z1-Z5' : selectedMetricInfo?.unit}
+              {selectedMetric === 'intensity' && selectedAnalysis === 'planned' ? 'Z1-Z5' : 
+               selectedMetric === 'effort_level' && selectedAnalysis === 'planned' ? 'muito leve - muito forte' :
+               selectedMetric === 'modalidade' && selectedAnalysis === 'planned' ? 'corrida, força, educativo, flexibilidade, bike' :
+               selectedMetric === 'treino_tipo' && selectedAnalysis === 'planned' ? 'contínuo, intervalado, longo, fartlek, tiro, ritmo, regenerativo' :
+               selectedMetric === 'terreno' && selectedAnalysis === 'planned' ? 'asfalto, esteira, trilha, pista, outro' :
+               selectedMetric === 'percurso' && selectedAnalysis === 'planned' ? 'plano, ligeira, moderada, forte, muita inclinação' :
+               selectedMetricInfo?.unit}
             </Text>
           </View>
           
           <View style={styles.chartContainer}>
             {metricData.length > 0 ? (
                 <View style={styles.chartBars}>
-                  {metricData.slice(-7).map((item, index) => (
+                  {metricData.map((item, index) => (
                     <View key={index} style={styles.barWrapper}>
                       {selectedAnalysis === 'comparison' ? (
                         <>
@@ -689,13 +740,70 @@ export default function TrainingChartsTab() {
                         />
                       )}
                       <Text style={styles.barLabel}>
-                        {new Date(item?.date || '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                        {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][index]}
                       </Text>
                       <Text style={styles.barValue}>
                         {selectedAnalysis === 'comparison' ? 
                           `${item?.actualValue || 0}/${item?.plannedValue || 0}` : 
                           selectedMetric === 'intensity' && selectedAnalysis === 'planned' ?
                           `Z${item?.value || 0}` :
+                          selectedMetric === 'effort_level' && selectedAnalysis === 'planned' ?
+                          (() => {
+                            switch (item?.value) {
+                              case 1: return 'muito leve';
+                              case 2: return 'leve';
+                              case 3: return 'moderado';
+                              case 4: return 'forte';
+                              case 5: return 'muito forte';
+                              default: return 'não definido';
+                            }
+                          })() :
+                          selectedMetric === 'modalidade' && selectedAnalysis === 'planned' ?
+                          (() => {
+                            switch (item?.value) {
+                              case 1: return 'corrida';
+                              case 2: return 'força';
+                              case 3: return 'educativo';
+                              case 4: return 'flexibilidade';
+                              case 5: return 'bike';
+                              default: return 'não definido';
+                            }
+                          })() :
+                          selectedMetric === 'treino_tipo' && selectedAnalysis === 'planned' ?
+                          (() => {
+                            switch (item?.value) {
+                              case 1: return 'contínuo';
+                              case 2: return 'intervalado';
+                              case 3: return 'longo';
+                              case 4: return 'fartlek';
+                              case 5: return 'tiro';
+                              case 6: return 'ritmo';
+                              case 7: return 'regenerativo';
+                              default: return 'não definido';
+                            }
+                          })() :
+                          selectedMetric === 'terreno' && selectedAnalysis === 'planned' ?
+                          (() => {
+                            switch (item?.value) {
+                              case 1: return 'asfalto';
+                              case 2: return 'esteira';
+                              case 3: return 'trilha';
+                              case 4: return 'pista';
+                              case 5: return 'outro';
+                              default: return 'não definido';
+                            }
+                          })() :
+                          selectedMetric === 'percurso' && selectedAnalysis === 'planned' ?
+                          (() => {
+                            switch (item?.value) {
+                              case 1: return 'plano';
+                              case 2: return 'ligeira';
+                              case 3: return 'moderada';
+                              case 4: return 'forte';
+                              case 5: return 'muita';
+                              default: return 'não definido';
+                            }
+                          })() :
                           (item?.value || 0).toFixed(1)}
                       </Text>
                     </View>
@@ -719,7 +827,7 @@ export default function TrainingChartsTab() {
       {/* Resumo Detalhado */}
       <Card style={styles.summaryCard}>
         <Card.Content>
-          <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel(selectedPeriod, customStartDate, customEndDate)}</Text>
+          <Text style={styles.summaryTitle}>Resumo - {getPeriodLabel('custom', customStartDate, customEndDate)}</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Treinos Realizados</Text>
@@ -748,26 +856,6 @@ export default function TrainingChartsTab() {
           </View>
         </Card.Content>
       </Card>
-
-      {/* Análise por Modalidade */}
-      {analytics?.metricsByModality && (
-        <Card style={styles.modalityCard}>
-          <Card.Content>
-            <Text style={styles.summaryTitle}>Análise por Modalidade</Text>
-            {Object.entries(analytics.metricsByModality).map(([modality, data]) => (
-              <View key={modality} style={styles.modalityItem}>
-                <Text style={styles.modalityName}>{modality.charAt(0).toUpperCase() + modality.slice(1)}</Text>
-                <View style={styles.modalityStats}>
-                  <Text style={styles.modalityStat}>Treinos: {data.count}</Text>
-                  <Text style={styles.modalityStat}>Distância: {data.totalDistance.toFixed(1)}km</Text>
-                  <Text style={styles.modalityStat}>Esforço: {data.avgEffort.toFixed(1)}/10</Text>
-                  <Text style={styles.modalityStat}>Satisfação: {data.avgSatisfaction.toFixed(1)}/5</Text>
-                </View>
-              </View>
-            ))}
-          </Card.Content>
-        </Card>
-      )}
     </ScrollView>
   );
 }
@@ -857,14 +945,15 @@ const styles = StyleSheet.create({
   },
   chartBars: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'flex-end',
     height: '100%',
+    paddingHorizontal: 5,
   },
   barWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
-    width: 40,
+    width: 55,
     height: '100%',
   },
   bar: {
@@ -886,10 +975,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   barValue: {
-    fontSize: 10,
+    fontSize: 7,
     fontWeight: 'bold',
     color: '#333',
     marginTop: 2,
+    textAlign: 'center',
+    flexWrap: 'nowrap',
+    maxWidth: 50,
   },
   noDataContainer: {
     flex: 1,
@@ -941,30 +1033,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  modalityCard: {
+  navigationCard: {
+    marginBottom: 16,
     borderRadius: 12,
   },
-  modalityItem: {
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  modalityName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  modalityStats: {
+  navigationContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
   },
-  modalityStat: {
-    fontSize: 12,
-    color: '#666',
-    width: '48%',
-    marginBottom: 4,
+  navButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  weekInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  weekLabel: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: 'bold',
+    marginHorizontal: 10,
   },
 }); 
