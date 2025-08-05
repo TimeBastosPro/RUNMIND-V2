@@ -12,13 +12,7 @@ export function filterDataByPeriod<T extends DateFilterable>(
   customStartDate?: Date,
   customEndDate?: Date
 ): T[] {
-  console.log('🔍 filterDataByPeriod - data recebida:', data);
-  console.log('🔍 filterDataByPeriod - period:', period);
-  console.log('🔍 filterDataByPeriod - customStartDate:', customStartDate);
-  console.log('🔍 filterDataByPeriod - customEndDate:', customEndDate);
-
   if (!data || data.length === 0) {
-    console.log('🔍 filterDataByPeriod - dados vazios, retornando array vazio');
     return [];
   }
 
@@ -27,8 +21,9 @@ export function filterDataByPeriod<T extends DateFilterable>(
   let endDate: Date;
 
   if (customStartDate && customEndDate) {
-    startDate = customStartDate;
-    endDate = customEndDate;
+    // CORRIGIR: Não normalizar as datas aqui, usar exatamente as datas fornecidas
+    startDate = new Date(customStartDate);
+    endDate = new Date(customEndDate);
   } else {
     // Datas padrão: 5 semanas antes e 5 semanas depois da semana atual
     const today = new Date();
@@ -42,40 +37,27 @@ export function filterDataByPeriod<T extends DateFilterable>(
     startDate.setDate(currentWeekStart.getDate() - (5 * 7)); // 5 semanas antes
   }
 
-  // Normalizar as datas para início e fim do dia
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
-
-  console.log('🔍 filterDataByPeriod - startDate final:', startDate);
-  console.log('🔍 filterDataByPeriod - endDate final:', endDate);
-
   const filteredData = data.filter(item => {
     const dateString = item.date || item.training_date;
     if (!dateString) {
-      console.log('🔍 filterDataByPeriod - item sem data:', item);
       return false;
     }
     
     const itemDate = new Date(dateString);
     if (isNaN(itemDate.getTime())) {
-      console.log('🔍 filterDataByPeriod - data inválida:', dateString);
       return false;
     }
     
-    // Normalizar a data do item para início do dia
-    itemDate.setHours(0, 0, 0, 0);
+    // CORRIGIR: Comparar apenas as datas, não as horas
+    const itemDateOnly = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
+    const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
     
-    const isInRange = itemDate >= startDate && itemDate <= endDate;
-    console.log('🔍 filterDataByPeriod - item:', {
-      id: item.id,
-      date: dateString,
-      itemDate: itemDate.toISOString(),
-      isInRange: isInRange
-    });
+    const isInRange = itemDateOnly >= startDateOnly && itemDateOnly <= endDateOnly;
+    
     return isInRange;
   });
-
-  console.log('🔍 filterDataByPeriod - dados filtrados:', filteredData);
+  
   return filteredData;
 }
 

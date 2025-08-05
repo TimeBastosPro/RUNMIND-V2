@@ -6,7 +6,6 @@ import { useCheckinStore } from '../../../stores/checkin';
 import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
 
 const TRAINING_METRICS = [
-  // Métricas Básicas (comuns a planejado e realizado)
   { 
     label: 'Distância', 
     value: 'distance',
@@ -26,44 +25,6 @@ const TRAINING_METRICS = [
     completed: 'duracao',
   },
   { 
-    label: 'Elevação Positiva', 
-    value: 'elevation_gain',
-    icon: 'elevation-rise',
-    color: '#795548',
-    unit: 'm',
-    planned: null, // Removido do planejado
-    completed: 'elevation_gain_meters',
-  },
-  { 
-    label: 'Elevação Negativa', 
-    value: 'elevation_loss',
-    icon: 'trending-down',
-    color: '#8D6E63',
-    unit: 'm',
-    planned: null, // Removido do planejado
-    completed: 'elevation_loss_meters',
-  },
-  { 
-    label: 'Frequência Cardíaca', 
-    value: 'avg_heart_rate',
-    icon: 'heart-pulse',
-    color: '#E91E63',
-    unit: 'bpm',
-    planned: null, // Removido do planejado
-    completed: 'avg_heart_rate',
-  },
-  
-  // Métricas de Esforço
-  { 
-    label: 'Esforço Percebido', 
-    value: 'perceived_effort',
-    icon: 'lightning-bolt',
-    color: '#FF5722',
-    unit: '/10',
-    planned: null, // Removido do planejado
-    completed: 'perceived_effort',
-  },
-  { 
     label: 'Esforço', 
     value: 'effort_level',
     icon: 'gauge',
@@ -77,43 +38,10 @@ const TRAINING_METRICS = [
     value: 'intensity',
     icon: 'speedometer',
     color: '#F44336',
-    unit: '1-5',
+    unit: 'Z1-Z5',
     planned: 'intensidade',
-    completed: null, // Não existe no realizado
+    completed: null,
   },
-  
-  // Métricas de Satisfação e Qualidade (apenas realizado)
-  { 
-    label: 'Satisfação', 
-    value: 'session_satisfaction',
-    icon: 'heart',
-    color: '#E91E63',
-    unit: '/5',
-    planned: null, // Não existe no planejado
-    completed: 'session_satisfaction',
-  },
-  { 
-    label: 'Clima', 
-    value: 'max_heart_rate',
-    icon: 'weather-partly-cloudy',
-    color: '#D32F2F',
-    unit: 'condições',
-    planned: null, // Não existe no planejado
-    completed: 'max_heart_rate',
-  },
-  
-  // Métricas de Frequência
-  { 
-    label: 'Frequência Semanal', 
-    value: 'frequency',
-    icon: 'calendar-week',
-    color: '#9C27B0',
-    unit: 'x/sem',
-    planned: null, // Calculado
-    completed: null, // Calculado
-  },
-  
-  // Métricas de Características (apenas planejado)
   { 
     label: 'Modalidade', 
     value: 'modalidade',
@@ -121,7 +49,7 @@ const TRAINING_METRICS = [
     color: '#4CAF50',
     unit: 'corrida, força, educativo, flexibilidade, bike',
     planned: 'modalidade',
-    completed: null, // Não existe no realizado
+    completed: null,
   },
   { 
     label: 'Tipo de Treino', 
@@ -130,7 +58,7 @@ const TRAINING_METRICS = [
     color: '#2196F3',
     unit: 'contínuo, intervalado, longo, fartlek, tiro, ritmo, regenerativo',
     planned: 'treino_tipo',
-    completed: null, // Não existe no realizado
+    completed: null,
   },
   { 
     label: 'Terreno', 
@@ -139,7 +67,7 @@ const TRAINING_METRICS = [
     color: '#795548',
     unit: 'asfalto, esteira, trilha, pista, outro',
     planned: 'terreno',
-    completed: null, // Não existe no realizado
+    completed: null,
   },
   { 
     label: 'Percurso', 
@@ -148,7 +76,7 @@ const TRAINING_METRICS = [
     color: '#607D8B',
     unit: 'plano, ligeira, moderada, forte, muita inclinação',
     planned: 'percurso',
-    completed: null, // Não existe no realizado
+    completed: null,
   },
 ];
 
@@ -162,52 +90,21 @@ export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
    
-  // Calcular datas padrão: semana atual (segunda a domingo)
-  const today = new Date();
-  const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
+  // FORÇAR diretamente a semana 04/08-10/08 (segunda a domingo)
+  const forcedStartDate = new Date('2025-08-04'); // Segunda-feira
+  const forcedEndDate = new Date('2025-08-10'); // Domingo
+  
+  // Garantir que as datas estão corretas
+  forcedStartDate.setHours(0, 0, 0, 0);
+  forcedEndDate.setHours(23, 59, 59, 999);
    
-  const defaultStartDate = new Date(currentWeekStart);
-  const defaultEndDate = new Date(currentWeekStart);
-  defaultEndDate.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
-   
-  const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
-  const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
+  const [customStartDate, setCustomStartDate] = useState<Date>(forcedStartDate);
+  const [customEndDate, setCustomEndDate] = useState<Date>(forcedEndDate);
   const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
-    console.log('🔍 DEBUG - TrainingChartsTab montada, carregando treinos...');
     fetchTrainingSessions();
   }, [fetchTrainingSessions]);
-
-  // Log quando os dados mudarem
-  useEffect(() => {
-    console.log('🔍 DEBUG - trainingSessions atualizado:', {
-      total: trainingSessions.length,
-      planned: trainingSessions.filter(t => t.status === 'planned').length,
-      completed: trainingSessions.filter(t => t.status === 'completed').length,
-      sample: trainingSessions.slice(0, 2).map(t => ({
-        id: t.id,
-        status: t.status,
-        date: t.training_date,
-        planned_distance: t.distance_km,
-        actual_distance: t.distance_km
-      }))
-    });
-  }, [trainingSessions]);
-
-  // Resetar para semana atual quando mudar o tipo de análise
-  useEffect(() => {
-    const today = new Date();
-    const currentWeekStart = new Date(today);
-    currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
-    
-    const currentWeekEnd = new Date(currentWeekStart);
-    currentWeekEnd.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
-    
-    setCustomStartDate(currentWeekStart);
-    setCustomEndDate(currentWeekEnd);
-  }, [selectedAnalysis]);
 
   // Função para navegar entre semanas
   const navigateWeek = (direction: 'prev' | 'next') => {
@@ -226,10 +123,6 @@ export default function TrainingChartsTab() {
   };
 
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
-   
-   // Separar dados por status
-   const completedSessions = trainingSessions.filter(t => t.status === 'completed');
-   const plannedSessions = trainingSessions.filter(t => t.status === 'planned');
 
   // Filtrar métricas disponíveis baseado no tipo de análise
   const getAvailableMetrics = () => {
@@ -257,64 +150,23 @@ export default function TrainingChartsTab() {
 
   // Calcular dados para a métrica selecionada
   const getMetricData = () => {
-    console.log('🔍 DEBUG - getMetricData INÍCIO:', {
-      trainingSessionsTotal: trainingSessions.length,
-      selectedPeriod: 'custom', // PeriodSelector foi removido, então sempre 'custom'
-      customStartDate: customStartDate?.toISOString(),
-      customEndDate: customEndDate?.toISOString(),
-      selectedMetric: selectedMetric,
-      selectedAnalysis: selectedAnalysis,
-      sampleTrainingSessions: trainingSessions.slice(0, 3).map(t => ({
-        id: t.id,
-        status: t.status,
-        date: t.training_date,
-        distance_km: t.distance_km,
-        duracao_horas: t.duracao_horas,
-        duracao_minutos: t.duracao_minutos,
-        esforco: t.esforco,
-        intensidade: t.intensidade,
-        modalidade: t.modalidade,
-        treino_tipo: t.treino_tipo,
-        terreno: t.terreno,
-        percurso: t.percurso
-      }))
-    });
-
     // Filtrar dados por período primeiro
     const allFilteredSessions = filterDataByPeriod(trainingSessions, 'custom', customStartDate, customEndDate);
     
-    // Depois separar por tipo de análise
-    const sessions = selectedAnalysis === 'completed' ? 
-      allFilteredSessions.filter(s => s.status === 'completed') : 
-      selectedAnalysis === 'planned' ? 
-      allFilteredSessions.filter(s => s.status === 'planned') : 
-      allFilteredSessions; // Para comparação, usar todos os dados
+    // Depois separar por tipo de análise - CORRIGIR LÓGICA
+    let sessions;
+    if (selectedAnalysis === 'completed') {
+      // Para treinos realizados, mostrar apenas os que foram realmente realizados
+      sessions = allFilteredSessions.filter(s => s.status === 'completed');
+    } else if (selectedAnalysis === 'planned') {
+      // Para treinos planejados, mostrar TODOS os treinos (planejados + realizados)
+      // porque quando um treino é realizado, ele ainda mantém os dados planejados
+      sessions = allFilteredSessions;
+    } else {
+      // Para comparação, usar todos os dados
+      sessions = allFilteredSessions;
+    }
     
-    console.log('🔍 DEBUG - getMetricData FILTRADO:', {
-      selectedMetric,
-      selectedAnalysis,
-      'trainingSessions total': trainingSessions.length,
-      'allFilteredSessions': allFilteredSessions.length,
-      'sessions filtrados por tipo': sessions.length,
-      'primeiro treino planejado': allFilteredSessions.find(s => s.status === 'planned') ? {
-        id: allFilteredSessions.find(s => s.status === 'planned')?.id,
-        status: allFilteredSessions.find(s => s.status === 'planned')?.status,
-        distance_km: allFilteredSessions.find(s => s.status === 'planned')?.distance_km,
-        duracao_horas: allFilteredSessions.find(s => s.status === 'planned')?.duracao_horas,
-        duracao_minutos: allFilteredSessions.find(s => s.status === 'planned')?.duracao_minutos,
-        esforco: allFilteredSessions.find(s => s.status === 'planned')?.esforco,
-        intensidade: allFilteredSessions.find(s => s.status === 'planned')?.intensidade
-      } : null,
-      'primeiro treino realizado': allFilteredSessions.find(s => s.status === 'completed') ? {
-        id: allFilteredSessions.find(s => s.status === 'completed')?.id,
-        status: allFilteredSessions.find(s => s.status === 'completed')?.status,
-        distance_km: allFilteredSessions.find(s => s.status === 'completed')?.distance_km,
-        duracao_horas: allFilteredSessions.find(s => s.status === 'completed')?.duracao_horas,
-        duracao_minutos: allFilteredSessions.find(s => s.status === 'completed')?.duracao_minutos,
-        effort_level: allFilteredSessions.find(s => s.status === 'completed')?.effort_level
-      } : null
-    });
-
     // Sempre retornar 7 dias (segunda a domingo) para consistência visual
     const weekStart = new Date(customStartDate);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Segunda-feira
@@ -329,21 +181,6 @@ export default function TrainingChartsTab() {
       
       let value = 0;
       if (sessionForDay) {
-        console.log('🔍 DEBUG - Processando sessão para dia:', {
-          date: dateStr,
-          sessionId: sessionForDay.id,
-          status: sessionForDay.status,
-          selectedMetric: selectedMetric,
-          sessionData: {
-            distance_km: sessionForDay.distance_km,
-            duracao_horas: sessionForDay.duracao_horas,
-            duracao_minutos: sessionForDay.duracao_minutos,
-            esforco: sessionForDay.esforco,
-            intensidade: sessionForDay.intensidade,
-            effort_level: sessionForDay.effort_level
-          }
-        });
-        
         switch (selectedMetric) {
           case 'distance':
             value = sessionForDay.distance_km !== null && sessionForDay.distance_km !== undefined ? sessionForDay.distance_km : 0;
@@ -355,32 +192,12 @@ export default function TrainingChartsTab() {
               (isNaN(parseInt(sessionForDay.duracao_minutos)) ? 0 : parseInt(sessionForDay.duracao_minutos)) : 0;
             value = hours * 60 + minutes;
             break;
-          case 'elevation_gain':
-            value = sessionForDay.elevation_gain_meters || 0;
-            break;
-          case 'elevation_loss':
-            value = sessionForDay.elevation_loss_meters || 0;
-            break;
-          case 'avg_heart_rate':
-            value = sessionForDay.avg_heart_rate || 0;
-            break;
-          case 'perceived_effort':
-            value = sessionForDay.perceived_effort || 0;
-            break;
           case 'effort_level':
             if (selectedAnalysis === 'planned') {
-              // Para treinos planejados, usar esforco
               value = sessionForDay.esforco ? parseInt(sessionForDay.esforco) || 0 : 0;
             } else {
-              // Para treinos realizados, usar effort_level
               value = sessionForDay.effort_level || 0;
             }
-            break;
-          case 'session_satisfaction':
-            value = sessionForDay.session_satisfaction || 0;
-            break;
-          case 'max_heart_rate':
-            value = sessionForDay.max_heart_rate || 0;
             break;
           case 'intensity':
             if (sessionForDay.intensidade) {
@@ -456,13 +273,6 @@ export default function TrainingChartsTab() {
         }
       }
       
-      console.log('🔍 DEBUG - Valor calculado para dia:', {
-        date: dateStr,
-        value: value,
-        selectedMetric: selectedMetric,
-        selectedAnalysis: selectedAnalysis
-      });
-      
       weekDays.push({
         date: dateStr,
         value: value,
@@ -526,64 +336,43 @@ export default function TrainingChartsTab() {
     1
   );
 
-  // Log detalhado dos dados processados
-  console.log('🔍 DEBUG - Dados finais do gráfico:', {
-    metricDataLength: metricData.length,
-    maxValue: maxValue,
-    selectedMetric: selectedMetric,
-    selectedAnalysis: selectedAnalysis,
-    sampleData: metricData.slice(0, 3).map(d => ({
-      date: d?.date,
-      value: d?.value,
-      plannedValue: d?.plannedValue,
-      actualValue: d?.actualValue
-    })),
-    allData: metricData.map(d => ({
-      date: d?.date,
-      value: d?.value,
-      plannedValue: d?.plannedValue,
-      actualValue: d?.actualValue
-    }))
-  });
-
-  // Calcular resumo
+  // Calcular resumo - CORRIGIR LÓGICA
   const getSummary = () => {
     // Filtrar dados por período para o resumo
-    const filteredCompletedSessions = filterDataByPeriod(completedSessions, 'custom', customStartDate, customEndDate);
-    const filteredPlannedSessions = filterDataByPeriod(plannedSessions, 'custom', customStartDate, customEndDate);
+    const allFilteredSessions = filterDataByPeriod(trainingSessions, 'custom', customStartDate, customEndDate);
     
-    const totalSessions = filteredCompletedSessions.length;
-    const totalPlanned = filteredPlannedSessions.length;
-    const totalDistance = filteredCompletedSessions.reduce((sum, s) => sum + (s.distance_km || 0), 0);
-    const totalDuration = filteredCompletedSessions.reduce((sum, s) => {
-      const hours = s.duracao_horas ? parseInt(s.duracao_horas) : 0;
-      const minutes = s.duracao_minutos ? parseInt(s.duracao_minutos) : 0;
-      return sum + hours * 60 + minutes;
+    // Separar corretamente:
+    // - Treinos planejados: apenas treinos com status 'planned' na semana
+    // - Treinos realizados: apenas treinos com status 'completed' na semana
+    const filteredCompletedSessions = allFilteredSessions.filter(s => s.status === 'completed');
+    const filteredPlannedSessions = allFilteredSessions.filter(s => s.status === 'planned');
+    
+    // Contar apenas os treinos da semana atual
+    const totalPlanned = filteredPlannedSessions.length; // Apenas treinos planejados na semana
+    const totalSessions = filteredCompletedSessions.length; // Apenas treinos realizados na semana
+    
+    const totalDistance = filteredCompletedSessions.reduce((sum, session) => sum + (session.distance_km || 0), 0);
+    const totalDuration = filteredCompletedSessions.reduce((sum, session) => {
+      const hours = Number(session.duracao_horas) || 0;
+      const minutes = Number(session.duracao_minutos) || 0;
+      return sum + hours + (minutes / 60);
     }, 0);
+    
     const avgIntensity = filteredCompletedSessions.length > 0 ? 
       filteredCompletedSessions.reduce((sum, s) => sum + (s.perceived_effort || 0), 0) / filteredCompletedSessions.length : 0;
     const completionRate = totalPlanned > 0 ? (totalSessions / totalPlanned) * 100 : 0;
-
+    
     return {
       totalSessions,
       totalPlanned,
       totalDistance: totalDistance.toFixed(1),
-      totalDuration: `${Math.floor(totalDuration / 60)}h ${totalDuration % 60}m`,
+      totalDuration: totalDuration.toFixed(1),
       avgIntensity: avgIntensity.toFixed(1),
-      completionRate: completionRate.toFixed(1),
+      completionRate: completionRate.toFixed(1)
     };
   };
 
   const summary = getSummary();
-
-  // Log antes da renderização
-  console.log('🔍 DEBUG - Antes da renderização:', {
-    metricDataLength: metricData.length,
-    maxValue: maxValue,
-    selectedAnalysis: selectedAnalysis,
-    selectedMetric: selectedMetric,
-    summary: summary
-  });
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
