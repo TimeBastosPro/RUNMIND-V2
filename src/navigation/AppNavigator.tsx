@@ -256,16 +256,11 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  console.log('AppNavigator renderizou');
   const { user, profile, isLoading, isInitializing, isAuthenticated, loadProfile, setInitializing } = useAuthStore();
 
   useEffect(() => {
-    console.log('Efeito onAuthStateChange INICIOU');
-    let initialized = false;
-
     // Checagem inicial da sessão
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('onAuthStateChange DISPAROU', { event: 'initial', session });
       if (session?.user) {
         useAuthStore.setState({
           user: session.user,
@@ -285,7 +280,6 @@ export default function AppNavigator() {
 
     // Listener para mudanças futuras
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('onAuthStateChange DISPAROU', { event, session });
       if (session?.user) {
         useAuthStore.setState({
           user: session.user,
@@ -305,10 +299,6 @@ export default function AppNavigator() {
     return () => subscription.unsubscribe();
   }, [loadProfile, setInitializing]);
 
-  console.log('ESTADO ATUAL:', { isLoading, user, isAuthenticated, isInitializing });
-  console.log('USER:', user);
-  console.log('IS_AUTHENTICATED:', isAuthenticated);
-
   if (isInitializing || isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -321,8 +311,14 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* Temporariamente desabilitando autenticação para teste */}
-        <Stack.Screen name="Main" component={MainTabs} />
+        {isAuthenticated ? (
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
+          </>
+        ) : (
+          <Stack.Screen name="Auth" component={AuthScreen} />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

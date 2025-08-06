@@ -51,23 +51,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   races: [],
 
   signIn: async (email: string, password: string) => {
+    console.log('🔍 signIn iniciado para email:', email);
     set({ isLoading: true });
     try {
+      console.log('🔍 Chamando supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
-      if (error) throw error;
+      console.log('🔍 Resposta do Supabase:', { 
+        success: !!data.user, 
+        error: error?.message,
+        userId: data.user?.id 
+      });
       
+      if (error) {
+        console.error('🔍 Erro do Supabase:', error);
+        throw error;
+      }
+      
+      console.log('🔍 Login bem-sucedido, atualizando estado...');
       set({ 
         user: data.user, 
         isAuthenticated: true,
         isLoading: false 
       });
       
+      console.log('🔍 Chamando loadProfile...');
       await get().loadProfile();
+      console.log('🔍 signIn concluído com sucesso');
     } catch (error) {
+      console.error('🔍 Erro no signIn:', error);
       set({ isLoading: false });
       throw error;
     }
