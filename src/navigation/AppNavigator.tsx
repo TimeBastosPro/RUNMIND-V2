@@ -7,6 +7,7 @@ import { Text, Card, TextInput, Button, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuthStore } from '../stores/auth';
+import { useCoachStore } from '../stores/coach';
 import { supabase } from '../services/supabase';
 
 // Screens
@@ -21,9 +22,16 @@ import GlossaryScreen from '../screens/academy/GlossaryScreen';
 import GuidesScreen from '../screens/academy/GuidesScreen';
 import ChatScreen from '../screens/academy/ChatScreen';
 import ComparativeChartsScreen from '../screens/analysis/ComparativeChartsScreen';
-
 import SportsProfileScreen from '../screens/SportsProfileScreen';
-// Remover: import CalendarScreen from '../screens/training/CalendarScreen';
+
+// Coach Screens
+import CoachDashboardScreen from '../screens/coach/CoachDashboardScreen';
+import CoachProfileScreen from '../screens/coach/CoachProfileScreen';
+import CoachProfileSetupScreen from '../screens/auth/CoachProfileSetupScreen';
+import UserTypeSelectionScreen from '../screens/auth/UserTypeSelectionScreen';
+
+// Athlete Screens
+import CoachSearchScreen from '../screens/athlete/CoachSearchScreen';
 
 // Types
 type TabParamList = {
@@ -32,17 +40,28 @@ type TabParamList = {
   Insights: undefined;
   Treinos: undefined;
   Análise: undefined;
-
   Profile: undefined;
   Academy: undefined;
   'Perfil Esportivo': undefined;
+  'Buscar Treinador': undefined;
+};
+
+type CoachTabParamList = {
+  'CoachHome': undefined;
+  'CoachAthletes': undefined;
+  'CoachTeams': undefined;
+  'CoachAnalytics': undefined;
+  'CoachProfile': undefined;
 };
 
 type StackParamList = {
   Main: undefined;
   Auth: undefined;
   InitialLoading: undefined;
-
+  UserTypeSelection: undefined;
+  CoachProfileSetup: undefined;
+  CoachMain: undefined;
+  CoachProfile: undefined;
   Calendar: undefined;
 };
 
@@ -65,10 +84,13 @@ const signUpSchema = loginSchema.extend({
 type LoginForm = z.infer<typeof loginSchema>;
 type SignUpForm = z.infer<typeof signUpSchema>;
 
-function AuthScreen() {
+function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
   const { signIn, signUp, isLoading, resetPassword } = useAuthStore();
+  const { currentCoach, loadCoachProfile } = useCoachStore();
   const [isLogin, setIsLogin] = useState(true);
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showUserTypeSelection, setShowUserTypeSelection] = useState(false);
+  const [isCoachSignUp, setIsCoachSignUp] = useState(false);
 
   const {
     control,
@@ -84,14 +106,17 @@ function AuthScreen() {
     try {
       if (isLogin) {
         await signIn(data.email, data.password);
+        // Verificar se é treinador após login
+        await loadCoachProfile();
       } else {
         await signUp(data.email, data.password, data.fullName);
-        // ✅ MELHORADO: Mostrar mensagem de sucesso para cadastro
-        setError('root', { 
-          message: 'Conta criada com sucesso! Faça login para continuar.',
-          type: 'success'
-        });
-        setIsLogin(true); // Voltar para tela de login
+        // Se for cadastro de treinador, ir direto para configuração do perfil
+        if (isCoachSignUp) {
+          onCoachSelected?.();
+        } else {
+          // Se for atleta, voltar para login
+          setIsLogin(true);
+        }
       }
     } catch (error: any) {
       console.error('🔍 Erro na autenticação:', error);
@@ -148,7 +173,27 @@ function AuthScreen() {
     }
   };
 
-  // ✅ NOVO: Componente de reset de senha
+  // Componente de seleção de tipo de usuário (mantido para compatibilidade)
+  if (showUserTypeSelection) {
+    return (
+      <UserTypeSelectionScreen 
+        navigation={{ goBack: () => setShowUserTypeSelection(false) }}
+        onSelectUserType={(userType) => {
+          if (userType === 'coach') {
+            // Navegar para configuração de perfil de treinador
+            setShowUserTypeSelection(false);
+            onCoachSelected?.();
+          } else {
+            // Atleta - voltar para login
+            setShowUserTypeSelection(false);
+            setIsLogin(true);
+          }
+        }}
+      />
+    );
+  }
+
+  // Componente de reset de senha
   if (showResetPassword) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
@@ -221,8 +266,14 @@ function AuthScreen() {
             🏃‍♂️ RunMind
           </Text>
           <Text variant="bodyLarge" style={{ textAlign: 'center', marginBottom: 24 }}>
-            {isLogin ? 'Entre na sua conta' : 'Crie sua conta'}
+            {isLogin ? 'Entre na sua conta' : (isCoachSignUp ? 'Crie sua conta de Treinador' : 'Crie sua conta de Atleta')}
           </Text>
+          
+          {!isLogin && isCoachSignUp && (
+            <Text variant="bodySmall" style={{ textAlign: 'center', marginBottom: 16, color: '#666', fontStyle: 'italic' }}>
+              Complete seu perfil profissional após o cadastro
+            </Text>
+          )}
 
           {!isLogin && (
             <Controller
@@ -316,13 +367,38 @@ function AuthScreen() {
             {isLogin ? 'Entrar' : 'Criar Conta'}
           </Button>
 
-          <Button mode="text" onPress={() => setIsLogin(!isLogin)}>
-            {isLogin ? 'Não tem conta? Criar conta' : 'Já tem conta? Entrar'}
-          </Button>
+          {isLogin ? (
+            <>
+              <Button mode="text" onPress={() => setIsLogin(false)}>
+                Não tem conta? Criar conta de Atleta
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                onPress={() => {
+                  setIsCoachSignUp(true);
+                  setIsLogin(false);
+                }}
+                style={{ marginBottom: 8 }}
+                contentStyle={{ paddingVertical: 8 }}
+              >
+                👨‍💼 Criar conta de Treinador
+              </Button>
+            </>
+          ) : (
+            <Button mode="text" onPress={() => {
+              setIsLogin(true);
+              setIsCoachSignUp(false);
+            }}>
+              Já tem conta? Entrar
+            </Button>
+          )}
 
-          <Button mode="text" onPress={() => setShowResetPassword(true)}>
-            Esqueci minha senha
-          </Button>
+          {isLogin && (
+            <Button mode="text" onPress={() => setShowResetPassword(true)}>
+              Esqueci minha senha
+            </Button>
+          )}
         </Card.Content>
       </Card>
     </View>
@@ -367,6 +443,8 @@ function MainTabs() {
             iconName = 'school';
           } else if (route.name === 'Perfil Esportivo') {
             iconName = 'run-fast';
+          } else if (route.name === 'Buscar Treinador') {
+            iconName = 'account-search';
           }
 
           return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
@@ -384,12 +462,15 @@ function MainTabs() {
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
       <Tab.Screen name="Perfil Esportivo" component={SportsProfileScreen} options={{ title: 'Perfil Esportivo' }} />
       <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />
+      <Tab.Screen name="Buscar Treinador" component={CoachSearchScreen} options={{ title: 'Treinador' }} />
     </Tab.Navigator>
   );
 }
 
 export default function AppNavigator() {
   const { user, profile, isLoading, isInitializing, isAuthenticated, loadProfile, setInitializing } = useAuthStore();
+  const { currentCoach, loadCoachProfile } = useCoachStore();
+  const [showCoachProfileSetup, setShowCoachProfileSetup] = useState(false);
 
   useEffect(() => {
     // ✅ SIMPLIFICADO: Inicialização básica
@@ -408,6 +489,7 @@ export default function AppNavigator() {
             isInitializing: false
           });
           loadProfile();
+          loadCoachProfile(); // Carregar perfil de treinador se existir
         } else {
           console.log('🔍 Nenhuma sessão válida encontrada');
           useAuthStore.setState({
@@ -443,6 +525,7 @@ export default function AppNavigator() {
             isInitializing: false
           });
           loadProfile();
+          loadCoachProfile(); // Carregar perfil de treinador se existir
         } else {
           useAuthStore.setState({
             user: null,
@@ -479,11 +562,31 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <>
-            <Stack.Screen name="Main" component={MainTabs} />
+            {showCoachProfileSetup ? (
+              // Mostrar tela de configuração do perfil de treinador
+              <Stack.Screen name="CoachProfileSetup" component={CoachProfileSetupScreen} />
+            ) : currentCoach ? (
+              <>
+                {/* Usuário é treinador - mostrar interface do treinador */}
+                <Stack.Screen name="CoachMain" component={CoachDashboardScreen} />
+                <Stack.Screen name="CoachProfile" component={CoachProfileScreen} />
+              </>
+            ) : (
+              // Usuário é atleta - mostrar interface normal
+              <Stack.Screen name="Main" component={MainTabs} />
+            )}
             <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
           </>
         ) : (
-          <Stack.Screen name="Auth" component={AuthScreen} />
+          <Stack.Screen 
+            name="Auth" 
+            component={(props: any) => (
+              <AuthScreen 
+                {...props} 
+                onCoachSelected={() => setShowCoachProfileSetup(true)} 
+              />
+            )} 
+          />
         )}
       </Stack.Navigator>
     </NavigationContainer>

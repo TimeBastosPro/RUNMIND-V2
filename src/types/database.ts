@@ -152,4 +152,91 @@ export interface Profile {
     created_at: string;
     updated_at?: string;
   }
+
+  // === SISTEMA DE TREINADOR ===
+  
+  export interface Coach {
+    id: string;
+    user_id: string;
+    full_name: string;
+    email: string;
+    phone?: string;
+    bio?: string;
+    experience_years?: number;
+    certifications?: string[];
+    specialties?: string[];
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface Team {
+    id: string;
+    coach_id: string;
+    name: string;
+    description?: string;
+    logo_url?: string;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface AthleteCoachRelationship {
+    id: string;
+    athlete_id: string;
+    coach_id: string;
+    team_id?: string;
+    status: 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
+    requested_at: string;
+    approved_at?: string;
+    approved_by?: string;
+    notes?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface ActiveAthleteCoachRelationship {
+    id: string;
+    athlete_id: string;
+    coach_id: string;
+    team_id?: string;
+    status: string;
+    requested_at: string;
+    approved_at?: string;
+    athlete_name: string;
+    athlete_email: string;
+    coach_name: string;
+    coach_email: string;
+    team_name?: string;
+  }
+
+  // Tipos para criação/atualização
+  export type CreateCoachData = Omit<Coach, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
+  export type UpdateCoachData = Partial<CreateCoachData>;
+  
+  export type CreateTeamData = Omit<Team, 'id' | 'created_at' | 'updated_at'>;
+  export type UpdateTeamData = Partial<CreateTeamData>;
+  
+  export type CreateRelationshipData = Omit<AthleteCoachRelationship, 'id' | 'created_at' | 'updated_at'>;
+  export type UpdateRelationshipData = Partial<CreateRelationshipData>;
+
+  // Tipos para filtros e consultas
+  export interface CoachFilters {
+    is_active?: boolean;
+    specialties?: string[];
+    experience_years_min?: number;
+    search?: string; // Adicionado para busca por texto
+  }
+
+  export interface TeamFilters {
+    coach_id?: string;
+    is_active?: boolean;
+  }
+
+  export interface RelationshipFilters {
+    athlete_id?: string;
+    coach_id?: string;
+    team_id?: string;
+    status?: AthleteCoachRelationship['status'];
+  }
   
