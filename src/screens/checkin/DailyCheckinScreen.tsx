@@ -136,15 +136,11 @@ export default function DailyCheckinScreen() {
   // Submissão final do check-in diário
   const handleSubmit = async () => {
     const checkinData = {
-      sleep_quality: sleepQuality,      // 1-7
+      sleep_hours: sleepQuality,       // 1-7 (qualidade do sono)
       soreness,                        // 1-7
-      notes,                           // texto
-      emocional: emotion ?? 3,         // 1-5 (corrigido para 'emocional')
-      motivation,                      // 1-5
+      motivation: emotion ?? 3,        // 1-5 (estado emocional/motivação)
       focus,                           // 1-5
       confidence,                      // 1-5
-      energy_score: motivation,        // Usando motivation como energia
-      sleep_hours: 8,                  // Valor padrão (pode ser ajustado)
     };
     try {
       console.log('Enviando check-in:', checkinData);

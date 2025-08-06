@@ -11,42 +11,42 @@ const METRICS = [
     value: 'sleep_quality',
     icon: 'sleep',
     color: '#4CAF50',
-    field: 'sleep_quality_score',
+    field: 'sleep_quality', // Campo correto do banco
   },
   { 
     label: 'Dores Musculares', 
     value: 'soreness',
     icon: 'human-handsup',
     color: '#FF5722',
-    field: 'soreness_score',
+    field: 'soreness', // Campo correto do banco
   },
   { 
     label: 'Motivação', 
     value: 'motivation',
     icon: 'lightning-bolt',
     color: '#FFC107',
-    field: 'mood_score',
+    field: 'motivation', // Campo correto do banco
   },
   { 
     label: 'Confiança', 
     value: 'confidence',
     icon: 'target',
     color: '#9C27B0',
-    field: 'confidence_score',
+    field: 'confidence', // Campo correto do banco
   },
   { 
     label: 'Foco', 
     value: 'focus',
     icon: 'eye',
     color: '#2196F3',
-    field: 'focus_score',
+    field: 'focus', // Campo correto do banco
   },
   { 
     label: 'Energia', 
     value: 'energy',
     icon: 'heart',
     color: '#E91E63',
-    field: 'energy_score',
+    field: 'emocional', // Campo correto do banco (emocional = energia)
   },
 ];
 
@@ -62,29 +62,14 @@ export default function WellbeingChartsTab() {
   const defaultEndDate = new Date(currentWeekStart);
   defaultEndDate.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
   
-  console.log('🔍 DEBUG - Datas padrão calculadas:', {
-    today: today.toISOString(),
-    todayDay: today.getDay(), // 0 = domingo, 1 = segunda, etc.
-    currentWeekStart: currentWeekStart.toISOString(),
-    defaultStartDate: defaultStartDate.toISOString(),
-    defaultEndDate: defaultEndDate.toISOString(),
-    startDateFormatted: defaultStartDate.toLocaleDateString('pt-BR'),
-    endDateFormatted: defaultEndDate.toLocaleDateString('pt-BR')
-  });
-  
   const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
   const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
   const { recentCheckins, loadRecentCheckins } = useCheckinStore();
 
   useEffect(() => {
-    console.log('🔍 DEBUG - WellbeingChartsTab montada, carregando checkins...');
-    console.log('🔍 DEBUG - loadRecentCheckins disponível:', !!loadRecentCheckins);
-    
     const loadData = async () => {
       try {
-        console.log('🔍 DEBUG - Chamando loadRecentCheckins...');
         await loadRecentCheckins();
-        console.log('🔍 DEBUG - loadRecentCheckins concluída');
       } catch (error) {
         console.error('❌ Erro ao carregar checkins:', error);
       }
@@ -93,58 +78,56 @@ export default function WellbeingChartsTab() {
     loadData();
   }, [loadRecentCheckins]);
 
-  // Log quando os dados mudarem
+  // Efeito para ajustar automaticamente o período quando os dados são carregados
   useEffect(() => {
-    console.log('🔍 DEBUG - recentCheckins atualizado:', {
-      total: recentCheckins.length,
-      sample: recentCheckins.slice(0, 3).map(c => ({
-        date: c.date,
-        sleep_quality_score: c.sleep_quality_score,
-        mood_score: c.mood_score,
-        energy_score: c.energy_score
-      }))
-    });
-    
-    // Verificar se há dados para o período atual
     if (recentCheckins.length > 0) {
-      const currentWeekStart = new Date(customStartDate);
-      const currentWeekEnd = new Date(customEndDate);
+      // Encontrar o período com mais dados nos últimos 30 dias
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
-      // Log de todas as datas dos check-ins para debug
-      console.log('🔍 DEBUG - Todas as datas dos check-ins:', 
-        recentCheckins.map(c => c.date).sort()
-      );
-      
-      // Verificar especificamente check-ins no dia 04/08/2025
-      const checkinsOn0408 = recentCheckins.filter(c => c.date === '2025-08-04');
-      console.log('🔍 DEBUG - Check-ins no dia 04/08/2025:', {
-        count: checkinsOn0408.length,
-        data: checkinsOn0408.map(c => ({
-          date: c.date,
-          sleep_quality_score: c.sleep_quality_score,
-          mood_score: c.mood_score,
-          energy_score: c.energy_score
-        }))
+      const checkinsInLast30Days = recentCheckins.filter(checkin => {
+        const checkinDate = new Date(checkin.date);
+        return checkinDate >= thirtyDaysAgo;
       });
       
-      const checkinsInPeriod = recentCheckins.filter(c => {
-        const checkinDate = new Date(c.date);
-        return checkinDate >= currentWeekStart && checkinDate <= currentWeekEnd;
-      });
-      
-      console.log('🔍 DEBUG - Checkins no período atual:', {
-        periodStart: currentWeekStart.toISOString().split('T')[0],
-        periodEnd: currentWeekEnd.toISOString().split('T')[0],
-        totalInPeriod: checkinsInPeriod.length,
-        sampleInPeriod: checkinsInPeriod.slice(0, 3).map(c => ({
-          date: c.date,
-          sleep_quality_score: c.sleep_quality_score,
-          mood_score: c.mood_score,
-          energy_score: c.energy_score
-        }))
-      });
+      if (checkinsInLast30Days.length > 0) {
+        // Encontrar a semana com mais check-ins
+        const weekMap = new Map();
+        
+        checkinsInLast30Days.forEach(checkin => {
+          const checkinDate = new Date(checkin.date);
+          const weekStart = new Date(checkinDate);
+          weekStart.setDate(checkinDate.getDate() - checkinDate.getDay() + 1); // Segunda-feira
+          const weekKey = weekStart.toISOString().split('T')[0];
+          
+          if (!weekMap.has(weekKey)) {
+            weekMap.set(weekKey, []);
+          }
+          weekMap.get(weekKey).push(checkin);
+        });
+        
+        // Encontrar a semana com mais dados
+        let bestWeek = null;
+        let maxCheckins = 0;
+        
+        weekMap.forEach((checkins, weekKey) => {
+          if (checkins.length > maxCheckins) {
+            maxCheckins = checkins.length;
+            bestWeek = weekKey;
+          }
+        });
+        
+        if (bestWeek) {
+          const newStartDate = new Date(bestWeek);
+          const newEndDate = new Date(bestWeek);
+          newEndDate.setDate(newStartDate.getDate() + 6);
+          
+          setCustomStartDate(newStartDate);
+          setCustomEndDate(newEndDate);
+        }
+      }
     }
-  }, [recentCheckins, customStartDate, customEndDate]);
+  }, [recentCheckins]);
 
   const selectedMetricInfo = METRICS.find(m => m.value === selectedMetric);
 
@@ -166,31 +149,13 @@ export default function WellbeingChartsTab() {
 
   // Processar dados reais dos checkins
   const getMetricData = () => {
-    console.log('🔍 DEBUG - Wellbeing getMetricData:', {
-      recentCheckinsTotal: recentCheckins.length,
-      selectedMetric: selectedMetric,
-      selectedMetricField: selectedMetricInfo?.field
-    });
-
-    // SIMPLIFICAR: Filtrar apenas por data exata (sem complicações de timezone)
+    // Filtrar check-ins por período selecionado
     const filteredCheckins = recentCheckins.filter(checkin => {
-      const checkinDate = checkin.date; // Usar a data como string diretamente
+      const checkinDate = checkin.date;
       const startDate = customStartDate.toISOString().split('T')[0];
       const endDate = customEndDate.toISOString().split('T')[0];
       
-      console.log('🔍 DEBUG - Comparando datas:', {
-        checkinDate: checkinDate,
-        startDate: startDate,
-        endDate: endDate,
-        isInRange: checkinDate >= startDate && checkinDate <= endDate
-      });
-      
       return checkinDate >= startDate && checkinDate <= endDate;
-    });
-    
-    console.log('🔍 DEBUG - Checkins filtrados:', {
-      total: filteredCheckins.length,
-      sample: filteredCheckins.slice(0, 3)
     });
 
     // Sempre retornar 7 dias (segunda a domingo) para consistência visual
@@ -216,13 +181,6 @@ export default function WellbeingChartsTab() {
         value: value,
       });
     }
-    
-    console.log('🔍 DEBUG - Dados finais do gráfico de bem-estar:', {
-      weekDaysLength: weekDays.length,
-      sampleData: weekDays.slice(0, 3),
-      selectedMetric: selectedMetric,
-      selectedField: selectedMetricInfo?.field
-    });
     
     return weekDays;
   };
@@ -379,8 +337,8 @@ export default function WellbeingChartsTab() {
       {/* Estatísticas */}
       {metricData.length > 0 && (
         <Card style={styles.statsCard}>
-                  <Card.Content>
-          <Text style={styles.statsTitle}>Estatísticas - {getPeriodLabel('custom', customStartDate, customEndDate)}</Text>
+          <Card.Content>
+            <Text style={styles.statsTitle}>Estatísticas - {getPeriodLabel('custom', customStartDate, customEndDate)}</Text>
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Média</Text>
@@ -411,19 +369,6 @@ export default function WellbeingChartsTab() {
           </Card.Content>
         </Card>
       )}
-
-      {/* Status */}
-      <Card style={styles.statusCard}>
-        <Card.Content>
-          <Text style={styles.statusTitle}>Status da Análise</Text>
-          <Text style={styles.statusText}>
-            {metricData.length > 0 
-              ? `Analisando ${metricData.length} registros de bem-estar do período selecionado.`
-              : 'Nenhum dado de bem-estar encontrado. Faça check-ins diários para ver suas análises.'
-            }
-          </Text>
-        </Card.Content>
-      </Card>
     </ScrollView>
   );
 }
@@ -587,19 +532,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-  },
-  statusCard: {
-    borderRadius: 12,
-  },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
   },
 }); 

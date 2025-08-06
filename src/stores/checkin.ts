@@ -4,12 +4,12 @@ import { generateInsight } from '../services/gemini';
 import type { DailyCheckin, Insight, Race, TrainingSession } from '../types/database';
 
 interface RecentCheckin {
-  sleep_quality_score?: number;
-  soreness_score?: number;
-  mood_score?: number;
-  confidence_score?: number;
-  focus_score?: number;
-  energy_score?: number;
+  sleep_quality?: number;
+  soreness?: number;
+  motivation?: number;
+  confidence?: number;
+  focus?: number;
+  emocional?: number;
   notes?: string;
   date: string;
 }
@@ -166,16 +166,12 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   },
 
   loadRecentCheckins: async (days = 180) => {
-    console.log('🔄 loadRecentCheckins INICIADA com days:', days);
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { 
-        console.log('❌ Usuário não autenticado em loadRecentCheckins');
         return; 
       }
-      
-      console.log('👤 Usuário autenticado:', user.id);
       
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
@@ -185,51 +181,21 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .from('daily_checkins')
         .select('*', { count: 'exact', head: true });
       
-      console.log('🔍 DEBUG - Total de check-ins na tabela:', { count, countError });
-      
       // Buscar TODOS os check-ins do usuário (sem filtro de data)
       const { data: allData, error: allError } = await supabase
         .from('daily_checkins')
-        .select('sleep_quality_score, soreness_score, mood_score, confidence_score, focus_score, energy_score, notes, date')
+        .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
         .eq('user_id', user.id)
         .order('date', { ascending: false });
-      
-      console.log('🔍 DEBUG - TODOS os check-ins do usuário:', {
-        total: allData?.length || 0,
-        sampleData: allData?.slice(0, 10)?.map(c => ({
-          date: c.date,
-          sleep_quality_score: c.sleep_quality_score,
-          mood_score: c.mood_score,
-          energy_score: c.energy_score,
-          soreness_score: c.soreness_score,
-          confidence_score: c.confidence_score,
-          focus_score: c.focus_score
-        }))
-      });
       
       // Agora buscar com filtro de data
       const { data, error } = await supabase
         .from('daily_checkins')
-        .select('sleep_quality_score, soreness_score, mood_score, confidence_score, focus_score, energy_score, notes, date')
+        .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
         .eq('user_id', user.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
       if (error) throw error;
-      
-      console.log('🔍 DEBUG - Checkins carregados (com filtro de data):', {
-        total: data?.length || 0,
-        startDate: startDate.toISOString().split('T')[0],
-        days: days,
-        sampleData: data?.slice(0, 5)?.map(c => ({
-          date: c.date,
-          sleep_quality_score: c.sleep_quality_score,
-          mood_score: c.mood_score,
-          energy_score: c.energy_score,
-          soreness_score: c.soreness_score,
-          confidence_score: c.confidence_score,
-          focus_score: c.focus_score
-        }))
-      });
       
       set({ recentCheckins: (data as RecentCheckin[]) || [], isLoading: false, error: null });
     } catch (error: unknown) {
@@ -717,12 +683,12 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     if (!user) throw new Error('Usuário não autenticado');
     const insertData = {
       user_id: user.id,
-      sleep_quality: checkinData.sleep_hours,
-      soreness: checkinData.soreness,
-      emocional: checkinData.motivation,
-      motivation: checkinData.motivation,
-      focus: checkinData.focus,
-      confidence: checkinData.confidence,
+      sleep_quality_score: checkinData.sleep_hours,
+      soreness_score: checkinData.soreness,
+      mood_score: checkinData.motivation,
+      confidence_score: checkinData.confidence,
+      focus_score: checkinData.focus,
+      energy_score: checkinData.motivation, // Usando motivation como energia
       notes: '', // Assuming notes is not part of the new checkinData object
       date: new Date().toISOString().split('T')[0],
     };
