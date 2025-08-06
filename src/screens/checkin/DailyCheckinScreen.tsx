@@ -4,6 +4,7 @@ import { Card, Text, Button, ActivityIndicator, TextInput, Modal, Portal } from 
 import Slider from '@react-native-community/slider';
 import WeeklyReflectionModal, { WeeklyReflectionAnswers } from '../training/WeeklyReflectionModal';
 import { useCheckinStore } from '../../stores/checkin';
+import { useAuthStore } from '../../stores/auth';
 import { generateInsight } from '../../services/gemini';
 
 type DailyCheckinModalProps = {
@@ -111,6 +112,9 @@ export default function DailyCheckinScreen() {
   const submitWeeklyReflection = useCheckinStore(s => s.submitWeeklyReflection);
   const saveDailyCheckin = useCheckinStore(s => s.saveDailyCheckin);
   const updateCheckinWithInsight = useCheckinStore(s => s.updateCheckinWithInsight);
+  const recentCheckins = useCheckinStore(s => s.recentCheckins);
+  const trainingSessions = useCheckinStore(s => s.trainingSessions);
+  const userProfile = useAuthStore(s => s.profile);
 
   // Estados do wizard
   const [step, setStep] = useState(0);
@@ -145,11 +149,21 @@ export default function DailyCheckinScreen() {
     try {
       console.log('Enviando check-in:', checkinData);
       const saved = await saveDailyCheckin(checkinData);
-      // Insight opcional
+      // Insight opcional - dados melhorados com perfil personalizado
       const athleteData = {
         context_type: 'solo',
-        last_checkin: checkinData,
+        last_checkin: {
+          sleep_quality: sleepQuality,
+          soreness: soreness,
+          motivation: emotion ?? 3,
+          confidence: confidence,
+          focus: focus,
+          emocional: emotion ?? 3,
+        },
         planned_training: null,
+        recent_checkins: recentCheckins || [],
+        recent_trainings: trainingSessions || [],
+        user_profile: userProfile, // Perfil personalizado do usuário
       };
       const insight = await generateInsight(athleteData);
       Alert.alert('Insight de Prontidão', insight);
