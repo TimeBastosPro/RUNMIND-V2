@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '../services/supabase';
+import { supabase, checkAndRepairSession, clearCorruptedSession } from '../services/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Profile, FitnessTest, Race } from '../types/database';
 
@@ -39,6 +39,8 @@ interface AuthState {
   saveRace: (raceData: Omit<Race, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<Race>;
   updateRace: (raceId: string, raceData: Partial<Omit<Race, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => Promise<Race>;
   deleteRace: (raceId: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  checkEmailExists: (email: string) => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -54,6 +56,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 signIn iniciado para email:', email);
     set({ isLoading: true });
     try {
+      // ✅ NOVO: Verificar e reparar sessão antes do login
+      await checkAndRepairSession();
+      
       console.log('🔍 Chamando supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -68,7 +73,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       if (error) {
         console.error('🔍 Erro do Supabase:', error);
-        throw error;
+        
+        // ✅ MELHORADO: Tratamento específico de erros para mobile
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Email ou senha incorretos. Verifique suas credenciais.');
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('Confirme seu email antes de fazer login.');
+        } else if (error.message.includes('Too many requests')) {
+          throw new Error('Muitas tentativas de login. Aguarde alguns minutos.');
+        } else if (error.message.includes('Network error')) {
+          throw new Error('Erro de conexão. Verifique sua internet.');
+        } else {
+          throw error;
+        }
       }
       
       console.log('🔍 Login bem-sucedido, atualizando estado...');
@@ -89,52 +106,152 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUp: async (email: string, password: string, fullName: string) => {
+    console.log('🔍 signUp iniciado para email:', email);
     set({ isLoading: true });
     try {
+      // ✅ NOVO: Limpar sessão corrompida antes do cadastro
+      await clearCorruptedSession();
+      
+      console.log('🔍 Chamando supabase.auth.signUp...');
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          // ✅ NOVO: Dados do usuário para o perfil
+          data: {
+            full_name: fullName,
+          }
+        }
       });
       
-      if (error) throw error;
+      console.log('🔍 Resposta do Supabase:', { 
+        success: !!data.user, 
+        error: error?.message,
+        userId: data.user?.id 
+      });
+      
+      if (error) {
+        console.error('🔍 Erro no cadastro:', error);
+        
+        // ✅ MELHORADO: Tratamento específico de erros para mobile
+        if (error.message.includes('User already registered')) {
+          throw new Error('Este email já está cadastrado. Tente fazer login.');
+        } else if (error.message.includes('Password should be at least')) {
+          throw new Error('A senha deve ter pelo menos 6 caracteres.');
+        } else if (error.message.includes('Invalid email')) {
+          throw new Error('Email inválido. Verifique o formato.');
+        } else if (error.message.includes('Network error')) {
+          throw new Error('Erro de conexão. Verifique sua internet.');
+        } else {
+          throw error;
+        }
+      }
       
       if (data.user) {
-        // Create profile
+        console.log('🔍 Criando perfil para usuário:', data.user.id);
+        // Create profile with all required fields
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
             id: data.user.id,
             email,
             full_name: fullName,
-            experience_level: 'beginner',
+            experience_level: 'beginner', // ✅ CORRIGIDO: Adicionado campo obrigatório
             main_goal: 'health',
             context_type: 'solo',
             onboarding_completed: false,
           });
           
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('🔍 Erro ao criar perfil:', profileError);
+          throw new Error('Erro ao criar perfil. Tente novamente.');
+        }
+        
+        console.log('🔍 Perfil criado com sucesso');
       }
       
       set({ isLoading: false });
+      console.log('🔍 signUp concluído com sucesso');
     } catch (error) {
+      console.error('🔍 Erro no signUp:', error);
       set({ isLoading: false });
       throw error;
     }
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
-    set({ 
-      user: null, 
-      profile: null, 
-      isAuthenticated: false 
-    });
+    try {
+      console.log('🔍 Fazendo logout...');
+      await supabase.auth.signOut();
+      await clearCorruptedSession(); // ✅ NOVO: Limpar sessão corrompida
+      set({ 
+        user: null, 
+        profile: null, 
+        isAuthenticated: false 
+      });
+      console.log('🔍 Logout concluído');
+    } catch (error) {
+      console.error('🔍 Erro no logout:', error);
+      // Forçar limpeza mesmo com erro
+      await clearCorruptedSession();
+      set({ 
+        user: null, 
+        profile: null, 
+        isAuthenticated: false 
+      });
+    }
+  },
+
+  // ✅ NOVO: Função para reset de senha
+  resetPassword: async (email: string) => {
+    console.log('🔍 Reset de senha iniciado para:', email);
+    set({ isLoading: true });
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'runmind://reset-password',
+      });
+      
+      if (error) {
+        console.error('🔍 Erro no reset de senha:', error);
+        throw new Error('Erro ao enviar email de reset. Tente novamente.');
+      }
+      
+      console.log('🔍 Email de reset enviado com sucesso');
+      set({ isLoading: false });
+    } catch (error) {
+      console.error('🔍 Erro no reset de senha:', error);
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  // ✅ NOVO: Função para verificar se email existe
+  checkEmailExists: async (email: string) => {
+    console.log('🔍 Verificando se email existe:', email);
+    try {
+      const { data, error } = await supabase.auth.admin.listUsers();
+      
+      if (error) {
+        console.error('🔍 Erro ao verificar email:', error);
+        return false;
+      }
+      
+      const userExists = data.users.some(user => user.email === email);
+      console.log('🔍 Email existe:', userExists);
+      return userExists;
+    } catch (error) {
+      console.error('🔍 Erro ao verificar email:', error);
+      return false;
+    }
   },
 
   loadProfile: async () => {
-    console.log('Carregando perfil para o usuário:', get().user?.id);
+    console.log('🔍 Carregando perfil para o usuário:', get().user?.id);
     const { user } = get();
-    if (!user) return;
+    if (!user) {
+      console.log('🔍 Usuário não encontrado, pulando carregamento do perfil');
+      return;
+    }
     
     try {
       const { data, error } = await supabase
@@ -143,13 +260,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .eq('id', user.id)
         .single();
         
-      if (error) throw error;
-      
-      set({ profile: data });
-      console.log('Perfil carregado com sucesso:', data);
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Perfil não encontrado - criar um novo
+          console.log('🔍 Perfil não encontrado, criando novo perfil...');
+          const { error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email,
+              full_name: user.user_metadata?.full_name || 'Usuário',
+              experience_level: 'beginner',
+              main_goal: 'health',
+              context_type: 'solo',
+              onboarding_completed: false,
+            });
+            
+          if (createError) {
+            console.error('🔍 Erro ao criar perfil:', createError);
+            throw createError;
+          }
+          
+          // Recarregar o perfil criado
+          const { data: newProfile, error: reloadError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+            
+          if (reloadError) throw reloadError;
+          set({ profile: newProfile });
+          console.log('🔍 Novo perfil criado e carregado:', newProfile);
+        } else {
+          throw error;
+        }
+      } else {
+        set({ profile: data });
+        console.log('🔍 Perfil carregado com sucesso:', data);
+      }
     } catch (error) {
-      console.log('ERRO ao carregar perfil:', error);
-      console.error('Error loading profile:', error);
+      console.error('🔍 ERRO ao carregar perfil:', error);
+      // Não rethrow para não quebrar o app
     }
   },
 

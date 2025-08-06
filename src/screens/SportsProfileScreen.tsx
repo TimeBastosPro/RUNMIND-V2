@@ -16,6 +16,7 @@ import {
   calculateKarvonenZones,
   calculatePaceZones,
   calculateMaxHeartRateTanaka,
+  formatPace,
   TrainingZone,
   PaceZone
 } from '../utils/sportsCalculations';
@@ -419,23 +420,30 @@ export default function SportsProfileScreen() {
   const trainingZones = profile?.max_heart_rate && profile?.resting_heart_rate 
     ? calculateKarvonenZones(profile.max_heart_rate, profile.resting_heart_rate)
     : [];
-  const paceZones = vo2max && vam ? calculatePaceZones(vo2max, vam) : [];
+  const paceZones = vo2max ? calculatePaceZones(vo2max) : [];
 
   // Combinar zonas de FC com zonas de ritmo
   const combinedZones = trainingZones.length > 0 
     ? trainingZones.map((zone, index) => ({
-        ...zone,
-        pace: paceZones[index] ? `${paceZones[index].minPace} - ${paceZones[index].maxPace}` : '--'
+        zone: `Z${index + 1}`,
+        name: zone.name,
+        minHR: zone.minHR,
+        maxHR: zone.maxHR,
+        minHeartRate: zone.minHR,
+        maxHeartRate: zone.maxHR,
+        description: zone.description,
+        pace: paceZones[index] ? `${formatPace(paceZones[index].minPace)} - ${formatPace(paceZones[index].maxPace)}` : '--'
       }))
     : paceZones.length > 0 
-      ? paceZones.map((zone, index) => ({
+      ? paceZones.map((zone) => ({
           zone: zone.zone,
-          minPercentage: zone.minPercentage,
-          maxPercentage: zone.maxPercentage,
+          name: zone.name,
+          minHR: 0,
+          maxHR: 0,
           minHeartRate: 0,
           maxHeartRate: 0,
           description: zone.description,
-          pace: `${zone.minPace} - ${zone.maxPace}`
+          pace: `${formatPace(zone.minPace)} - ${formatPace(zone.maxPace)}`
         }))
       : [];
 
@@ -594,7 +602,7 @@ export default function SportsProfileScreen() {
                     </DataTable.Cell>
                     <DataTable.Cell style={styles.fcColumn}>
                       <Text style={styles.fcRange}>
-                        {zone.minHeartRate > 0 ? `${zone.minHeartRate}-${zone.maxHeartRate}` : '--'}
+                        {zone.minHR > 0 ? `${zone.minHR}-${zone.maxHR}` : '--'}
                       </Text>
                     </DataTable.Cell>
                     <DataTable.Cell style={styles.paceColumn}>

@@ -17,6 +17,277 @@ export interface DailyWorkload {
   duration: number;
 }
 
+export interface TrainingZone {
+  name: string;
+  minHR: number;
+  maxHR: number;
+  description: string;
+  color: string;
+}
+
+export interface PaceZone {
+  name: string;
+  zone: string;
+  minPercentage: number;
+  maxPercentage: number;
+  minPace: number;
+  maxPace: number;
+  description: string;
+  color: string;
+}
+
+/**
+ * Calcula o IMC (Índice de Massa Corporal)
+ * Fórmula: IMC = peso (kg) / altura (m)²
+ */
+export function calculateIMC(weightKg: number, heightCm: number): number {
+  if (weightKg <= 0 || heightCm <= 0) return 0;
+  const heightM = heightCm / 100;
+  return weightKg / (heightM * heightM);
+}
+
+/**
+ * Calcula VO2max a partir do tempo de prova
+ */
+export function calculateVO2maxFromRaceTime(distanceKm: number, timeSeconds: number): number {
+  if (distanceKm <= 0 || timeSeconds <= 0) return 0;
+  const paceSecondsPerKm = timeSeconds / distanceKm;
+  const paceMinutesPerKm = paceSecondsPerKm / 60;
+  
+  // Fórmula aproximada baseada em estudos de VO2max
+  return Math.max(0, 85 - (paceMinutesPerKm - 3.5) * 10);
+}
+
+/**
+ * Calcula VAM (Velocidade Aeróbica Máxima)
+ * Fórmula: VAM = VO2max / 3.5
+ */
+export function calculateVAM(vo2max: number): number {
+  return vo2max / 3.5;
+}
+
+/**
+ * Calcula VAM a partir do VO2max
+ */
+export function calculateVamFromVo2max(vo2max: number): number {
+  return vo2max / 3.5;
+}
+
+/**
+ * Calcula zonas de treino baseadas na frequência cardíaca máxima
+ */
+export function calculateTrainingZones(maxHR: number): TrainingZone[] {
+  return [
+    {
+      name: 'Zona 1 - Recuperação',
+      minHR: Math.round(maxHR * 0.5),
+      maxHR: Math.round(maxHR * 0.6),
+      description: 'Recuperação ativa, aquecimento',
+      color: '#4CAF50'
+    },
+    {
+      name: 'Zona 2 - Resistência Aeróbica',
+      minHR: Math.round(maxHR * 0.6),
+      maxHR: Math.round(maxHR * 0.7),
+      description: 'Treino de base, resistência',
+      color: '#2196F3'
+    },
+    {
+      name: 'Zona 3 - Resistência Aeróbica',
+      minHR: Math.round(maxHR * 0.7),
+      maxHR: Math.round(maxHR * 0.8),
+      description: 'Treino de limiar aeróbico',
+      color: '#FF9800'
+    },
+    {
+      name: 'Zona 4 - Limiar Anaeróbico',
+      minHR: Math.round(maxHR * 0.8),
+      maxHR: Math.round(maxHR * 0.9),
+      description: 'Treino de limiar anaeróbico',
+      color: '#F44336'
+    },
+    {
+      name: 'Zona 5 - Capacidade Anaeróbica',
+      minHR: Math.round(maxHR * 0.9),
+      maxHR: maxHR,
+      description: 'Treino de alta intensidade',
+      color: '#9C27B0'
+    }
+  ];
+}
+
+/**
+ * Calcula VO2max a partir do teste de Cooper (12 min)
+ */
+export function calculateVo2maxFromCooper(distanceMeters: number): number {
+  if (distanceMeters <= 0) return 0;
+  // Fórmula de Cooper: VO2max = (distância - 504.9) / 44.73
+  return Math.max(0, (distanceMeters - 504.9) / 44.73);
+}
+
+/**
+ * Calcula VO2max a partir do teste de 3km
+ */
+export function calculateVo2maxFrom3km(timeSeconds: number): number {
+  if (timeSeconds <= 0) return 0;
+  const paceSecondsPerKm = timeSeconds / 3;
+  const paceMinutesPerKm = paceSecondsPerKm / 60;
+  
+  // Fórmula aproximada para 3km
+  return Math.max(0, 80 - (paceMinutesPerKm - 3.5) * 8);
+}
+
+/**
+ * Calcula VO2max a partir do teste de caminhada Rockport
+ */
+export function calculateVo2maxFromRockport(
+  weightKg: number, 
+  age: number, 
+  gender: string, 
+  timeSeconds: number, 
+  heartRate: number
+): number {
+  if (weightKg <= 0 || age <= 0 || timeSeconds <= 0 || heartRate <= 0) return 0;
+  
+  const timeMinutes = timeSeconds / 60;
+  const genderFactor = gender.toLowerCase() === 'male' ? 1 : 0;
+  
+  // Fórmula de Rockport
+  return 132.853 - (0.0769 * weightKg) - (0.3877 * age) + (6.315 * genderFactor) - 
+         (3.2649 * timeMinutes) - (0.1565 * heartRate);
+}
+
+/**
+ * Calcula VO2max a partir de resultado de prova
+ */
+export function calculateVo2maxFromRace(distanceKm: number, timeSeconds: number): number {
+  return calculateVO2maxFromRaceTime(distanceKm, timeSeconds);
+}
+
+/**
+ * Calcula zonas de treino usando método de Karvonen
+ */
+export function calculateKarvonenZones(maxHR: number, restingHR: number): TrainingZone[] {
+  const hrReserve = maxHR - restingHR;
+  
+  return [
+    {
+      name: 'Zona 1 - Recuperação',
+      minHR: Math.round(restingHR + hrReserve * 0.5),
+      maxHR: Math.round(restingHR + hrReserve * 0.6),
+      description: 'Recuperação ativa, aquecimento',
+      color: '#4CAF50'
+    },
+    {
+      name: 'Zona 2 - Resistência Aeróbica',
+      minHR: Math.round(restingHR + hrReserve * 0.6),
+      maxHR: Math.round(restingHR + hrReserve * 0.7),
+      description: 'Treino de base, resistência',
+      color: '#2196F3'
+    },
+    {
+      name: 'Zona 3 - Resistência Aeróbica',
+      minHR: Math.round(restingHR + hrReserve * 0.7),
+      maxHR: Math.round(restingHR + hrReserve * 0.8),
+      description: 'Treino de limiar aeróbico',
+      color: '#FF9800'
+    },
+    {
+      name: 'Zona 4 - Limiar Anaeróbico',
+      minHR: Math.round(restingHR + hrReserve * 0.8),
+      maxHR: Math.round(restingHR + hrReserve * 0.9),
+      description: 'Treino de limiar anaeróbico',
+      color: '#F44336'
+    },
+    {
+      name: 'Zona 5 - Capacidade Anaeróbica',
+      minHR: Math.round(restingHR + hrReserve * 0.9),
+      maxHR: Math.round(restingHR + hrReserve * 1.0),
+      description: 'Treino de alta intensidade',
+      color: '#9C27B0'
+    }
+  ];
+}
+
+/**
+ * Formata segundos para formato min:seg
+ */
+export function formatPace(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Calcula zonas de pace baseadas no VO2max
+ */
+export function calculatePaceZones(vo2max: number): PaceZone[] {
+  const vam = calculateVAM(vo2max);
+  const basePace = 3600 / vam; // segundos por km
+  
+  return [
+    {
+      name: 'Zona 1 - Recuperação',
+      zone: 'Z1',
+      minPercentage: 50,
+      maxPercentage: 60,
+      minPace: basePace * 1.3,
+      maxPace: basePace * 1.2,
+      description: 'Recuperação ativa, aquecimento',
+      color: '#4CAF50'
+    },
+    {
+      name: 'Zona 2 - Resistência Aeróbica',
+      zone: 'Z2',
+      minPercentage: 60,
+      maxPercentage: 70,
+      minPace: basePace * 1.2,
+      maxPace: basePace * 1.1,
+      description: 'Treino de base, resistência',
+      color: '#2196F3'
+    },
+    {
+      name: 'Zona 3 - Resistência Aeróbica',
+      zone: 'Z3',
+      minPercentage: 70,
+      maxPercentage: 80,
+      minPace: basePace * 1.1,
+      maxPace: basePace * 1.05,
+      description: 'Treino de limiar aeróbico',
+      color: '#FF9800'
+    },
+    {
+      name: 'Zona 4 - Limiar Anaeróbico',
+      zone: 'Z4',
+      minPercentage: 80,
+      maxPercentage: 90,
+      minPace: basePace * 1.05,
+      maxPace: basePace * 0.95,
+      description: 'Treino de limiar anaeróbico',
+      color: '#F44336'
+    },
+    {
+      name: 'Zona 5 - Capacidade Anaeróbica',
+      zone: 'Z5',
+      minPercentage: 90,
+      maxPercentage: 100,
+      minPace: basePace * 0.95,
+      maxPace: basePace * 0.85,
+      description: 'Treino de alta intensidade',
+      color: '#9C27B0'
+    }
+  ];
+}
+
+/**
+ * Calcula frequência cardíaca máxima usando fórmula de Tanaka
+ */
+export function calculateMaxHeartRateTanaka(age: number): number {
+  if (age <= 0) return 0;
+  // Fórmula de Tanaka: FCmax = 208 - (0.7 × idade)
+  return Math.round(208 - (0.7 * age));
+}
+
 /**
  * Calcula a carga de treino baseada na duração e intensidade
  * Fórmula: Carga = Duração (min) × Intensidade (PSE 1-10)

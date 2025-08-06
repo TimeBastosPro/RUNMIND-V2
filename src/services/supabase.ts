@@ -22,11 +22,60 @@ if (!supabaseUrl || !supabaseAnonKey) {
 console.log('🔧 Supabase Config - URL:', supabaseUrl ? 'Configurado' : 'Não configurado');
 console.log('🔧 Supabase Config - Key:', supabaseAnonKey ? 'Configurado' : 'Não configurado');
 
+// ✅ MELHORADO: Configuração específica para React Native
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // ✅ NOVO: Configurações específicas para mobile
+    flowType: 'pkce',
+    debug: __DEV__, // Logs apenas em desenvolvimento
+  },
+  // ✅ NOVO: Configurações de rede para mobile
+  global: {
+    headers: {
+      'X-Client-Info': 'runmind-mobile',
+    },
+  },
+  // ✅ NOVO: Configurações de retry para mobile
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
   },
 });
+
+// ✅ NOVO: Função para limpar dados de sessão corrompidos
+export const clearCorruptedSession = async () => {
+  try {
+    console.log('🧹 Limpando sessão corrompida...');
+    await AsyncStorage.removeItem('supabase.auth.token');
+    await AsyncStorage.removeItem('supabase.auth.refreshToken');
+    console.log('✅ Sessão limpa com sucesso');
+  } catch (error) {
+    console.error('❌ Erro ao limpar sessão:', error);
+  }
+};
+
+// ✅ NOVO: Função para verificar e reparar sessão
+export const checkAndRepairSession = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.log('🔍 Erro ao verificar sessão:', error.message);
+      if (error.message.includes('Refresh Token Not Found')) {
+        console.log('🔧 Reparando sessão corrompida...');
+        await clearCorruptedSession();
+        return false;
+      }
+    }
+    
+    return !!session;
+  } catch (error) {
+    console.error('❌ Erro ao verificar sessão:', error);
+    return false;
+  }
+};
