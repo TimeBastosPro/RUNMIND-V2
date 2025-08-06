@@ -7,7 +7,7 @@ import { Text, Card, TextInput, Button, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuthStore } from '../stores/auth';
-import { supabase, checkAndRepairSession } from '../services/supabase';
+import { supabase } from '../services/supabase';
 
 // Screens
 import DailyCheckinScreen from '../screens/checkin/DailyCheckinScreen';
@@ -392,37 +392,24 @@ export default function AppNavigator() {
   const { user, profile, isLoading, isInitializing, isAuthenticated, loadProfile, setInitializing } = useAuthStore();
 
   useEffect(() => {
-    // ✅ MELHORADO: Verificação inicial com reparo de sessão
+    // ✅ SIMPLIFICADO: Inicialização básica
     const initializeAuth = async () => {
       try {
         console.log('🔍 Inicializando autenticação...');
         
-        // Verificar e reparar sessão corrompida
-        const hasValidSession = await checkAndRepairSession();
+        // Checagem inicial da sessão
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (hasValidSession) {
-          // Checagem inicial da sessão
-          const { data: { session }, error } = await supabase.auth.getSession();
-          
-          if (session?.user && !error) {
-            console.log('🔍 Sessão válida encontrada:', session.user.id);
-            useAuthStore.setState({
-              user: session.user,
-              isAuthenticated: true,
-              isInitializing: false
-            });
-            loadProfile();
-          } else {
-            console.log('🔍 Nenhuma sessão válida encontrada');
-            useAuthStore.setState({
-              user: null,
-              profile: null,
-              isAuthenticated: false,
-              isInitializing: false
-            });
-          }
+        if (session?.user && !error) {
+          console.log('🔍 Sessão válida encontrada:', session.user.id);
+          useAuthStore.setState({
+            user: session.user,
+            isAuthenticated: true,
+            isInitializing: false
+          });
+          loadProfile();
         } else {
-          console.log('🔍 Sessão inválida, limpando estado');
+          console.log('🔍 Nenhuma sessão válida encontrada');
           useAuthStore.setState({
             user: null,
             profile: null,
