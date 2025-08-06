@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
 import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
+
+const { width: screenWidth } = Dimensions.get('window');
+const isMobile = screenWidth < 768;
 
 const METRICS = [
   { 
@@ -239,8 +242,9 @@ export default function WellbeingChartsTab() {
               onPress={() => navigateWeek('prev')}
               icon="chevron-left"
               style={styles.navButton}
+              compact={isMobile}
             >
-              Semana Anterior
+              {isMobile ? 'Anterior' : 'Semana Anterior'}
             </Button>
             <View style={styles.weekInfo}>
               <Text style={styles.weekLabel}>
@@ -252,8 +256,9 @@ export default function WellbeingChartsTab() {
               onPress={() => navigateWeek('next')}
               icon="chevron-right"
               style={styles.navButton}
+              compact={isMobile}
             >
-              Próxima Semana
+              {isMobile ? 'Próxima' : 'Próxima Semana'}
             </Button>
           </View>
         </Card.Content>
@@ -278,8 +283,9 @@ export default function WellbeingChartsTab() {
                   selectedMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
                 ]}
                 icon={metric.icon}
+                compact={isMobile}
               >
-                {metric.label}
+                {isMobile ? metric.label.split(' ')[0] : metric.label}
               </Chip>
             ))}
           </View>
@@ -293,7 +299,7 @@ export default function WellbeingChartsTab() {
             <View style={styles.chartTitleContainer}>
               <MaterialCommunityIcons 
                 name={selectedMetricInfo?.icon as any} 
-                size={24} 
+                size={isMobile ? 20 : 24} 
                 color={selectedMetricInfo?.color} 
               />
               <Text style={styles.chartTitle}>{selectedMetricInfo?.label}</Text>
@@ -323,7 +329,7 @@ export default function WellbeingChartsTab() {
               </View>
             ) : (
               <View style={styles.noDataContainer}>
-                <MaterialCommunityIcons name="chart-line" size={48} color="#ccc" />
+                <MaterialCommunityIcons name="chart-line" size={isMobile ? 36 : 48} color="#ccc" />
                 <Text style={styles.noDataText}>Nenhum dado disponível</Text>
                 <Text style={styles.noDataSubtext}>
                   Faça alguns check-ins para ver seus dados de bem-estar
@@ -377,7 +383,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-    padding: 16,
+    padding: isMobile ? 12 : 16,
   },
   navigationCard: {
     marginBottom: 16,
@@ -393,13 +399,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    minWidth: isMobile ? 80 : 120,
   },
   weekInfo: {
     flex: 1,
     alignItems: 'center',
   },
   weekLabel: {
-    fontSize: 14,
+    fontSize: isMobile ? 12 : 14,
     color: '#4CAF50',
     fontWeight: 'bold',
     marginHorizontal: 10,
@@ -409,7 +416,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: isMobile ? 14 : 16,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 12,
@@ -417,7 +424,7 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: isMobile ? 6 : 8,
   },
   metricChip: {
     marginBottom: 8,
@@ -426,6 +433,7 @@ const styles = StyleSheet.create({
   },
   metricChipText: {
     color: '#333',
+    fontSize: isMobile ? 11 : 12,
   },
   chartCard: {
     marginBottom: 16,
@@ -443,13 +451,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chartTitle: {
-    fontSize: 18,
+    fontSize: isMobile ? 16 : 18,
     fontWeight: 'bold',
     color: '#333',
     marginLeft: 8,
   },
   chartContainer: {
-    height: 200,
+    height: isMobile ? 160 : 200,
     backgroundColor: '#f8f9fa',
     borderRadius: 8,
     padding: 10,
@@ -463,7 +471,7 @@ const styles = StyleSheet.create({
   barWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
-    width: 40,
+    width: isMobile ? 32 : 40,
     height: '100%',
   },
   bar: {
@@ -472,13 +480,13 @@ const styles = StyleSheet.create({
     minHeight: 10,
   },
   barLabel: {
-    fontSize: 10,
+    fontSize: isMobile ? 8 : 10,
     color: '#666',
     marginTop: 4,
     textAlign: 'center',
   },
   barValue: {
-    fontSize: 12,
+    fontSize: isMobile ? 10 : 12,
     fontWeight: 'bold',
     color: '#333',
     marginTop: 2,
@@ -489,12 +497,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   noDataText: {
-    fontSize: 16,
+    fontSize: isMobile ? 14 : 16,
     color: '#666',
     marginTop: 8,
   },
   noDataSubtext: {
-    fontSize: 12,
+    fontSize: isMobile ? 10 : 12,
     color: '#999',
     textAlign: 'center',
     marginTop: 4,
@@ -504,7 +512,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statsTitle: {
-    fontSize: 16,
+    fontSize: isMobile ? 14 : 16,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 16,
@@ -515,21 +523,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   statItem: {
-    width: '48%',
+    width: isMobile ? '48%' : '48%',
     backgroundColor: '#f8f9fa',
-    padding: 12,
+    padding: isMobile ? 10 : 12,
     borderRadius: 8,
     marginBottom: 8,
     alignItems: 'center',
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: isMobile ? 10 : 12,
     color: '#666',
     marginBottom: 4,
     textAlign: 'center',
   },
   statValue: {
-    fontSize: 16,
+    fontSize: isMobile ? 14 : 16,
     fontWeight: 'bold',
     color: '#333',
   },

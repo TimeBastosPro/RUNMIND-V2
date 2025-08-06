@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { Text } from 'react-native-paper';
 
@@ -7,8 +7,14 @@ import { Text } from 'react-native-paper';
 import WellbeingChartsTab from './tabs/WellbeingChartsTab';
 import TrainingChartsTab from './tabs/TrainingChartsTab';
 import CrossAnalysisTab from './tabs/CrossAnalysisTab';
+import TrainingLoadTab from './tabs/TrainingLoadTab';
 
 const Tab = createMaterialTopTabNavigator();
+const { width: screenWidth } = Dimensions.get('window');
+
+// Determinar se é um dispositivo móvel
+const isMobile = screenWidth < 768;
+const isTablet = screenWidth >= 768 && screenWidth < 1024;
 
 export default function ComparativeChartsScreen() {
   return (
@@ -23,24 +29,67 @@ export default function ComparativeChartsScreen() {
           tabBarActiveTintColor: '#2196F3',
           tabBarInactiveTintColor: '#666',
           tabBarIndicatorStyle: { backgroundColor: '#2196F3' },
-          tabBarLabelStyle: { fontSize: 12, fontWeight: 'bold' },
-          tabBarStyle: { backgroundColor: '#fff' },
+          tabBarLabelStyle: { 
+            fontSize: isMobile ? 10 : 12, 
+            fontWeight: 'bold',
+            textTransform: 'none',
+          },
+          tabBarStyle: { 
+            backgroundColor: '#fff',
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 3,
+          },
+          tabBarScrollEnabled: isMobile, // Scroll apenas em mobile
+          tabBarItemStyle: {
+            minWidth: isMobile ? 80 : 100,
+            paddingHorizontal: isMobile ? 4 : 8,
+          },
+          tabBarPressColor: 'rgba(33, 150, 243, 0.1)',
+          tabBarPressOpacity: 0.8,
         }}
       >
         <Tab.Screen 
           name="Wellbeing" 
           component={WellbeingChartsTab}
-          options={{ tabBarLabel: 'Bem-estar' }}
+          options={{ 
+            tabBarLabel: isMobile ? 'Bem-estar' : 'Bem-estar',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ color, fontSize: 16 }}>😴</Text>
+            ),
+          }}
         />
         <Tab.Screen 
           name="Training" 
           component={TrainingChartsTab}
-          options={{ tabBarLabel: 'Treinos' }}
+          options={{ 
+            tabBarLabel: isMobile ? 'Treinos' : 'Treinos',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ color, fontSize: 16 }}>🏃</Text>
+            ),
+          }}
+        />
+        <Tab.Screen 
+          name="TrainingLoad" 
+          component={TrainingLoadTab}
+          options={{ 
+            tabBarLabel: isMobile ? 'Carga' : 'Carga de Treino',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ color, fontSize: 16 }}>⚡</Text>
+            ),
+          }}
         />
         <Tab.Screen 
           name="CrossAnalysis" 
           component={CrossAnalysisTab}
-          options={{ tabBarLabel: 'Correlação' }}
+          options={{ 
+            tabBarLabel: isMobile ? 'Correlação' : 'Correlação',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ color, fontSize: 16 }}>📈</Text>
+            ),
+          }}
         />
       </Tab.Navigator>
     </View>

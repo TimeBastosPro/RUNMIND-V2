@@ -1,216 +1,294 @@
-// Cálculo do IMC
-export function calculateIMC(pesoKg: number, alturaCm: number): number | undefined {
-  if (!pesoKg || !alturaCm) return undefined;
-  const alturaM = alturaCm / 100;
-  return pesoKg / (alturaM * alturaM);
+import { TrainingSession } from '../types/database';
+
+export interface WorkloadMetrics {
+  acuteLoad: number;      // Carga aguda (7 dias)
+  chronicLoad: number;    // Carga crônica (28 dias)
+  acwr: number;          // Acute:Chronic Workload Ratio
+  riskZone: 'detraining' | 'safety' | 'risk' | 'high-risk';
+  riskPercentage: number;
+  trend: 'increasing' | 'decreasing' | 'stable';
+  recommendations: string[];
 }
 
-// Cálculo do VO2max estimado a partir de tempo de prova (Jack Daniels para 5k, 10k, etc)
-// tempoEmSegundos deve ser o tempo total da prova
-export function calculateVO2maxFromRaceTime(distanciaEmMetros: number, tempoHHMMSS: string): number | undefined {
-  if (!distanciaEmMetros || !tempoHHMMSS) return undefined;
-  // Converter HH:MM:SS para segundos
-  const [hh = '0', mm = '0', ss = '0'] = tempoHHMMSS.split(':');
-  const tempoSegundos = parseInt(hh) * 3600 + parseInt(mm) * 60 + parseInt(ss);
-  if (!tempoSegundos || tempoSegundos === 0) return undefined;
-  // Fórmula simplificada de Jack Daniels para corrida de longa distância
-  const velocidadeMS = distanciaEmMetros / tempoSegundos;
-  const vo2 = (-4.6 + 0.182258 * velocidadeMS * 60 + 0.000104 * Math.pow(velocidadeMS * 60, 2));
-  const vo2max = vo2 / (0.8 + 0.1894393 * Math.exp(-0.012778 * tempoSegundos / 60) + 0.2989558 * Math.exp(-0.1932605 * tempoSegundos / 60));
-  return vo2max;
+export interface DailyWorkload {
+  date: string;
+  workload: number;
+  intensity: number;
+  duration: number;
 }
 
-// Cálculo da VAM (Velocidade Aeróbia Máxima)
-export function calculateVAM(vo2max: number): number | undefined {
-  if (!vo2max) return undefined;
-  // VAM em km/h (VAM ≈ VO2max / 3.5)
-  return vo2max / 3.5;
+/**
+ * Calcula a carga de treino baseada na duração e intensidade
+ * Fórmula: Carga = Duração (min) × Intensidade (PSE 1-10)
+ */
+export function calculateWorkload(duration: number, intensity: number): number {
+  return duration * intensity;
 }
 
-// Cálculo das zonas de treino de FC (Karvonen)
-export function calculateTrainingZones(fcMax: number, fcRepouso: number) {
-  if (!fcMax || !fcRepouso) return undefined;
-  // 5 zonas clássicas: 50-60%, 60-70%, 70-80%, 80-90%, 90-100%
-  const zonas = [
-    { min: Math.round((fcMax - fcRepouso) * 0.5 + fcRepouso), max: Math.round((fcMax - fcRepouso) * 0.6 + fcRepouso) },
-    { min: Math.round((fcMax - fcRepouso) * 0.6 + fcRepouso), max: Math.round((fcMax - fcRepouso) * 0.7 + fcRepouso) },
-    { min: Math.round((fcMax - fcRepouso) * 0.7 + fcRepouso), max: Math.round((fcMax - fcRepouso) * 0.8 + fcRepouso) },
-    { min: Math.round((fcMax - fcRepouso) * 0.8 + fcRepouso), max: Math.round((fcMax - fcRepouso) * 0.9 + fcRepouso) },
-    { min: Math.round((fcMax - fcRepouso) * 0.9 + fcRepouso), max: fcMax },
-  ];
-  return zonas;
-}
-
-// Novas funções para testes de performance
-export const calculateVo2maxFromCooper = (distanceInMeters: number): number => {
-  return (distanceInMeters - 504.9) / 44.73;
-};
-
-export const calculateVo2maxFrom3km = (timeInSeconds: number): number => {
-  const timeInMinutes = timeInSeconds / 60;
-  return (483 / timeInMinutes) + 3.5;
-};
-
-export const calculateVo2maxFromRockport = (
-  weightKg: number,
-  age: number,
-  gender: string,
-  timeInSeconds: number,
-  finalHeartRate: number
-): number => {
-  const timeInMinutes = timeInSeconds / 60;
-  const genderValue = gender === 'male' ? 1 : 0;
+/**
+ * Calcula a carga aguda (últimos 7 dias)
+ */
+export function calculateAcuteLoad(sessions: TrainingSession[]): number {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   
-  return 132.853 - (0.0769 * weightKg) - (0.3877 * age) + (6.315 * genderValue) - (3.2649 * timeInMinutes) - (0.1565 * finalHeartRate);
-};
+  const recentSessions = sessions.filter(session => {
+    const sessionDate = new Date(session.training_date || '');
+    return sessionDate >= sevenDaysAgo;
+  });
 
-export const calculateVo2maxFromRace = (distanceInMeters: number, timeInSeconds: number): number => {
-  const timeInMinutes = timeInSeconds / 60;
-  const velocity = distanceInMeters / timeInMinutes; // m/min
-  
-  // Fórmula VDOT de Jack Daniels
-  return velocity * 0.2 + 3.5;
-};
-
-export const calculateVamFromVo2max = (vo2max: number): number => {
-  return vo2max / 3.5;
-};
-
-export interface TrainingZone {
-  zone: number;
-  minPercentage: number;
-  maxPercentage: number;
-  minHeartRate: number;
-  maxHeartRate: number;
-  description: string;
+  return recentSessions.reduce((total, session) => {
+    const duration = session.duration_minutes || 0;
+    const intensity = session.perceived_exertion || 5; // Default PSE 5
+    return total + calculateWorkload(duration, intensity);
+  }, 0);
 }
 
-export interface PaceZone {
-  zone: number;
-  minPercentage: number;
-  maxPercentage: number;
-  minPace: string; // formato "mm:ss"
-  maxPace: string; // formato "mm:ss"
-  description: string;
+/**
+ * Calcula a carga crônica (últimos 28 dias)
+ */
+export function calculateChronicLoad(sessions: TrainingSession[]): number {
+  const twentyEightDaysAgo = new Date();
+  twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 28);
+  
+  const recentSessions = sessions.filter(session => {
+    const sessionDate = new Date(session.training_date || '');
+    return sessionDate >= twentyEightDaysAgo;
+  });
+
+  return recentSessions.reduce((total, session) => {
+    const duration = session.duration_minutes || 0;
+    const intensity = session.perceived_exertion || 5;
+    return total + calculateWorkload(duration, intensity);
+  }, 0);
 }
 
-export const calculateKarvonenZones = (maxHeartRate: number, restingHeartRate: number): TrainingZone[] => {
-  const heartRateReserve = maxHeartRate - restingHeartRate;
-  
-  return [
-    {
-      zone: 1,
-      minPercentage: 0.5,
-      maxPercentage: 0.6,
-      minHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.5)),
-      maxHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.6)),
-      description: 'Recuperação'
-    },
-    {
-      zone: 2,
-      minPercentage: 0.6,
-      maxPercentage: 0.7,
-      minHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.6)),
-      maxHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.7)),
-      description: 'Aeróbico'
-    },
-    {
-      zone: 3,
-      minPercentage: 0.7,
-      maxPercentage: 0.8,
-      minHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.7)),
-      maxHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.8)),
-      description: 'Limiar'
-    },
-    {
-      zone: 4,
-      minPercentage: 0.8,
-      maxPercentage: 0.9,
-      minHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.8)),
-      maxHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.9)),
-      description: 'Anaeróbico'
-    },
-    {
-      zone: 5,
-      minPercentage: 0.9,
-      maxPercentage: 1.0,
-      minHeartRate: Math.round(restingHeartRate + (heartRateReserve * 0.9)),
-      maxHeartRate: Math.round(restingHeartRate + (heartRateReserve * 1.0)),
-      description: 'Máximo'
-    }
-  ];
-};
+/**
+ * Calcula o ACWR (Acute:Chronic Workload Ratio)
+ * ACWR = Carga Aguda (7 dias) / Carga Crônica (28 dias)
+ */
+export function calculateACWR(acuteLoad: number, chronicLoad: number): number {
+  if (chronicLoad === 0) return 0;
+  return acuteLoad / chronicLoad;
+}
 
-// Calcular zonas de ritmo baseadas no VO2max e VAM
-export const calculatePaceZones = (vo2max: number, vam: number): PaceZone[] => {
-  console.log('DEBUG - calculatePaceZones chamado com:', { vo2max, vam });
-  
-  if (!vo2max || !vam) {
-    console.log('DEBUG - VO2max ou VAM inválidos, retornando array vazio');
-    return [];
+/**
+ * Determina a zona de risco baseada no ACWR
+ */
+export function determineRiskZone(acwr: number): 'detraining' | 'safety' | 'risk' | 'high-risk' {
+  if (acwr < 0.8) return 'detraining';
+  if (acwr >= 0.8 && acwr <= 1.3) return 'safety';
+  if (acwr > 1.3 && acwr <= 1.5) return 'risk';
+  return 'high-risk';
+}
+
+/**
+ * Calcula a porcentagem de risco
+ */
+export function calculateRiskPercentage(acwr: number): number {
+  if (acwr < 0.8) return 0; // Sem risco de lesão, mas risco de destreino
+  if (acwr >= 0.8 && acwr <= 1.3) return 0; // Zona segura
+  if (acwr > 1.3 && acwr <= 1.5) return Math.round(((acwr - 1.3) / 0.2) * 50); // 0-50%
+  return Math.round(50 + ((acwr - 1.5) / 0.5) * 50); // 50-100%
+}
+
+/**
+ * Determina a tendência da carga de treino
+ */
+export function determineTrend(sessions: TrainingSession[]): 'increasing' | 'decreasing' | 'stable' {
+  const last14Days = sessions.filter(session => {
+    const sessionDate = new Date(session.training_date || '');
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    return sessionDate >= fourteenDaysAgo;
+  });
+
+  if (last14Days.length < 4) return 'stable';
+
+  // Dividir em duas semanas
+  const week1 = last14Days.slice(0, Math.ceil(last14Days.length / 2));
+  const week2 = last14Days.slice(Math.ceil(last14Days.length / 2));
+
+  const week1Load = week1.reduce((total, session) => {
+    const duration = session.duration_minutes || 0;
+    const intensity = session.perceived_exertion || 5;
+    return total + calculateWorkload(duration, intensity);
+  }, 0);
+
+  const week2Load = week2.reduce((total, session) => {
+    const duration = session.duration_minutes || 0;
+    const intensity = session.perceived_exertion || 5;
+    return total + calculateWorkload(duration, intensity);
+  }, 0);
+
+  const difference = week2Load - week1Load;
+  const threshold = week1Load * 0.1; // 10% de variação
+
+  if (difference > threshold) return 'increasing';
+  if (difference < -threshold) return 'decreasing';
+  return 'stable';
+}
+
+/**
+ * Gera recomendações baseadas no ACWR e tendência
+ */
+export function generateRecommendations(
+  acwr: number, 
+  riskZone: string, 
+  trend: string
+): string[] {
+  const recommendations: string[] = [];
+
+  switch (riskZone) {
+    case 'detraining':
+      recommendations.push('⚠️ Sua carga de treino está baixa');
+      recommendations.push('Considere aumentar gradualmente a intensidade');
+      recommendations.push('Mantenha pelo menos 3 sessões por semana');
+      break;
+    
+    case 'safety':
+      recommendations.push('✅ Você está na zona segura');
+      recommendations.push('Continue com sua rotina atual');
+      if (trend === 'increasing') {
+        recommendations.push('Monitore o aumento gradual da carga');
+      }
+      break;
+    
+    case 'risk':
+      recommendations.push('⚠️ Carga de treino elevada');
+      recommendations.push('Considere reduzir a intensidade ou volume');
+      recommendations.push('Aumente o tempo de recuperação');
+      break;
+    
+    case 'high-risk':
+      recommendations.push('🚨 Risco alto de lesão!');
+      recommendations.push('Reduza imediatamente a carga de treino');
+      recommendations.push('Considere dias de descanso completo');
+      recommendations.push('Consulte um profissional se necessário');
+      break;
   }
-  
-  // Converter VAM de km/h para min/km (ritmo)
-  const vamPaceSeconds = 3600 / vam; // segundos por km
-  console.log('DEBUG - VAM Pace Seconds:', vamPaceSeconds);
-  
-  const zones = [
-    {
-      zone: 1,
-      minPercentage: 0.5,
-      maxPercentage: 0.6,
-      minPace: formatSecondsToPace(vamPaceSeconds / 0.5),
-      maxPace: formatSecondsToPace(vamPaceSeconds / 0.6),
-      description: 'Recuperação'
-    },
-    {
-      zone: 2,
-      minPercentage: 0.6,
-      maxPercentage: 0.7,
-      minPace: formatSecondsToPace(vamPaceSeconds / 0.6),
-      maxPace: formatSecondsToPace(vamPaceSeconds / 0.7),
-      description: 'Aeróbico'
-    },
-    {
-      zone: 3,
-      minPercentage: 0.7,
-      maxPercentage: 0.8,
-      minPace: formatSecondsToPace(vamPaceSeconds / 0.7),
-      maxPace: formatSecondsToPace(vamPaceSeconds / 0.8),
-      description: 'Limiar'
-    },
-    {
-      zone: 4,
-      minPercentage: 0.8,
-      maxPercentage: 0.9,
-      minPace: formatSecondsToPace(vamPaceSeconds / 0.8),
-      maxPace: formatSecondsToPace(vamPaceSeconds / 0.9),
-      description: 'Anaeróbico'
-    },
-    {
-      zone: 5,
-      minPercentage: 0.9,
-      maxPercentage: 1.0,
-      minPace: formatSecondsToPace(vamPaceSeconds / 0.9),
-      maxPace: formatSecondsToPace(vamPaceSeconds / 1.0),
-      description: 'Máximo'
+
+  return recommendations;
+}
+
+/**
+ * Calcula todas as métricas de carga de treino
+ */
+export function calculateWorkloadMetrics(sessions: TrainingSession[]): WorkloadMetrics {
+  const acuteLoad = calculateAcuteLoad(sessions);
+  const chronicLoad = calculateChronicLoad(sessions);
+  const acwr = calculateACWR(acuteLoad, chronicLoad);
+  const riskZone = determineRiskZone(acwr);
+  const riskPercentage = calculateRiskPercentage(acwr);
+  const trend = determineTrend(sessions);
+  const recommendations = generateRecommendations(acwr, riskZone, trend);
+
+  return {
+    acuteLoad,
+    chronicLoad,
+    acwr,
+    riskZone,
+    riskPercentage,
+    trend,
+    recommendations
+  };
+}
+
+/**
+ * Calcula carga diária para gráficos
+ */
+export function calculateDailyWorkloads(sessions: TrainingSession[]): DailyWorkload[] {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const recentSessions = sessions.filter(session => {
+    const sessionDate = new Date(session.training_date || '');
+    return sessionDate >= thirtyDaysAgo;
+  });
+
+  // Agrupar por data
+  const dailyWorkloads = new Map<string, DailyWorkload>();
+
+  recentSessions.forEach(session => {
+    const date = session.training_date || '';
+    const duration = session.duration_minutes || 0;
+    const intensity = session.perceived_exertion || 5;
+    const workload = calculateWorkload(duration, intensity);
+
+    if (dailyWorkloads.has(date)) {
+      const existing = dailyWorkloads.get(date)!;
+      existing.workload += workload;
+      existing.duration += duration;
+      existing.intensity = Math.max(existing.intensity, intensity);
+    } else {
+      dailyWorkloads.set(date, {
+        date,
+        workload,
+        intensity,
+        duration
+      });
     }
-  ];
-  
-  console.log('DEBUG - Zonas de ritmo calculadas:', zones);
-  return zones;
-};
+  });
 
-// Função auxiliar para formatar segundos em ritmo (mm:ss)
-const formatSecondsToPace = (seconds: number): string => {
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
-};
+  return Array.from(dailyWorkloads.values())
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
 
-// Fórmula de Tanaka para calcular FC Máxima baseada na idade
-export const calculateMaxHeartRateTanaka = (age: number): number => {
-  if (!age || age <= 0) return 0;
-  // Fórmula de Tanaka: FCmax = 208 - (0.7 × idade)
-  return Math.round(208 - (0.7 * age));
-}; 
+/**
+ * Calcula a carga semanal para análise de tendências
+ */
+export function calculateWeeklyWorkloads(sessions: TrainingSession[]): Array<{
+  weekStart: string;
+  totalWorkload: number;
+  averageIntensity: number;
+  sessionsCount: number;
+}> {
+  const eightWeeksAgo = new Date();
+  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
+
+  const recentSessions = sessions.filter(session => {
+    const sessionDate = new Date(session.training_date || '');
+    return sessionDate >= eightWeeksAgo;
+  });
+
+  const weeklyData = new Map<string, {
+    weekStart: string;
+    totalWorkload: number;
+    totalIntensity: number;
+    sessionsCount: number;
+  }>();
+
+  recentSessions.forEach(session => {
+    const sessionDate = new Date(session.training_date || '');
+    const weekStart = new Date(sessionDate);
+    weekStart.setDate(sessionDate.getDate() - sessionDate.getDay()); // Domingo
+    const weekKey = weekStart.toISOString().split('T')[0];
+
+    const duration = session.duration_minutes || 0;
+    const intensity = session.perceived_exertion || 5;
+    const workload = calculateWorkload(duration, intensity);
+
+    if (weeklyData.has(weekKey)) {
+      const existing = weeklyData.get(weekKey)!;
+      existing.totalWorkload += workload;
+      existing.totalIntensity += intensity;
+      existing.sessionsCount += 1;
+    } else {
+      weeklyData.set(weekKey, {
+        weekStart: weekKey,
+        totalWorkload: workload,
+        totalIntensity: intensity,
+        sessionsCount: 1
+      });
+    }
+  });
+
+  return Array.from(weeklyData.values())
+    .map(week => ({
+      weekStart: week.weekStart,
+      totalWorkload: week.totalWorkload,
+      averageIntensity: week.totalIntensity / week.sessionsCount,
+      sessionsCount: week.sessionsCount
+    }))
+    .sort((a, b) => new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime());
+} 
