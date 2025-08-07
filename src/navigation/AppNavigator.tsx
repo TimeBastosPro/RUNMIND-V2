@@ -27,6 +27,9 @@ import SportsProfileScreen from '../screens/SportsProfileScreen';
 // Coach Screens
 import CoachDashboardScreen from '../screens/coach/CoachDashboardScreen';
 import CoachProfileScreen from '../screens/coach/CoachProfileScreen';
+import CoachRequestsScreen from '../screens/coach/CoachRequestsScreen';
+import CoachTeamsScreen from '../screens/coach/CoachTeamsScreen';
+import CoachAthletesScreen from '../screens/coach/CoachAthletesScreen';
 import CoachProfileSetupScreen from '../screens/auth/CoachProfileSetupScreen';
 import UserTypeSelectionScreen from '../screens/auth/UserTypeSelectionScreen';
 
@@ -62,6 +65,9 @@ type StackParamList = {
   CoachProfileSetup: undefined;
   CoachMain: undefined;
   CoachProfile: undefined;
+  CoachRequests: undefined;
+  CoachTeams: undefined;
+  CoachAthletes: undefined;
   Calendar: undefined;
 };
 
@@ -570,6 +576,9 @@ export default function AppNavigator() {
                 {/* Usuário é treinador - mostrar interface do treinador */}
                 <Stack.Screen name="CoachMain" component={CoachDashboardScreen} />
                 <Stack.Screen name="CoachProfile" component={CoachProfileScreen} />
+                <Stack.Screen name="CoachRequests" component={CoachRequestsScreen} />
+                <Stack.Screen name="CoachTeams" component={CoachTeamsScreen} />
+                <Stack.Screen name="CoachAthletes" component={CoachAthletesScreen} />
               </>
             ) : (
               // Usuário é atleta - mostrar interface normal

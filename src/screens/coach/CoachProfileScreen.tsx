@@ -258,7 +258,7 @@ export default function CoachProfileScreen({ navigation }: CoachProfileScreenPro
           
           <Button 
             mode="contained" 
-            onPress={() => navigation.navigate('CoachDashboard')}
+            onPress={() => navigation.navigate('CoachMain')}
             style={styles.actionButton}
             icon="dashboard"
           >

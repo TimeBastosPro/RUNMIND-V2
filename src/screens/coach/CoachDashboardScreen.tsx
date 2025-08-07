@@ -314,7 +314,7 @@ export default function CoachDashboardScreen({ navigation }: CoachDashboardScree
                 style={styles.actionButton}
                 icon="account-plus"
               >
-                Solicitações ({activeRelationships.filter(r => r.status === 'pending').length})
+                {`Solicitações (${activeRelationships.filter(r => r.status === 'pending').length})`}
               </Button>
               
               <Button 

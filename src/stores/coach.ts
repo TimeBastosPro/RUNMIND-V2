@@ -287,6 +287,24 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
+      // VERIFICAR SE JÁ EXISTE UM RELACIONAMENTO
+      const { data: existingRelationship, error: checkError } = await supabase
+        .from('athlete_coach_relationships')
+        .select('*')
+        .eq('athlete_id', user.id)
+        .eq('coach_id', coachId)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('❌ Erro ao verificar relacionamento existente:', checkError);
+        throw checkError;
+      }
+
+      if (existingRelationship) {
+        console.log('⚠️ Relacionamento já existe:', existingRelationship);
+        throw new Error('Você já possui uma solicitação para este treinador');
+      }
+
       const { data, error } = await supabase
         .from('athlete_coach_relationships')
         .insert([{
@@ -348,37 +366,47 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const { currentCoach } = get();
       if (!currentCoach) throw new Error('Perfil de treinador não encontrado');
 
+      console.log('🔍 loadCoachRelationships - Treinador:', currentCoach.id, currentCoach.full_name);
+
+      // Usar a view que inclui dados do atleta
       let query = supabase
-        .from('athlete_coach_relationships')
+        .from('active_athlete_coach_relationships')
         .select('*')
         .eq('coach_id', currentCoach.id);
 
       if (filters?.status) {
         query = query.eq('status', filters.status);
+        console.log('🔍 Aplicando filtro de status:', filters.status);
       }
       if (filters?.athlete_id) {
         query = query.eq('athlete_id', filters.athlete_id);
+        console.log('🔍 Aplicando filtro de atleta:', filters.athlete_id);
       }
       if (filters?.team_id) {
         query = query.eq('team_id', filters.team_id);
+        console.log('🔍 Aplicando filtro de equipe:', filters.team_id);
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
+      console.log('🔍 Resultado da consulta active_athlete_coach_relationships:', {
+        data: data?.length || 0,
+        error: error?.message || 'Nenhum erro',
+        relationships: data?.map(r => ({ 
+          id: r.id, 
+          athlete_id: r.athlete_id, 
+          status: r.status,
+          athlete_name: r.athlete_name,
+          athlete_email: r.athlete_email
+        }))
+      });
+
       if (error) throw error;
 
+      // Definir apenas relationships - não precisamos de activeRelationships separado
       set({ relationships: data || [], isLoading: false });
-
-      // Carregar também relacionamentos ativos
-      const { data: activeData, error: activeError } = await supabase
-        .from('active_athlete_coach_relationships')
-        .select('*')
-        .eq('coach_id', currentCoach.id);
-
-      if (!activeError) {
-        set({ activeRelationships: activeData || [] });
-      }
     } catch (error: any) {
+      console.error('🔍 Erro em loadCoachRelationships:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
@@ -390,28 +418,54 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const { currentCoach } = get();
       if (!currentCoach) throw new Error('Perfil de treinador não encontrado');
 
-      const { data, error } = await supabase
+      console.log('🔍 Aprovando relacionamento:', { relationshipId, teamId, notes });
+
+      // SOLUÇÃO DEFINITIVA: Usar UPDATE direto sem SELECT
+      const updateData: any = {
+        status: 'active',
+        approved_at: new Date().toISOString()
+      };
+
+      if (notes) {
+        updateData.notes = notes;
+      }
+
+      if (teamId) {
+        updateData.team_id = teamId;
+      }
+
+      console.log('🔍 Dados para atualização:', updateData);
+
+      // UPDATE direto sem SELECT - isso resolve o PGRST116
+      const { error } = await supabase
         .from('athlete_coach_relationships')
-        .update({
-          status: 'active',
-          approved_at: new Date().toISOString(),
-          approved_by: currentCoach.id,
-          team_id: teamId,
-          notes
-        })
+        .update(updateData)
         .eq('id', relationshipId)
-        .select()
-        .single();
+        .eq('coach_id', currentCoach.id)
+        .eq('status', 'pending');
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao atualizar relacionamento:', error);
+        throw error;
+      }
 
-      const currentRelationships = get().relationships;
-      const updatedRelationships = currentRelationships.map(rel =>
-        rel.id === relationshipId ? data : rel
-      );
-      set({ relationships: updatedRelationships, isLoading: false });
-      return data;
+      console.log('✅ Relacionamento aprovado com sucesso');
+
+      // Recarregar os relacionamentos para atualizar a interface
+      await get().loadCoachRelationships();
+
+      set({ isLoading: false });
+      
+      // Retornar um objeto simulado para manter compatibilidade
+      return {
+        id: relationshipId,
+        status: 'active',
+        approved_at: updateData.approved_at,
+        notes: updateData.notes,
+        team_id: updateData.team_id
+      } as any;
     } catch (error: any) {
+      console.error('❌ Erro geral ao aprovar relacionamento:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
@@ -420,25 +474,40 @@ export const useCoachStore = create<CoachState>((set, get) => ({
   rejectRelationship: async (relationshipId: string, notes?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase
+      const { currentCoach } = get();
+      if (!currentCoach) throw new Error('Perfil de treinador não encontrado');
+
+      console.log('🔍 Rejeitando relacionamento:', { relationshipId, notes });
+
+      // DELETAR o relacionamento ao invés de marcar como rejeitado
+      // Isso permite que o atleta solicite vínculo a outro treinador
+      const { error } = await supabase
         .from('athlete_coach_relationships')
-        .update({
-          status: 'rejected',
-          notes
-        })
+        .delete()
         .eq('id', relationshipId)
-        .select()
-        .single();
+        .eq('coach_id', currentCoach.id)
+        .eq('status', 'pending');
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao deletar relacionamento:', error);
+        throw error;
+      }
 
-      const currentRelationships = get().relationships;
-      const updatedRelationships = currentRelationships.map(rel =>
-        rel.id === relationshipId ? data : rel
-      );
-      set({ relationships: updatedRelationships, isLoading: false });
-      return data;
+      console.log('✅ Relacionamento rejeitado e deletado com sucesso');
+
+      // Recarregar os relacionamentos para atualizar a interface
+      await get().loadCoachRelationships();
+
+      set({ isLoading: false });
+      
+      // Retornar um objeto simulado para manter compatibilidade
+      return {
+        id: relationshipId,
+        status: 'deleted',
+        notes: notes
+      } as any;
     } catch (error: any) {
+      console.error('❌ Erro geral ao rejeitar relacionamento:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }

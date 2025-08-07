@@ -34,16 +34,18 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
   const loadData = async () => {
     try {
       console.log('🔍 Carregando dados iniciais...');
-      const [coachesData, relationshipsData] = await Promise.all([
-        searchCoaches(),
-        loadAthleteRelationships()
-      ]);
+      const coachesData = await searchCoaches();
+      await loadAthleteRelationships();
+      
+      // Pegar os relacionamentos do store após carregar
+      const { relationships: storeRelationships } = useCoachStore.getState();
+      
       console.log('🔍 Dados carregados:', { 
         coachesCount: coachesData?.length || 0, 
-        relationshipsCount: relationshipsData?.length || 0 
+        relationshipsCount: storeRelationships?.length || 0 
       });
       setCoaches(coachesData);
-      setRelationships(relationshipsData);
+      setRelationships(storeRelationships || []);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
@@ -80,7 +82,11 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
       setShowRequestModal(false);
       setSelectedCoach(null);
       setRequestNotes('');
+      
+      // Recarregar relacionamentos do store
       await loadAthleteRelationships();
+      const { relationships: storeRelationships } = useCoachStore.getState();
+      setRelationships(storeRelationships || []);
     } catch (error) {
       console.error('Erro ao solicitar vínculo:', error);
     }
@@ -95,6 +101,12 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
   };
 
   const getRelationshipStatus = (coachId: string) => {
+    // Verificar se relationships existe e é um array
+    if (!relationships || !Array.isArray(relationships)) {
+      console.log('🔍 relationships não é um array válido:', relationships);
+      return null;
+    }
+    
     const relationship = relationships.find(r => r.coach_id === coachId);
     if (!relationship) return null;
     
@@ -112,7 +124,11 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
     }
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name: string | undefined | null) => {
+    if (!name || typeof name !== 'string') {
+      return '??';
+    }
+    
     return name
       .split(' ')
       .map(word => word.charAt(0))
@@ -193,26 +209,26 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                 return (
                   <Card key={coach.id} style={styles.coachCard}>
                     <Card.Content>
-                      <View style={styles.coachHeader}>
-                        <Avatar.Text 
-                          size={50} 
-                          label={getInitials(coach.full_name)}
-                          style={styles.coachAvatar}
-                        />
-                        <View style={styles.coachInfo}>
-                          <Text variant="titleMedium" style={styles.coachName}>
-                            {coach.full_name}
-                          </Text>
-                          <Text variant="bodySmall" style={styles.coachEmail}>
-                            {coach.email}
-                          </Text>
-                          {coach.phone && (
-                            <Text variant="bodySmall" style={styles.coachPhone}>
-                              📞 {coach.phone}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
+                                             <View style={styles.coachHeader}>
+                         <Avatar.Text 
+                           size={50} 
+                           label={getInitials(coach.full_name)}
+                           style={styles.coachAvatar}
+                         />
+                         <View style={styles.coachInfo}>
+                           <Text variant="titleMedium" style={styles.coachName}>
+                             {coach.full_name || 'Nome não informado'}
+                           </Text>
+                           <Text variant="bodySmall" style={styles.coachEmail}>
+                             {coach.email || 'Email não informado'}
+                           </Text>
+                           {coach.phone && (
+                             <Text variant="bodySmall" style={styles.coachPhone}>
+                               📞 {coach.phone}
+                             </Text>
+                           )}
+                         </View>
+                       </View>
 
                       {coach.bio && (
                         <Text variant="bodyMedium" style={styles.coachBio}>
@@ -294,31 +310,31 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
               relationships.map((relationship) => (
                 <Card key={relationship.id} style={styles.relationshipCard}>
                   <Card.Content>
-                    <View style={styles.relationshipHeader}>
-                      <Avatar.Text 
-                        size={40} 
-                        label={getInitials(relationship.coach_name)}
-                        style={styles.relationshipAvatar}
-                      />
-                      <View style={styles.relationshipInfo}>
-                        <Text variant="titleMedium" style={styles.relationshipName}>
-                          {relationship.coach_name}
-                        </Text>
-                        <Text variant="bodySmall" style={styles.relationshipEmail}>
-                          {relationship.coach_email}
-                        </Text>
-                        <Chip 
-                          style={[styles.statusChip, { 
-                            backgroundColor: getRelationshipStatus(relationship.coach_id)?.color + '20' 
-                          }]}
-                          textStyle={{ color: getRelationshipStatus(relationship.coach_id)?.color }}
-                          mode="outlined"
-                          compact
-                        >
-                          {getRelationshipStatus(relationship.coach_id)?.label}
-                        </Chip>
-                      </View>
-                    </View>
+                                         <View style={styles.relationshipHeader}>
+                       <Avatar.Text 
+                         size={40} 
+                         label={getInitials(relationship.coach_name)}
+                         style={styles.relationshipAvatar}
+                       />
+                       <View style={styles.relationshipInfo}>
+                         <Text variant="titleMedium" style={styles.relationshipName}>
+                           {relationship.coach_name || 'Nome não informado'}
+                         </Text>
+                         <Text variant="bodySmall" style={styles.relationshipEmail}>
+                           {relationship.coach_email || 'Email não informado'}
+                         </Text>
+                         <Chip 
+                           style={[styles.statusChip, { 
+                             backgroundColor: getRelationshipStatus(relationship.coach_id)?.color + '20' 
+                           }]}
+                           textStyle={{ color: getRelationshipStatus(relationship.coach_id)?.color }}
+                           mode="outlined"
+                           compact
+                         >
+                           {getRelationshipStatus(relationship.coach_id)?.label}
+                         </Chip>
+                       </View>
+                     </View>
                   </Card.Content>
                 </Card>
               ))
@@ -355,23 +371,23 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                 Solicitar Vínculo
               </Text>
               
-              {selectedCoach && (
-                <View style={styles.modalCoachInfo}>
-                  <Avatar.Text 
-                    size={40} 
-                    label={getInitials(selectedCoach.full_name)}
-                    style={styles.modalCoachAvatar}
-                  />
-                  <View style={styles.modalCoachDetails}>
-                    <Text variant="titleMedium" style={styles.modalCoachName}>
-                      {selectedCoach.full_name}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.modalCoachEmail}>
-                      {selectedCoach.email}
-                    </Text>
-                  </View>
-                </View>
-              )}
+                             {selectedCoach && (
+                 <View style={styles.modalCoachInfo}>
+                   <Avatar.Text 
+                     size={40} 
+                     label={getInitials(selectedCoach.full_name)}
+                     style={styles.modalCoachAvatar}
+                   />
+                   <View style={styles.modalCoachDetails}>
+                     <Text variant="titleMedium" style={styles.modalCoachName}>
+                       {selectedCoach.full_name || 'Nome não informado'}
+                     </Text>
+                     <Text variant="bodySmall" style={styles.modalCoachEmail}>
+                       {selectedCoach.email || 'Email não informado'}
+                     </Text>
+                   </View>
+                 </View>
+               )}
               
               <TextInput
                 label="Mensagem (opcional)"
