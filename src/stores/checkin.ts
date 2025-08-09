@@ -80,7 +80,7 @@ interface CheckinState {
     week_start: string;
   }) => Promise<void>;
   saveDailyCheckin: (checkinData: {
-    sleep_hours: number;
+    sleep_quality: number;
     soreness: number;
     motivation: number;
     focus: number;
@@ -673,7 +673,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     if (error) throw error;
   },
   saveDailyCheckin: async (checkinData: {
-    sleep_hours: number;
+    sleep_quality: number;
     soreness: number;
     motivation: number;
     focus: number;
@@ -681,23 +681,42 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   }) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado');
+    // Sanitização e logs para depuração
+    const safeSleep = Number(checkinData.sleep_quality ?? 4) || 4;
+    const safeSoreness = Number(checkinData.soreness ?? 4) || 4;
+    const safeMotivation = Number(checkinData.motivation ?? 3) || 3;
+    const safeConfidence = Number(checkinData.confidence ?? 3) || 3;
+    const safeFocus = Number(checkinData.focus ?? 3) || 3;
     const insertData = {
       user_id: user.id,
-      sleep_quality_score: checkinData.sleep_hours,
-      soreness_score: checkinData.soreness,
-      mood_score: checkinData.motivation,
-      confidence_score: checkinData.confidence,
-      focus_score: checkinData.focus,
-      energy_score: checkinData.motivation, // Usando motivation como energia
+      sleep_quality: safeSleep,
+      sleep_quality_score: safeSleep,
+      // Usar nomes de colunas reais da tabela
+      soreness: safeSoreness,
+      motivation: safeMotivation,
+      emocional: safeMotivation,
+      confidence: safeConfidence,
+      focus: safeFocus,
+      // Campos obrigatórios herdados (escala 1-10)
+      mood_score: Math.min(10, Math.max(1, safeMotivation * 2)),
+      energy_score: Math.min(10, Math.max(1, safeMotivation * 2)),
+      confidence_score: Math.min(10, Math.max(1, safeConfidence * 2)),
+      focus_score: Math.min(10, Math.max(1, safeFocus * 2)),
+      soreness_score: safeSoreness,
       notes: '', // Assuming notes is not part of the new checkinData object
       date: new Date().toISOString().split('T')[0],
     };
+    console.log('👀 insertData (daily_checkins):', insertData);
     const { data, error } = await supabase
       .from('daily_checkins')
       .insert([insertData])
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase insert error (daily_checkins):', { error });
+      const message = [error.message, error.details, error.hint].filter(Boolean).join(' | ');
+      throw new Error(message || 'Falha ao salvar check-in');
+    }
     return data;
   },
   updateCheckinWithInsight: async (checkinId: string, insightText: string) => {

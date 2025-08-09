@@ -46,9 +46,13 @@ export interface Profile {
     date: string;
     mood_score: number; // 1-10
     energy_score: number; // 1-10
-    sleep_hours: number;
-    sleep_quality?: number; // 1-5 (opcional, não existe no banco)
+    sleep_quality: number; // 1-7 (obrigatório no banco)
     sleep_quality_score?: number; // 1-7 (Índice de Hooper)
+    // Campos atuais usados no app
+    motivation?: number; // 1-5
+    focus?: number; // 1-5
+    confidence?: number; // 1-5
+    soreness?: number; // 1-7
     fatigue_score?: number; // 1-7
     stress_score?: number; // 1-7
     soreness_score?: number; // 1-7
@@ -186,6 +190,7 @@ export interface Profile {
     athlete_id: string;
     coach_id: string;
     team_id?: string;
+    modality?: string;
     status: 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
     requested_at: string;
     approved_at?: string;
@@ -203,6 +208,7 @@ export interface Profile {
     status: string;
     requested_at: string;
     approved_at?: string;
+    modality?: string;
     athlete_name: string;
     athlete_email: string;
     coach_name: string;
@@ -226,6 +232,7 @@ export interface Profile {
     specialties?: string[];
     experience_years_min?: number;
     search?: string; // Adicionado para busca por texto
+    team_name?: string; // Nome da equipe para filtrar treinadores por equipes cadastradas
   }
 
   export interface TeamFilters {

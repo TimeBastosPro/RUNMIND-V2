@@ -276,7 +276,7 @@ export default function CoachProfileScreen({ navigation }: CoachProfileScreenPro
           
           <Button 
             mode="outlined" 
-            onPress={() => navigation.navigate('CoachAthletes')}
+            onPress={() => navigation.navigate('CoachMain', { screen: 'CoachAthletes' })}
             style={styles.actionButton}
             icon="account-group"
           >

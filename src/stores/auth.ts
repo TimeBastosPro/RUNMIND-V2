@@ -182,23 +182,53 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     try {
       console.log('🔍 Fazendo logout...');
-      await supabase.auth.signOut();
-      await clearCorruptedSession(); // ✅ NOVO: Limpar sessão corrompida
+      
+      // Tentar fazer logout normalmente
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.log('🔍 Erro no logout normal, tentando limpeza forçada:', error.message);
+        
+        // Se for erro de refresh token, fazer limpeza forçada
+        if (error.message.includes('Refresh Token Not Found') || 
+            error.message.includes('Invalid Refresh Token')) {
+          console.log('🔍 Refresh token inválido, fazendo limpeza forçada...');
+        }
+      }
+      
+      // Sempre limpar sessão corrompida
+      await clearCorruptedSession();
+      
+      // Limpar estado local
       set({ 
         user: null, 
         profile: null, 
-        isAuthenticated: false 
+        isAuthenticated: false,
+        isLoading: false,
+        isInitializing: false
       });
-      console.log('🔍 Logout concluído');
+      
+      console.log('🔍 Logout concluído com sucesso');
     } catch (error) {
       console.error('🔍 Erro no logout:', error);
+      
       // Forçar limpeza mesmo com erro
-      await clearCorruptedSession();
+      try {
+        await clearCorruptedSession();
+      } catch (clearError) {
+        console.error('🔍 Erro ao limpar sessão:', clearError);
+      }
+      
+      // Forçar limpeza do estado
       set({ 
         user: null, 
         profile: null, 
-        isAuthenticated: false 
+        isAuthenticated: false,
+        isLoading: false,
+        isInitializing: false
       });
+      
+      console.log('🔍 Logout forçado concluído');
     }
   },
 

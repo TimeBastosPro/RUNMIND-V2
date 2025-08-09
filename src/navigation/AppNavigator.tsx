@@ -30,6 +30,7 @@ import CoachProfileScreen from '../screens/coach/CoachProfileScreen';
 import CoachRequestsScreen from '../screens/coach/CoachRequestsScreen';
 import CoachTeamsScreen from '../screens/coach/CoachTeamsScreen';
 import CoachAthletesScreen from '../screens/coach/CoachAthletesScreen';
+import CoachAthleteDetailScreen from '../screens/coach/CoachAthleteDetailScreen';
 import CoachProfileSetupScreen from '../screens/auth/CoachProfileSetupScreen';
 import UserTypeSelectionScreen from '../screens/auth/UserTypeSelectionScreen';
 
@@ -68,6 +69,7 @@ type StackParamList = {
   CoachRequests: undefined;
   CoachTeams: undefined;
   CoachAthletes: undefined;
+  CoachAthleteDetail: { relationshipId: string; athleteId: string };
   Calendar: undefined;
 };
 
@@ -413,6 +415,33 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const Stack = createStackNavigator<StackParamList>();
+const CoachTabsNav = createBottomTabNavigator<CoachTabParamList>();
+
+function CoachTabsComponent() {
+  return (
+    <CoachTabsNav.Navigator
+      initialRouteName="CoachHome"
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ color, size }) => {
+          let icon: keyof typeof MaterialCommunityIcons.glyphMap = 'view-dashboard';
+          if (route.name === 'CoachHome') icon = 'view-dashboard';
+          if (route.name === 'CoachAthletes') icon = 'account-group';
+          if (route.name === 'CoachTeams') icon = 'trophy';
+          if (route.name === 'CoachProfile') icon = 'account-cog';
+          return <MaterialCommunityIcons name={icon} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#2196F3',
+        tabBarInactiveTintColor: 'gray',
+        headerShown: false,
+      })}
+    >
+      <CoachTabsNav.Screen name="CoachHome" component={CoachDashboardScreen} options={{ title: 'Visão Geral' }} />
+      <CoachTabsNav.Screen name="CoachAthletes" component={CoachAthletesScreen} options={{ title: 'Atletas' }} />
+      <CoachTabsNav.Screen name="CoachTeams" component={CoachTeamsScreen} options={{ title: 'Equipes' }} />
+      <CoachTabsNav.Screen name="CoachProfile" component={CoachProfileScreen} options={{ title: 'Perfil' }} />
+    </CoachTabsNav.Navigator>
+  );
+}
 const AcademyStack = createStackNavigator();
 
 function AcademyNavigator() {
@@ -573,12 +602,15 @@ export default function AppNavigator() {
               <Stack.Screen name="CoachProfileSetup" component={CoachProfileSetupScreen} />
             ) : currentCoach ? (
               <>
-                {/* Usuário é treinador - mostrar interface do treinador */}
-                <Stack.Screen name="CoachMain" component={CoachDashboardScreen} />
+                {/* Usuário é treinador - suite de abas do treinador */}
+                <Stack.Screen name="CoachMain" component={CoachTabsComponent} />
                 <Stack.Screen name="CoachProfile" component={CoachProfileScreen} />
+                {/* Requests continuam disponíveis, mas não são o entrypoint */}
+                {/* Tela de solicitações permanece acessível, porém não duplicamos ações na aba de Atletas */}
                 <Stack.Screen name="CoachRequests" component={CoachRequestsScreen} />
                 <Stack.Screen name="CoachTeams" component={CoachTeamsScreen} />
                 <Stack.Screen name="CoachAthletes" component={CoachAthletesScreen} />
+                <Stack.Screen name="CoachAthleteDetail" component={CoachAthleteDetailScreen} />
               </>
             ) : (
               // Usuário é atleta - mostrar interface normal

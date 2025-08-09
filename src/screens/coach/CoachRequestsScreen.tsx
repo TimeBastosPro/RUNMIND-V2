@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { Text, Card, Button, Avatar, Chip, Portal, Modal, TextInput, HelperText } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import { Text, Card, Button, Avatar, Chip, Portal, Modal, TextInput, HelperText, ActivityIndicator } from 'react-native-paper';
 import { useCoachStore } from '../../stores/coach';
 import { useAuthStore } from '../../stores/auth';
 
@@ -15,7 +15,8 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
     rejectRelationship,
     isLoading,
     relationships,
-    clearError 
+    clearError,
+    error 
   } = useCoachStore();
   
   const { user, signOut } = useAuthStore();
@@ -26,10 +27,19 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [responseNotes, setResponseNotes] = useState('');
   const [lastAction, setLastAction] = useState<'approve' | 'reject' | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Mostrar erros para o usuário
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Erro', error);
+      clearError();
+    }
+  }, [error]);
 
   const loadData = async () => {
     try {
@@ -38,6 +48,7 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
       console.log('📋 Solicitações carregadas:', relationships?.length || 0);
     } catch (error) {
       console.error('Erro ao carregar solicitações:', error);
+      Alert.alert('Erro', 'Não foi possível carregar as solicitações. Tente novamente.');
     }
   };
 
@@ -50,6 +61,7 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
   const handleAction = async () => {
     if (!selectedRequest) return;
     
+    setIsProcessing(true);
     try {
       console.log('🔍 Processando ação:', { actionType, requestId: selectedRequest.id });
       
@@ -68,28 +80,37 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
       setResponseNotes('');
       await loadData();
       
-      // Mostrar modal de sucesso com opções de navegação
+      // Mostrar modal de sucesso
       setShowSuccessModal(true);
       
       console.log('✅ Ação processada com sucesso');
     } catch (error: any) {
       console.error('❌ Erro ao processar solicitação:', error);
-      
-      // Mostrar erro mais específico para o usuário
-      const errorMessage = error.message || 'Erro desconhecido';
-      console.error('Mensagem de erro:', errorMessage);
-      
-      // Aqui você pode adicionar um Alert ou Snackbar para mostrar o erro ao usuário
-      // Alert.alert('Erro', errorMessage);
+      Alert.alert('Erro', 'Não foi possível processar a solicitação. Tente novamente.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error);
-    }
+    Alert.alert(
+      'Sair da Conta',
+      'Tem certeza que deseja sair?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Sair', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              console.error('Erro ao fazer logout:', error);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getInitials = (name: string | undefined | null) => {
@@ -106,6 +127,15 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
   };
 
   const pendingRequests = relationships.filter(r => r.status === 'pending');
+
+  if (isLoading && !refreshing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Carregando solicitações...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -205,24 +235,9 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
             )}
           </Card.Content>
         </Card>
-
-        {/* Logout */}
-        <Card style={styles.logoutCard}>
-          <Card.Content>
-            <Button 
-              mode="outlined" 
-              onPress={handleLogout}
-              style={styles.logoutButton}
-              icon="logout"
-              textColor="#F44336"
-            >
-              Sair da Conta
-            </Button>
-          </Card.Content>
-        </Card>
       </ScrollView>
 
-      {/* Modal para aprovar/rejeitar */}
+      {/* Modal para aprovar/rejeitar solicitação */}
       <Portal>
         <Modal
           visible={showActionModal}
@@ -232,7 +247,7 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
           <Card>
             <Card.Content>
               <Text variant="titleLarge" style={styles.modalTitle}>
-                {actionType === 'approve' ? 'Aprovar Vínculo' : 'Rejeitar Vínculo'}
+                {actionType === 'approve' ? 'Aprovar Solicitação' : 'Rejeitar Solicitação'}
               </Text>
               
               {selectedRequest && (
@@ -254,23 +269,20 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
               )}
               
               <TextInput
-                label="Mensagem (opcional)"
+                label={`${actionType === 'approve' ? 'Mensagem de boas-vindas' : 'Motivo da rejeição'} (opcional)`}
                 value={responseNotes}
                 onChangeText={setResponseNotes}
                 style={styles.modalInput}
                 mode="outlined"
                 multiline
-                numberOfLines={4}
-                placeholder={actionType === 'approve' 
-                  ? "Mensagem de boas-vindas para o atleta..." 
-                  : "Motivo da rejeição (opcional)..."
-                }
+                numberOfLines={3}
+                placeholder={actionType === 'approve' ? 'Deixe uma mensagem de boas-vindas...' : 'Explique o motivo da rejeição...'}
               />
               
               <HelperText type="info">
                 {actionType === 'approve' 
-                  ? "O atleta será notificado da aprovação e poderá começar a treinar com você."
-                  : "O atleta será removido da lista e poderá solicitar vínculo a outro treinador."
+                  ? 'O atleta será notificado da aprovação e poderá começar a usar o app.'
+                  : 'O atleta será notificado da rejeição e poderá solicitar vínculo novamente no futuro.'
                 }
               </HelperText>
               
@@ -279,17 +291,16 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
                   mode="outlined" 
                   onPress={() => setShowActionModal(false)}
                   style={styles.modalButton}
+                  disabled={isProcessing}
                 >
                   Cancelar
                 </Button>
                 <Button 
                   mode="contained" 
                   onPress={handleAction}
-                  style={[
-                    styles.modalButton, 
-                    actionType === 'reject' ? styles.rejectButton : styles.approveButton
-                  ]}
-                  loading={isLoading}
+                  style={[styles.modalButton, actionType === 'approve' ? styles.approveButton : styles.rejectButton]}
+                  disabled={isProcessing}
+                  loading={isProcessing}
                 >
                   {actionType === 'approve' ? 'Aprovar' : 'Rejeitar'}
                 </Button>
@@ -297,8 +308,10 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
             </Card.Content>
           </Card>
         </Modal>
+      </Portal>
 
-        {/* Modal de sucesso com opções de navegação */}
+      {/* Modal de sucesso */}
+      <Portal>
         <Modal
           visible={showSuccessModal}
           onDismiss={() => setShowSuccessModal(false)}
@@ -307,41 +320,33 @@ export default function CoachRequestsScreen({ navigation }: CoachRequestsScreenP
           <Card>
             <Card.Content>
               <Text variant="titleLarge" style={styles.modalTitle}>
-                {lastAction === 'approve' ? '✅ Vínculo Aprovado!' : '❌ Vínculo Rejeitado!'}
+                ✅ Sucesso!
               </Text>
               
-              <Text variant="bodyLarge" style={styles.successMessage}>
+              <Text variant="bodyMedium" style={styles.modalText}>
                 {lastAction === 'approve' 
-                  ? 'O atleta foi aprovado com sucesso e agora faz parte da sua equipe!'
-                  : 'O atleta foi removido da lista de solicitações e poderá solicitar vínculo a outro treinador.'
+                  ? 'Solicitação aprovada com sucesso! O atleta foi notificado e pode começar a usar o app.'
+                  : 'Solicitação rejeitada com sucesso! O atleta foi notificado da rejeição.'
                 }
               </Text>
-              
-              <HelperText type="info" style={styles.successInfo}>
-                {lastAction === 'approve' 
-                  ? "Você pode gerenciar seus atletas na tela 'Meus Atletas'."
-                  : "O atleta não poderá mais solicitar vínculo com você, mas pode buscar outros treinadores."
-                }
-              </HelperText>
               
               <View style={styles.modalActions}>
+                <Button 
+                  mode="contained" 
+                  onPress={() => {
+                    setShowSuccessModal(false);
+                    navigation.navigate('CoachAthletes', { initialTab: 'pending' });
+                  }}
+                  style={styles.modalButton}
+                >
+                  Ver Atletas
+                </Button>
                 <Button 
                   mode="outlined" 
                   onPress={() => setShowSuccessModal(false)}
                   style={styles.modalButton}
                 >
-                  Continuar Aqui
-                </Button>
-                <Button 
-                  mode="contained" 
-                  onPress={() => {
-                    setShowSuccessModal(false);
-                    navigation.navigate('CoachAthletes');
-                  }}
-                  style={styles.modalButton}
-                  icon="account-group"
-                >
-                  Ir para Meus Atletas
+                  Continuar
                 </Button>
               </View>
             </Card.Content>
@@ -360,21 +365,31 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
   headerCard: {
     margin: 16,
-    elevation: 2,
+    elevation: 4,
     borderRadius: 12,
   },
   title: {
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
     color: '#666',
   },
   requestsCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    margin: 16,
+    marginTop: 0,
     elevation: 2,
     borderRadius: 12,
   },
@@ -395,7 +410,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   requestCard: {
-    marginBottom: 16,
+    marginBottom: 12,
     elevation: 1,
     borderRadius: 8,
   },
@@ -416,11 +431,10 @@ const styles = StyleSheet.create({
   },
   athleteEmail: {
     color: '#666',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   requestDate: {
     color: '#666',
-    fontSize: 12,
   },
   requestNotes: {
     marginBottom: 12,
@@ -431,11 +445,10 @@ const styles = StyleSheet.create({
   },
   requestActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   actionButton: {
-    flex: 1,
     borderRadius: 8,
   },
   approveButton: {
@@ -472,8 +485,11 @@ const styles = StyleSheet.create({
   modalAthleteEmail: {
     color: '#666',
   },
+  modalText: {
+    marginBottom: 16,
+  },
   modalInput: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   modalActions: {
     flexDirection: 'row',
@@ -482,24 +498,5 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     borderRadius: 8,
-  },
-  logoutCard: {
-    margin: 16,
-    marginTop: 0,
-    elevation: 2,
-    borderRadius: 12,
-  },
-  logoutButton: {
-    borderRadius: 8,
-    borderColor: '#F44336',
-  },
-  successMessage: {
-    marginBottom: 16,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  successInfo: {
-    marginBottom: 16,
-    textAlign: 'center',
   },
 }); 
