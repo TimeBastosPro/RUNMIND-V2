@@ -3,24 +3,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
-// Configuração segura usando variáveis de ambiente
-const supabaseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || 
+// Configuração segura usando variáveis de ambiente (SEM fallback para evitar apontar para projeto incorreto)
+const supabaseUrl = (Constants.expoConfig as any)?.extra?.EXPO_PUBLIC_SUPABASE_URL ||
                    process.env.EXPO_PUBLIC_SUPABASE_URL ||
-                   'https://dxzqfbslxtkxfayhydug.supabase.co';
+                   '';
 
-const supabaseAnonKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || 
+const supabaseAnonKey = (Constants.expoConfig as any)?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
                        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-                       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4enFmYnNseHRreGZheWh5ZHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5MTYzMDgsImV4cCI6MjA2NzQ5MjMwOH0.CVNLjXJyRuNEOf_1P8YnF7zVlMUrsCvBUlMVxxn1tc4';
+                       '';
 
 // Validação de segurança
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('❌ ERRO: Variáveis de ambiente do Supabase não configuradas!');
-  console.error('Configure EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env');
+  console.error('Configure EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY em app.json (extra) ou variáveis de ambiente.');
   throw new Error('Configuração do Supabase inválida');
 }
 
-console.log('🔧 Supabase Config - URL:', supabaseUrl ? 'Configurado' : 'Não configurado');
-console.log('🔧 Supabase Config - Key:', supabaseAnonKey ? 'Configurado' : 'Não configurado');
+console.log('🔧 Supabase Config - URL:', supabaseUrl);
+console.log('🔧 Supabase Config - Key: [oculta]');
 
 // ✅ MELHORADO: Configuração específica para React Native
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -51,8 +51,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const clearCorruptedSession = async () => {
   try {
     console.log('🧹 Limpando sessão corrompida...');
+    // Remove chaves conhecidas
     await AsyncStorage.removeItem('supabase.auth.token');
     await AsyncStorage.removeItem('supabase.auth.refreshToken');
+    // Remove todas as chaves do Supabase (formato sb-<ref>-auth-token)
+    const keys = await AsyncStorage.getAllKeys();
+    const toRemove = keys.filter(k => k.startsWith('sb-') || k.includes('supabase'));
+    if (toRemove.length) {
+      await AsyncStorage.multiRemove(toRemove);
+    }
     console.log('✅ Sessão limpa com sucesso');
   } catch (error) {
     console.error('❌ Erro ao limpar sessão:', error);

@@ -36,7 +36,12 @@ export default function CoachProfileScreen({ navigation }: CoachProfileScreenPro
 
   const handleLogout = async () => {
     try {
+      try {
+        const { useViewStore } = require('../../stores/view');
+        useViewStore.getState().exitCoachView();
+      } catch {}
       await signOut();
+      navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
     }

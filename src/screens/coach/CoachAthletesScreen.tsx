@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-nativ
 import { Text, Card, Button, Avatar, Chip, Portal, Modal, TextInput, HelperText, SegmentedButtons, ActivityIndicator, Snackbar, Appbar } from 'react-native-paper';
 import { useCoachStore } from '../../stores/coach';
 import { useAuthStore } from '../../stores/auth';
+import { useViewStore } from '../../stores/view';
 import { AthleteCoachRelationship } from '../../types/database';
 
 interface CoachAthletesScreenProps {
@@ -387,7 +388,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                   </View>
                 ) : (
                   relationships.filter(r => isActiveStatus(r.status as string)).map((relationship) => (
-                    <Card key={relationship.id} style={styles.athleteCard}>
+                    <Card key={relationship.id} style={styles.athleteCard} onPress={() => navigation.navigate('CoachViewAthlete', { athleteId: (relationship as any).athlete_id, relationshipId: relationship.id, athleteName: (relationship as any).athlete_name, athleteEmail: (relationship as any).athlete_email })}>
                       <Card.Content>
                         <View style={styles.athleteHeader}>
                           <Avatar.Text size={40} label={getInitials(((relationship as any).athlete_name || (relationship as any).athlete_email || '??'))} />
@@ -398,6 +399,37 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                               <Chip style={styles.teamChip} mode="outlined">{(relationship as any).team_name}</Chip>
                             )}
                           </View>
+                        </View>
+
+                        {/* Ações rápidas para ativos */}
+                        <View style={styles.actionButtons}>
+                          <Button
+                            mode="outlined"
+                            icon="message"
+                            onPress={() => navigation.navigate('CoachViewAthlete', { athleteId: (relationship as any).athlete_id, relationshipId: relationship.id, athleteName: (relationship as any).athlete_name, athleteEmail: (relationship as any).athlete_email })}
+                            style={styles.actionButton}
+                          >
+                            Mensagem
+                          </Button>
+                          <Button
+                            mode="contained"
+                            icon="account-off"
+                            onPress={() => openActionModal(relationship as any, 'deactivate')}
+                            style={[styles.actionButton, { backgroundColor: '#FF9800' }]}
+                          >
+                            Desativar
+                          </Button>
+                          <Button
+                            mode="outlined"
+                            icon="account-details"
+                            onPress={() => {
+                              useViewStore.getState().enterCoachView((relationship as any).athlete_id, (relationship as any).athlete_name || (relationship as any).athlete_email);
+                              navigation.navigate('Main', { screen: 'Perfil Esportivo' });
+                            }}
+                            style={styles.actionButton}
+                          >
+                            Ver Perfil
+                          </Button>
                         </View>
                       </Card.Content>
                     </Card>
@@ -431,7 +463,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
               </View>
             ) : (
               filteredRelationships.map((relationship) => (
-                <Card key={relationship.id} style={styles.athleteCard}>
+                <Card key={relationship.id} style={styles.athleteCard} onPress={() => navigation.navigate('CoachViewAthlete', { athleteId: (relationship as any).athlete_id, relationshipId: relationship.id, athleteName: (relationship as any).athlete_name, athleteEmail: (relationship as any).athlete_email })}>
                   <Card.Content>
                     <View style={styles.athleteHeader}>
                       <Avatar.Text 
@@ -535,6 +567,17 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                             style={styles.actionButton}
                           >
                             Rejeitar todas
+                          </Button>
+                          <Button
+                            mode="outlined"
+                            icon="account-details"
+                            onPress={() => {
+                              useViewStore.getState().enterCoachView((relationship as any).athlete_id, (relationship as any).athlete_name || (relationship as any).athlete_email);
+                              navigation.navigate('Main', { screen: 'Perfil Esportivo' });
+                            }}
+                            style={styles.actionButton}
+                          >
+                            Ver Perfil
                           </Button>
                         </>
                       )}
@@ -850,5 +893,6 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     borderRadius: 8,
+    marginRight: 8,
   },
 }); 

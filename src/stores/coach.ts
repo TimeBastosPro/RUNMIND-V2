@@ -123,18 +123,20 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          // Coach não encontrado
+        // Se coach não encontrado (PGRST116), apenas marcar como não-treinador
+        if ((error as any).code === 'PGRST116') {
           set({ currentCoach: null, isLoading: false });
           return;
         }
-        throw error;
+        // Supabase pode lançar erro se tabela vazia para este user
+        set({ currentCoach: null, isLoading: false });
+        return;
       }
 
       set({ currentCoach: data, isLoading: false });
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
-      throw error;
+      // Não falhar a inicialização do app por erro aqui
+      set({ currentCoach: null, error: error?.message ?? String(error), isLoading: false });
     }
   },
 

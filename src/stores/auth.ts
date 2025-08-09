@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase, checkAndRepairSession, clearCorruptedSession } from '../services/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '@supabase/supabase-js';
 import { Profile, FitnessTest, Race } from '../types/database';
 
@@ -14,7 +15,7 @@ interface AuthState {
   
   // Actions
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, options?: { isCoach?: boolean }) => Promise<void>;
   signOut: () => Promise<void>;
   loadProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
@@ -89,14 +90,53 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       
       console.log('🔍 Login bem-sucedido, atualizando estado...');
-      set({ 
-        user: data.user, 
-        isAuthenticated: true,
-        isLoading: false 
-      });
-      
-      console.log('🔍 Chamando loadProfile...');
-      await get().loadProfile();
+      set({ user: data.user, isAuthenticated: true, isLoading: false });
+
+      // ✅ Garantir imediatamente o registro de domínio conforme o tipo
+      const userId = data.user.id;
+      const emailFromAuth = (data.user.email || '').toLowerCase();
+      const fullNameFromMeta = (data.user.user_metadata?.full_name || data.user.user_metadata?.name || '').toString();
+      const userType = (data.user.user_metadata?.user_type || '').toString();
+
+      try {
+        const [profileResEnsure, coachResEnsure] = await Promise.all([
+          supabase.from('profiles').select('id').eq('id', userId).maybeSingle(),
+          supabase.from('coaches').select('id').eq('user_id', userId).maybeSingle(),
+        ]);
+        const hasProfile = !!profileResEnsure.data;
+        const hasCoach = !!coachResEnsure.data;
+
+        if (userType === 'coach') {
+          if (!hasCoach) {
+            console.log('🛠️ Criando registro mínimo de coach...');
+            const { error: coachInsertError } = await supabase
+              .from('coaches')
+              .insert([{ user_id: userId, full_name: fullNameFromMeta || emailFromAuth, email: emailFromAuth }]);
+            if (coachInsertError) {
+              console.log('⚠️ Falha ao criar coach minimal:', coachInsertError.message);
+            }
+          }
+        } else if (userType === 'athlete') {
+          // Atleta
+          if (!hasProfile) {
+            console.log('🛠️ Criando profile mínimo de atleta...');
+            const { error: profileInsertError } = await supabase
+              .from('profiles')
+              .insert([{ id: userId, email: emailFromAuth, full_name: fullNameFromMeta || emailFromAuth, experience_level: 'beginner', main_goal: 'health', context_type: 'solo', onboarding_completed: false }]);
+            if (profileInsertError) {
+              console.log('⚠️ Falha ao criar profile minimal:', profileInsertError.message);
+            }
+          }
+        } else {
+          console.log('ℹ️ user_type ausente. Não criar registros por padrão.');
+        }
+      } catch (ensureError) {
+        console.log('⚠️ Erro ao garantir registro de domínio:', ensureError);
+      }
+
+      // Carregar dados após garantir registro
+      await Promise.allSettled([get().loadProfile()]);
+
       console.log('🔍 signIn concluído com sucesso');
     } catch (error) {
       console.error('🔍 Erro no signIn:', error);
@@ -105,7 +145,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signUp: async (email: string, password: string, fullName: string) => {
+  signUp: async (email: string, password: string, fullName: string, options?: { isCoach?: boolean }) => {
     console.log('🔍 signUp iniciado para email:', email);
     set({ isLoading: true });
     try {
@@ -117,10 +157,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         email,
         password,
         options: {
-          // ✅ NOVO: Dados do usuário para o perfil
-          data: {
-            full_name: fullName,
-          }
+          // Metadados para distinguir o tipo de conta já no Auth
+          data: { full_name: fullName, user_type: options?.isCoach ? 'coach' : 'athlete' }
         }
       });
       
@@ -148,15 +186,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       
       if (data.user) {
-        console.log('🔍 Criando perfil para usuário:', data.user.id);
-        // Create profile with all required fields
+        if (options?.isCoach) {
+          console.log('🔍 Cadastro como TREINADOR. Não criar profile de atleta.');
+          // Para treinador, não criamos row em profiles. O perfil profissional será criado na tela de setup do coach.
+          // Criaremos um registro mínimo em coaches para garantir navegação correta após login.
+          try {
+            const { error: coachInsertError } = await supabase
+              .from('coaches')
+              .insert([{ user_id: data.user.id, full_name: fullName || email, email }]);
+            if (coachInsertError) {
+              console.log('⚠️ Falha ao criar coach minimal no signUp:', coachInsertError.message);
+            }
+          } catch {}
+        } else {
+          console.log('🔍 Cadastro como ATLETA. Criando profile...');
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
             id: data.user.id,
             email,
             full_name: fullName,
-            experience_level: 'beginner', // ✅ CORRIGIDO: Adicionado campo obrigatório
+              experience_level: 'beginner',
             main_goal: 'health',
             context_type: 'solo',
             onboarding_completed: false,
@@ -166,8 +216,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           console.error('🔍 Erro ao criar perfil:', profileError);
           throw new Error('Erro ao criar perfil. Tente novamente.');
         }
-        
-        console.log('🔍 Perfil criado com sucesso');
+          console.log('🔍 Perfil (atleta) criado com sucesso');
+        }
       }
       
       set({ isLoading: false });
@@ -180,55 +230,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    console.log('🔍 Fazendo logout...');
     try {
-      console.log('🔍 Fazendo logout...');
-      
-      // Tentar fazer logout normalmente
-      const { error } = await supabase.auth.signOut();
-      
+      // Executa o signOut com timeout para evitar travar a UI em caso de rede ruim
+      const signOutWithTimeout = Promise.race([
+        // Em alguns ambientes o escopo 'global' pode falhar; usar padrão se necessário
+        (async () => {
+          try {
+      const { error } = await supabase.auth.signOut({ scope: 'global' } as any);
       if (error) {
-        console.log('🔍 Erro no logout normal, tentando limpeza forçada:', error.message);
-        
-        // Se for erro de refresh token, fazer limpeza forçada
-        if (error.message.includes('Refresh Token Not Found') || 
-            error.message.includes('Invalid Refresh Token')) {
-          console.log('🔍 Refresh token inválido, fazendo limpeza forçada...');
-        }
-      }
+              console.log('🔍 Logout retornou erro, seguirá com limpeza:', error.message);
+            }
+          } catch (e) {
+            console.log('🔍 Exceção no signOut, seguirá com limpeza:', (e as Error)?.message);
+          }
+        })(),
+        new Promise<void>((resolve) => setTimeout(() => resolve(), 2000)),
+      ]);
+
+      await signOutWithTimeout;
+    } finally {
+      // Sempre limpar sessão e estado, mesmo que signOut falhe ou demore
+      try { await clearCorruptedSession(); } catch {}
+      try { await AsyncStorage.clear(); } catch {}
       
-      // Sempre limpar sessão corrompida
-      await clearCorruptedSession();
-      
-      // Limpar estado local
       set({ 
         user: null, 
         profile: null, 
         isAuthenticated: false,
         isLoading: false,
-        isInitializing: false
+        isInitializing: false,
       });
       
-      console.log('🔍 Logout concluído com sucesso');
-    } catch (error) {
-      console.error('🔍 Erro no logout:', error);
-      
-      // Forçar limpeza mesmo com erro
-      try {
-        await clearCorruptedSession();
-      } catch (clearError) {
-        console.error('🔍 Erro ao limpar sessão:', clearError);
-      }
-      
-      // Forçar limpeza do estado
-      set({ 
-        user: null, 
-        profile: null, 
-        isAuthenticated: false,
-        isLoading: false,
-        isInitializing: false
-      });
-      
-      console.log('🔍 Logout forçado concluído');
+      console.log('🔍 Logout finalizado (com ou sem erro)');
+      try { if (typeof window !== 'undefined') window.location.replace('/'); } catch {}
     }
   },
 
@@ -291,39 +326,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single();
         
       if (error) {
-        if (error.code === 'PGRST116') {
-          // Perfil não encontrado - criar um novo
-          console.log('🔍 Perfil não encontrado, criando novo perfil...');
-          const { error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              email: user.email,
-              full_name: user.user_metadata?.full_name || 'Usuário',
-              experience_level: 'beginner',
-              main_goal: 'health',
-              context_type: 'solo',
-              onboarding_completed: false,
-            });
-            
-          if (createError) {
-            console.error('🔍 Erro ao criar perfil:', createError);
-            throw createError;
-          }
-          
-          // Recarregar o perfil criado
-          const { data: newProfile, error: reloadError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-            
-          if (reloadError) throw reloadError;
-          set({ profile: newProfile });
-          console.log('🔍 Novo perfil criado e carregado:', newProfile);
-        } else {
-          throw error;
+        if ((error as any).code === 'PGRST116') {
+          // Perfil não encontrado: não criar automaticamente (treinador pode não ser atleta)
+          console.log('🔍 Perfil não encontrado. Mantendo profile = null.');
+          set({ profile: null });
+          return;
         }
+        throw error;
       } else {
         set({ profile: data });
         console.log('🔍 Perfil carregado com sucesso:', data);

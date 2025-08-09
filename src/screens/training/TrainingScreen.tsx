@@ -10,6 +10,9 @@ import Slider from '@react-native-community/slider';
 import { UniversalDocumentPicker } from '../../components/ui/UniversalDocumentPicker';
 import Papa from 'papaparse';
 import { useAuthStore } from '../../stores/auth';
+import { useViewStore } from '../../stores/view';
+import { supabase } from '../../services/supabase';
+import { useNavigation } from '@react-navigation/native';
 
 // --- Constantes e Funções de Data ---
 const WEEKDAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
@@ -194,6 +197,9 @@ export default function TrainingScreen() {
       deleteTrainingSession,
       submitWeeklyReflection
     } = useCheckinStore(s => s);
+    const navigation = useNavigation();
+    const { isCoachView, exitCoachView, viewAsAthleteId } = useViewStore();
+    const [athleteName, setAthleteName] = useState<string | null>(null);
 
     const [displayDate, setDisplayDate] = useState(new Date());
     const [loading, setLoading] = useState(true);
@@ -244,7 +250,31 @@ export default function TrainingScreen() {
                 intensidade: t.intensidade
             })));
         });
-    }, [fetchTrainingSessions]);
+    }, [fetchTrainingSessions, isCoachView]);
+
+    // Carregar nome do atleta para cabeçalho no modo treinador
+    useEffect(() => {
+        let isMounted = true;
+        (async () => {
+            if (isCoachView && viewAsAthleteId) {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('full_name, email')
+                    .eq('id', viewAsAthleteId)
+                    .maybeSingle();
+                if (isMounted) setAthleteName(data?.full_name || data?.email || null);
+            } else {
+                if (isMounted) setAthleteName(null);
+            }
+        })();
+        return () => { isMounted = false; };
+    }, [isCoachView, viewAsAthleteId]);
+
+    const handleExitCoachMode = () => {
+        exitCoachView();
+        // @ts-ignore
+        navigation.navigate('CoachAthletes');
+    };
 
     function getWeekStart(date: Date) {
       const d = new Date(date);
@@ -404,7 +434,7 @@ export default function TrainingScreen() {
               planningState.duracao_horas : undefined,
             duracao_minutos: planningState.duracao_minutos && planningState.duracao_minutos !== '' ? 
               planningState.duracao_minutos : undefined,
-            distancia_m: planningState.distancia_m || undefined,
+            distance_m: (planningState as any).distancia_m || undefined,
             observacoes: planningState.observacoes || undefined,
         };
         try {
@@ -497,6 +527,12 @@ export default function TrainingScreen() {
 
     return (
         <ScrollView style={{ flex: 1 }}>
+            {isCoachView && (
+              <View style={{ padding: 10, margin: 12, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
+                <Button mode="text" onPress={exitCoachView}>Sair do modo treinador</Button>
+              </View>
+            )}
             <View style={[styles.headerContainer, isMobile && styles.headerContainerMobile]}>
                 <Button onPress={() => isMobile ? setCurrentWeekIndex(i => Math.max(i - 1, 0)) : setDisplayDate(new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1))}>
                     Anterior

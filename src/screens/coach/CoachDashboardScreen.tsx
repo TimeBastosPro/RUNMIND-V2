@@ -61,7 +61,12 @@ export default function CoachDashboardScreen({ navigation }: CoachDashboardScree
           style: 'destructive',
           onPress: async () => {
             try {
+              try {
+                const { useViewStore } = require('../../stores/view');
+                useViewStore.getState().exitCoachView();
+              } catch {}
               await signOut();
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
             } catch (error) {
               Alert.alert('Erro', 'Não foi possível sair da conta. Tente novamente.');
             }
