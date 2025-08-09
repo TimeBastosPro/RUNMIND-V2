@@ -2,6 +2,35 @@ import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { generateInsight } from '../services/gemini';
 import type { DailyCheckin, Insight, Race, TrainingSession } from '../types/database';
+import { useViewStore } from './view';
+
+// Compat: propriedades que podem existir em esquemas diferentes
+type ExtTrainingSession = TrainingSession & {
+  duration_minutes?: number;
+  duration_hours?: string;
+  duracao_horas?: string;
+  duracao_minutos?: string;
+  planned_distance_km?: number;
+  planned_duration_hours?: string;
+  planned_duration_minutes?: string;
+  planned_perceived_effort?: number;
+  perceived_effort?: number;
+  session_satisfaction?: number;
+  distance_km?: number;
+  elevation_gain_meters?: number;
+  modalidade?: string;
+  training_date?: string;
+};
+
+function getDurationMinutesFrom(ts: ExtTrainingSession): number {
+  if (typeof ts.duration_minutes === 'number') return ts.duration_minutes;
+  // Suporte a campos em string
+  const hours = ts.duration_hours && ts.duration_hours !== '' ? (isNaN(parseInt(ts.duration_hours)) ? 0 : parseInt(ts.duration_hours)) : 0;
+  const minutes = ts.duracao_minutos && ts.duracao_minutos !== '' ? (isNaN(parseInt(ts.duracao_minutos)) ? 0 : parseInt(ts.duracao_minutos)) :
+                   ts.planned_duration_minutes && ts.planned_duration_minutes !== '' ? (isNaN(parseInt(ts.planned_duration_minutes)) ? 0 : parseInt(ts.planned_duration_minutes)) :
+                   (ts as any).duration_minutes || 0;
+  return hours * 60 + minutes;
+}
 
 interface RecentCheckin {
   sleep_quality?: number;
@@ -80,7 +109,7 @@ interface CheckinState {
     week_start: string;
   }) => Promise<void>;
   saveDailyCheckin: (checkinData: {
-    sleep_hours: number;
+    sleep_quality: number;
     soreness: number;
     motivation: number;
     focus: number;
@@ -116,20 +145,24 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const safeUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      if (!safeUserId && !useViewStore.getState().viewAsAthleteId) { set({ isLoading: false }); return; }
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? safeUserId;
+      if (!targetUserId) {
         console.log('❌ Usuário não autenticado');
         return;
       }
 
       const today = new Date().toISOString().split('T')[0];
       console.log('📅 Buscando check-in para a data:', today);
-      console.log('👤 User ID:', user.id);
+      console.log('👤 Target User ID:', targetUserId);
       
       // Buscar o check-in mais recente do dia
       const { data, error } = await supabase
         .from('daily_checkins')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .eq('date', today)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -169,7 +202,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { 
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) { 
         return; 
       }
       
@@ -185,14 +220,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const { data: allData, error: allError } = await supabase
         .from('daily_checkins')
         .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('date', { ascending: false });
       
       // Agora buscar com filtro de data
       const { data, error } = await supabase
         .from('daily_checkins')
         .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
       if (error) throw error;
@@ -284,24 +319,18 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) throw new Error('Usuário não autenticado');
       
       // Preparar dados para salvamento
       const upsertData = {
-        user_id: user.id,
+        user_id: targetUserId,
         ...trainingData,
         // Garantir que campos de array sejam salvos como JSON
         sensacoes: trainingData.sensacoes ? JSON.stringify(trainingData.sensacoes) : null,
         clima: trainingData.clima ? JSON.stringify(trainingData.clima) : null,
       };
-      
-      console.log('🔍 DEBUG - saveTrainingSession - Dados sendo enviados para o banco:', {
-        ...upsertData,
-        'planned_distance_km': upsertData.planned_distance_km,
-        'planned_duration_hours': upsertData.planned_duration_hours,
-        'planned_duration_minutes': upsertData.planned_duration_minutes,
-        'trainingData original': trainingData
-      });
       
       const { data, error } = await supabase
         .from('training_sessions')
@@ -310,18 +339,6 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .single();
         
       if (error) throw error;
-      
-      console.log('🔍 DEBUG - saveTrainingSession - Dados retornados do banco:', {
-        id: data.id,
-        title: data.title,
-        status: data.status,
-        'planned_distance_km': data.planned_distance_km,
-        'planned_duration_hours': data.planned_duration_hours,
-        'planned_duration_minutes': data.planned_duration_minutes,
-        'distance_km': data.distance_km,
-        'duracao_horas': data.duracao_horas,
-        'duracao_minutos': data.duracao_minutos
-      });
       
       // Atualizar o store local
       set(state => ({
@@ -344,7 +361,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) throw new Error('Usuário não autenticado');
       
       console.log('Usuário autenticado:', user.id);
       console.log('Tentando excluir treino com ID:', sessionId);
@@ -353,6 +372,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .from('training_sessions')
         .delete()
         .eq('id', sessionId)
+        .eq('user_id', targetUserId)
         .select(); // Adicionar select para ver o que foi excluído
       
       console.log('Resultado da exclusão:', { data, error });
@@ -382,7 +402,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { throw new Error('Usuário não autenticado'); }
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) { throw new Error('Usuário não autenticado'); }
       
       // Calcular intervalo amplo se não fornecido
       let _startDate = startDate;
@@ -400,25 +422,12 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .gte('training_date', _startDate)
         .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
         
       if (error) throw error;
-      
-      console.log('🔍 DEBUG - Treinos carregados do banco:', data?.map(t => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        date: t.training_date,
-        'planned_distance_km': t.planned_distance_km,
-        'planned_duration_hours': t.planned_duration_hours,
-        'planned_duration_minutes': t.planned_duration_minutes,
-        'distance_km': t.distance_km,
-        'duracao_horas': t.duracao_horas,
-        'duracao_minutos': t.duracao_minutos
-      })));
       
       // Processar campos JSON
       const processedData = (data || []).map(session => ({
@@ -444,35 +453,27 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     const completedSessions = trainingSessions.filter(t => t.status === 'completed');
 
     // 1. Carga de Treino (trainingLoad) - apenas treinos realizados
-    const trainingLoad = completedSessions.map((t: TrainingSession) => {
-      let duration = 0;
-      if (typeof t.duration_minutes === 'number') {
-        duration = t.duration_minutes;
-      } else if (t.duration_hours || t.duration_minutes) {
-        const hours = t.duration_hours && t.duration_hours !== '' ? 
-          (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
-        const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
-          (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
-        duration = hours * 60 + minutes;
-      }
+    const completedExt = (completedSessions as any as ExtTrainingSession[]);
+    const trainingLoad = completedExt.map((t) => {
+      const duration = getDurationMinutesFrom(t);
       
       return {
         id: t.id,
-        date: t.training_date,
+        date: (t as any).training_date,
         duration: duration,
-        perceivedEffort: t.perceived_effort || 0,
-        load: duration * (t.perceived_effort || 0),
-        distance: t.distance_km || 0,
-        elevation: t.elevation_gain_meters || 0,
+        perceivedEffort: (t.perceived_effort as any) || 0,
+        load: duration * ((t.perceived_effort as any) || 0),
+        distance: (t.distance_km as any) || 0,
+        elevation: (t.elevation_gain_meters as any) || 0,
       };
     });
 
     // 2. Carga Aguda (acuteLoad) - média dos últimos 7 dias para cada dia
     const acuteLoad: { date: string; value: number }[] = [];
-    const allDates = completedSessions.map((t: TrainingSession) => t.training_date).sort();
+    const allDates = ((completedSessions as any as ExtTrainingSession[]).map((t) => (t as any).training_date) as string[]).sort();
     allDates.forEach((date: string) => {
       const dateObj = new Date(date);
-      const past7 = trainingLoad.filter((tl) => {
+      const past7 = trainingLoad.filter((tl: any) => {
         const d = new Date(tl.date);
         return d <= dateObj && d >= new Date(dateObj.getTime() - 6 * 24 * 60 * 60 * 1000);
       });
@@ -484,7 +485,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     const chronicLoad: { date: string; value: number }[] = [];
     allDates.forEach((date: string) => {
       const dateObj = new Date(date);
-      const past28 = trainingLoad.filter((tl) => {
+      const past28 = trainingLoad.filter((tl: any) => {
         const d = new Date(tl.date);
         return d <= dateObj && d >= new Date(dateObj.getTime() - 27 * 24 * 60 * 60 * 1000);
       });
@@ -493,63 +494,44 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     });
 
     // 4. Eficiência de Corrida (runningEfficiency): para treinos de corrida realizados
-    const runningEfficiency = completedSessions
-      .filter((t: TrainingSession) => t.modalidade === 'corrida' && t.distance_km && t.distance_km > 0)
-      .map((t: TrainingSession) => {
-        let duration = 0;
-        if (typeof t.duration_minutes === 'number') {
-          duration = t.duration_minutes;
-        } else if (t.duration_hours || t.duration_minutes) {
-          const hours = t.duration_hours && t.duration_hours !== '' ? 
-            (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
-          const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
-            (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
-          duration = hours * 60 + minutes;
-        }
-        
+    const runningEfficiency = (completedExt as any as ExtTrainingSession[])
+      .filter((t) => (t.modalidade === 'corrida') && (t.distance_km as any) && (t.distance_km as any) > 0)
+      .map((t) => {
+        const duration = getDurationMinutesFrom(t);
         return {
-          pace: duration && t.distance_km ? duration / t.distance_km : 0,
-          pse: t.perceived_effort || 0,
-          date: t.training_date,
-          distance: t.distance_km || 0,
+          pace: duration && (t.distance_km as any) ? duration / (t.distance_km as any) : 0,
+          pse: (t.perceived_effort as any) || 0,
+          date: (t as any).training_date,
+          distance: (t.distance_km as any) || 0,
           duration: duration,
         };
       });
 
     // 5. Comparação Planejado vs Realizado
-    const plannedVsCompleted = completedSessions
+    const plannedVsCompleted = (completedExt as any as ExtTrainingSession[])
       .filter(t => {
         // Buscar treino planejado correspondente
-        const planned = plannedSessions.find(p => p.training_date === t.training_date);
-        return planned && t.distance_km && planned.planned_distance_km;
+        const planned = ((plannedSessions as any[]).map(ps => (ps as any as ExtTrainingSession))).find(p => (p as any).training_date === (t as any).training_date);
+        return planned && (t.distance_km as any) && (planned.planned_distance_km as any);
       })
       .map(t => {
-        const planned = plannedSessions.find(p => p.training_date === t.training_date)!;
-        const plannedDuration = (planned.planned_duration_hours && planned.planned_duration_hours !== '' ? 
-          (isNaN(parseInt(planned.planned_duration_hours)) ? 0 : parseInt(planned.planned_duration_hours)) * 60 : 0) + 
-          (planned.planned_duration_minutes && planned.planned_duration_minutes !== '' ? 
-          (isNaN(parseInt(planned.planned_duration_minutes)) ? 0 : parseInt(planned.planned_duration_minutes)) : 0);
-        let actualDuration = 0;
-        if (typeof t.duration_minutes === 'number') {
-          actualDuration = t.duration_minutes;
-        } else if (t.duration_hours || t.duration_minutes) {
-          const hours = t.duration_hours && t.duration_hours !== '' ? 
-            (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
-          const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
-            (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
-          actualDuration = hours * 60 + minutes;
-        }
+        const plannedList: ExtTrainingSession[] = (plannedSessions as any[]).map(ps => ps as any as ExtTrainingSession);
+        const planned = plannedList.find(p => (p as any).training_date === (t as any).training_date)!;
+        const pHours = planned.planned_duration_hours && planned.planned_duration_hours !== '' ? (isNaN(parseInt(planned.planned_duration_hours)) ? 0 : parseInt(planned.planned_duration_hours)) : 0;
+        const pMinutes = planned.planned_duration_minutes && planned.planned_duration_minutes !== '' ? (isNaN(parseInt(planned.planned_duration_minutes)) ? 0 : parseInt(planned.planned_duration_minutes)) : 0;
+        const plannedDuration = pHours * 60 + pMinutes;
+        const actualDuration = getDurationMinutesFrom(t);
         
         return {
-          date: t.training_date,
-          plannedDistance: planned.planned_distance_km || 0,
-          actualDistance: t.distance_km || 0,
+          date: (t as any).training_date,
+          plannedDistance: (planned.planned_distance_km as any) || 0,
+          actualDistance: (t.distance_km as any) || 0,
           plannedDuration: plannedDuration,
           actualDuration: actualDuration,
-          plannedEffort: planned.planned_perceived_effort || 0,
-          actualEffort: t.perceived_effort || 0,
-          completionRate: planned.planned_distance_km && t.distance_km ? 
-            (t.distance_km / planned.planned_distance_km) * 100 : 0,
+          plannedEffort: (planned.planned_perceived_effort as any) || 0,
+          actualEffort: (t.perceived_effort as any) || 0,
+          completionRate: (planned.planned_distance_km as any) && (t.distance_km as any) ? 
+            ((t.distance_km as any) / (planned.planned_distance_km as any)) * 100 : 0,
         };
       });
 
@@ -566,16 +548,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         };
       }
       
-      let duration = 0;
-      if (typeof t.duration_minutes === 'number') {
-        duration = t.duration_minutes;
-      } else if (t.duration_hours || t.duration_minutes) {
-        const hours = t.duration_hours && t.duration_hours !== '' ? 
-          (isNaN(parseInt(t.duration_hours)) ? 0 : parseInt(t.duration_hours)) : 0;
-        const minutes = t.duration_minutes && t.duration_minutes !== '' ? 
-          (isNaN(parseInt(t.duration_minutes)) ? 0 : parseInt(t.duration_minutes)) : 0;
-        duration = hours * 60 + minutes;
-      }
+      const duration = getDurationMinutesFrom(t);
       
       acc[modality].count++;
       acc[modality].totalDistance += t.distance_km || 0;
@@ -629,7 +602,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) throw new Error('Usuário não autenticado');
       const updateData = {
         ...completedData,
         status: 'completed',
@@ -638,7 +613,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .from('training_sessions')
         .update(updateData)
         .eq('id', id)
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .select()
         .single();
       if (error) throw error;
@@ -673,7 +648,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     if (error) throw error;
   },
   saveDailyCheckin: async (checkinData: {
-    sleep_hours: number;
+    sleep_quality: number;
     soreness: number;
     motivation: number;
     focus: number;
@@ -681,23 +656,42 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   }) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado');
+    // Sanitização e logs para depuração
+    const safeSleep = Number(checkinData.sleep_quality ?? 4) || 4;
+    const safeSoreness = Number(checkinData.soreness ?? 4) || 4;
+    const safeMotivation = Number(checkinData.motivation ?? 3) || 3;
+    const safeConfidence = Number(checkinData.confidence ?? 3) || 3;
+    const safeFocus = Number(checkinData.focus ?? 3) || 3;
     const insertData = {
       user_id: user.id,
-      sleep_quality_score: checkinData.sleep_hours,
-      soreness_score: checkinData.soreness,
-      mood_score: checkinData.motivation,
-      confidence_score: checkinData.confidence,
-      focus_score: checkinData.focus,
-      energy_score: checkinData.motivation, // Usando motivation como energia
+      sleep_quality: safeSleep,
+      sleep_quality_score: safeSleep,
+      // Usar nomes de colunas reais da tabela
+      soreness: safeSoreness,
+      motivation: safeMotivation,
+      emocional: safeMotivation,
+      confidence: safeConfidence,
+      focus: safeFocus,
+      // Campos obrigatórios herdados (escala 1-10)
+      mood_score: Math.min(10, Math.max(1, safeMotivation * 2)),
+      energy_score: Math.min(10, Math.max(1, safeMotivation * 2)),
+      confidence_score: Math.min(10, Math.max(1, safeConfidence * 2)),
+      focus_score: Math.min(10, Math.max(1, safeFocus * 2)),
+      soreness_score: safeSoreness,
       notes: '', // Assuming notes is not part of the new checkinData object
       date: new Date().toISOString().split('T')[0],
     };
+    console.log('👀 insertData (daily_checkins):', insertData);
     const { data, error } = await supabase
       .from('daily_checkins')
       .insert([insertData])
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase insert error (daily_checkins):', { error });
+      const message = [error.message, error.details, error.hint].filter(Boolean).join(' | ');
+      throw new Error(message || 'Falha ao salvar check-in');
+    }
     return data;
   },
   updateCheckinWithInsight: async (checkinId: string, insightText: string) => {
@@ -711,11 +705,13 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { return; }
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) { return; }
       const { data, error } = await supabase
         .from('weekly_reflections')
         .select('enjoyment, progress, confidence, week_start, created_at')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('week_start', { ascending: false });
       if (error) throw error;
       set({ weeklyReflections: (data as WeeklyReflection[]) || [], isLoading: false, error: null });
@@ -752,11 +748,13 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { return; }
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) { return; }
       const { data, error } = await supabase
         .from('insights')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
@@ -830,12 +828,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   fetchRaces: async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      if (!targetUserId) return;
 
       const { data, error } = await supabase
         .from('races')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('start_date', { ascending: true });
 
       if (error) throw error;

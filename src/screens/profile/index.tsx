@@ -511,7 +511,17 @@ export default function ProfileScreen() {
       <ScrollView style={{ flex: 1 }}>
         {renderTabContent()}
       </ScrollView>
-      <Button mode="outlined" onPress={signOut} style={{ marginTop: 16 }}>
+      <Button mode="outlined" onPress={async () => {
+        try {
+          const { useViewStore } = require('../../stores/view');
+          useViewStore.getState().exitCoachView();
+        } catch {}
+        try {
+          await signOut();
+        } finally {
+          (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
+        }
+      }} style={{ marginTop: 16 }}>
         Sair da conta
       </Button>
     </View>

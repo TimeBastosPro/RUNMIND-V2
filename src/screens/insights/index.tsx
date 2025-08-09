@@ -3,6 +3,8 @@ import { View, FlatList, StyleSheet, Alert } from 'react-native';
 import { Card, Text, ActivityIndicator, IconButton, Chip, FAB } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 import type { Insight } from '../../types/database';
+import { useViewStore } from '../../stores/view';
+import { supabase } from '../../services/supabase';
 
 export default function InsightsScreen() {
   const { 
@@ -15,12 +17,36 @@ export default function InsightsScreen() {
     recentCheckins,
     trainingSessions
   } = useCheckinStore();
+  const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
+  const [athleteName, setAthleteName] = React.useState<string | null>(athleteNameFromStore || null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (isCoachView && viewAsAthleteId) {
+        if (athleteNameFromStore) {
+          if (isMounted) setAthleteName(athleteNameFromStore);
+        } else {
+          const { data } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', viewAsAthleteId)
+            .maybeSingle();
+          if (isMounted) setAthleteName(data?.full_name || data?.email || null);
+        }
+      } else {
+        if (isMounted) setAthleteName(null);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [isCoachView, viewAsAthleteId, athleteNameFromStore]);
 
   useEffect(() => {
     loadSavedInsights();
   }, [loadSavedInsights]);
 
   const handleDeleteInsight = async (insightId: string) => {
+    if (isCoachView) return;
     Alert.alert(
       'Confirmar exclusão',
       'Tem certeza que deseja excluir este insight?',
@@ -42,6 +68,7 @@ export default function InsightsScreen() {
   };
 
   const handleGenerateInsight = async () => {
+    if (isCoachView) return;
     if (recentCheckins.length === 0) {
       Alert.alert('Sem dados', 'É necessário ter pelo menos um check-in para gerar insights.');
       return;
@@ -106,6 +133,12 @@ export default function InsightsScreen() {
 
   return (
     <View style={styles.container}>
+      {isCoachView && (
+        <View style={{ padding: 10, marginBottom: 8, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Chip icon="shield-account" mode="outlined">Visualizando como Treinador{athleteName ? ` — ${athleteName}` : ''}</Chip>
+          <Text onPress={exitCoachView} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
+        </View>
+      )}
       <FlatList
         data={savedInsights}
         keyExtractor={(item) => item.id}
@@ -122,12 +155,14 @@ export default function InsightsScreen() {
                     {getInsightTypeLabel(item.insight_type)}
                   </Chip>
                 </View>
-                <IconButton
-                  icon="delete"
-                  size={20}
-                  onPress={() => handleDeleteInsight(item.id)}
-                  style={styles.deleteButton}
-                />
+                {!isCoachView && (
+                  <IconButton
+                    icon="delete"
+                    size={20}
+                    onPress={() => handleDeleteInsight(item.id)}
+                    style={styles.deleteButton}
+                  />
+                )}
               </View>
               
               <Text style={styles.insightText}>{item.insight_text}</Text>
@@ -156,15 +191,16 @@ export default function InsightsScreen() {
         refreshing={isLoading}
         onRefresh={loadSavedInsights}
       />
-      
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={handleGenerateInsight}
-        loading={isSubmitting}
-        disabled={isSubmitting}
-        label="Gerar Insight"
-      />
+      {!isCoachView && (
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={handleGenerateInsight}
+          loading={isSubmitting}
+          disabled={isSubmitting}
+          label="Gerar Insight"
+        />
+      )}
     </View>
   );
 }

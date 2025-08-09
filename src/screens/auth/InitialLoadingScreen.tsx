@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useAuthStore } from '../../stores/auth';
+import { useCoachStore } from '../../stores/coach';
 
 interface InitialLoadingScreenProps {
   navigation: any;
@@ -9,6 +10,7 @@ interface InitialLoadingScreenProps {
 
 export default function InitialLoadingScreen({ navigation }: InitialLoadingScreenProps) {
   const { profile } = useAuthStore();
+  const { currentCoach } = useCoachStore();
   const [showSnackbar, setShowSnackbar] = useState(false);
 
   function isProfileComplete(profile: any) {
@@ -21,6 +23,11 @@ export default function InitialLoadingScreen({ navigation }: InitialLoadingScree
   }
 
   useEffect(() => {
+    // Se for treinador, não redireciona para Main (abas de atleta)
+    if (currentCoach) {
+      navigation.replace('CoachMain');
+      return;
+    }
     if (!profile) return;
     if (isProfileComplete(profile)) {
       navigation.replace('Main');
@@ -30,7 +37,7 @@ export default function InitialLoadingScreen({ navigation }: InitialLoadingScree
         navigation.replace('Main', { screen: 'Profile' });
       }, 1200);
     }
-  }, [profile, navigation]);
+  }, [profile, navigation, currentCoach]);
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

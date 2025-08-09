@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuthStore } from '../stores/auth';
 import { useCoachStore } from '../stores/coach';
-import { supabase } from '../services/supabase';
+import { supabase, clearCorruptedSession } from '../services/supabase';
 
 // Screens
 import DailyCheckinScreen from '../screens/checkin/DailyCheckinScreen';
@@ -30,11 +30,14 @@ import CoachProfileScreen from '../screens/coach/CoachProfileScreen';
 import CoachRequestsScreen from '../screens/coach/CoachRequestsScreen';
 import CoachTeamsScreen from '../screens/coach/CoachTeamsScreen';
 import CoachAthletesScreen from '../screens/coach/CoachAthletesScreen';
+import CoachAthleteDetailScreen from '../screens/coach/CoachAthleteDetailScreen';
+import CoachViewAthleteScreen from '../screens/coach/CoachViewAthleteScreen';
 import CoachProfileSetupScreen from '../screens/auth/CoachProfileSetupScreen';
 import UserTypeSelectionScreen from '../screens/auth/UserTypeSelectionScreen';
 
 // Athlete Screens
 import CoachSearchScreen from '../screens/athlete/CoachSearchScreen';
+import { useViewStore } from '../stores/view';
 
 // Types
 type TabParamList = {
@@ -68,6 +71,13 @@ type StackParamList = {
   CoachRequests: undefined;
   CoachTeams: undefined;
   CoachAthletes: undefined;
+  CoachAthleteDetail: { relationshipId: string; athleteId: string };
+  CoachViewAthlete: { athleteId: string; relationshipId?: string; athleteName?: string; athleteEmail?: string };
+  CoachAthleteHome: { athleteId: string };
+  CoachAthleteTrainings: { athleteId: string };
+  CoachAthleteSportsProfile: { athleteId: string };
+  CoachAthleteAnalysis: { athleteId: string };
+  CoachAthleteInsights: { athleteId: string };
   Calendar: undefined;
 };
 
@@ -112,15 +122,20 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
     try {
       if (isLogin) {
         await signIn(data.email, data.password);
-        // Verificar se é treinador após login
+        // Após login, carregar perfil de treinador e seguir para área correta
         await loadCoachProfile();
       } else {
-        await signUp(data.email, data.password, data.fullName);
-        // Se for cadastro de treinador, ir direto para configuração do perfil
+        await signUp(data.email, data.password, data.fullName, { isCoach: isCoachSignUp });
         if (isCoachSignUp) {
+          // Cadastro de treinador: carregar perfil e enviar imediatamente para CoachMain
+          await loadCoachProfile();
+          try {
+            // @ts-ignore
+            (props as any)?.navigation?.reset?.({ index: 0, routes: [{ name: 'CoachMain' }] });
+          } catch {}
           onCoachSelected?.();
         } else {
-          // Se for atleta, voltar para login
+          // Cadastro de atleta: voltar para login
           setIsLogin(true);
         }
       }
@@ -413,6 +428,33 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const Stack = createStackNavigator<StackParamList>();
+const CoachTabsNav = createBottomTabNavigator<CoachTabParamList>();
+
+function CoachTabsComponent() {
+  return (
+    <CoachTabsNav.Navigator
+      initialRouteName="CoachHome"
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ color, size }) => {
+          let icon: keyof typeof MaterialCommunityIcons.glyphMap = 'view-dashboard';
+          if (route.name === 'CoachHome') icon = 'view-dashboard';
+          if (route.name === 'CoachAthletes') icon = 'account-group';
+          if (route.name === 'CoachTeams') icon = 'trophy';
+          if (route.name === 'CoachProfile') icon = 'account-cog';
+          return <MaterialCommunityIcons name={icon} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#2196F3',
+        tabBarInactiveTintColor: 'gray',
+        headerShown: false,
+      })}
+    >
+      <CoachTabsNav.Screen name="CoachHome" component={CoachDashboardScreen} options={{ title: 'Visão Geral' }} />
+      <CoachTabsNav.Screen name="CoachAthletes" component={CoachAthletesScreen} options={{ title: 'Atletas' }} />
+      <CoachTabsNav.Screen name="CoachTeams" component={CoachTeamsScreen} options={{ title: 'Equipes' }} />
+      <CoachTabsNav.Screen name="CoachProfile" component={CoachProfileScreen} options={{ title: 'Perfil' }} />
+    </CoachTabsNav.Navigator>
+  );
+}
 const AcademyStack = createStackNavigator();
 
 function AcademyNavigator() {
@@ -427,6 +469,8 @@ function AcademyNavigator() {
 }
 
 function MainTabs() {
+  const { isCoachView } = useViewStore();
+  const { currentCoach } = useCoachStore();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -461,57 +505,85 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Início' }} />
-      <Tab.Screen name="Check-in" component={DailyCheckinScreen} />
+      {(!isCoachView && !currentCoach) && <Tab.Screen name="Check-in" component={DailyCheckinScreen} />}
       <Tab.Screen name="Insights" component={InsightsScreen} />
       <Tab.Screen name="Treinos" component={TrainingScreen} />
       <Tab.Screen name="Análise" component={ComparativeChartsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
+      {(!isCoachView && !currentCoach) && <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />}
       <Tab.Screen name="Perfil Esportivo" component={SportsProfileScreen} options={{ title: 'Perfil Esportivo' }} />
-      <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />
-      <Tab.Screen name="Buscar Treinador" component={CoachSearchScreen} options={{ title: 'Treinador' }} />
+      {(!isCoachView && !currentCoach) && <Tab.Screen name="Academy" component={AcademyNavigator} options={{ title: 'Academy' }} />}
+      {(!isCoachView && !currentCoach) && <Tab.Screen name="Buscar Treinador" component={CoachSearchScreen} options={{ title: 'Treinador' }} />}
     </Tab.Navigator>
   );
 }
 
 export default function AppNavigator() {
   const { user, profile, isLoading, isInitializing, isAuthenticated, loadProfile, setInitializing } = useAuthStore();
-  const { currentCoach, loadCoachProfile } = useCoachStore();
+  const { currentCoach, loadCoachProfile, isLoading: coachLoading } = useCoachStore();
   const [showCoachProfileSetup, setShowCoachProfileSetup] = useState(false);
+  const [hasPushedCoachMain, setHasPushedCoachMain] = useState(false);
 
   useEffect(() => {
-    // ✅ SIMPLIFICADO: Inicialização básica
+    // ✅ Inicialização com validação remota do usuário
     const initializeAuth = async () => {
       try {
-        console.log('🔍 Inicializando autenticação...');
-        
-        // Checagem inicial da sessão
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (session?.user && !error) {
-          console.log('🔍 Sessão válida encontrada:', session.user.id);
+        console.log('🔍 Inicializando autenticação (validação remota)...');
+        // getUser faz chamada de rede; detecta conta removida no servidor
+        const { data: { user }, error } = await supabase.auth.getUser();
+
+        if (user && !error) {
+          console.log('🔍 Usuário autenticado encontrado:', user.id);
           useAuthStore.setState({
-            user: session.user,
+            user,
             isAuthenticated: true,
-            isInitializing: false
+            isInitializing: true,
           });
-          loadProfile();
-          loadCoachProfile(); // Carregar perfil de treinador se existir
+          try { await loadProfile(); } catch (e) { console.log('Perfil ausente, seguindo como treinador apenas'); }
+          await loadCoachProfile();
+
+          // ✅ Verificação forte de cadastro (profiles ou coaches)
+          try {
+            const userId = user.id;
+            const [profileRes, coachRes] = await Promise.all([
+              supabase.from('profiles').select('id').eq('id', userId).maybeSingle(),
+              supabase.from('coaches').select('id').eq('user_id', userId).maybeSingle(),
+            ]);
+            const hasProfile = !!profileRes.data;
+            const isCoach = !!coachRes.data;
+            if (!hasProfile && !isCoach) {
+              console.log('🔒 Sessão bloqueada: usuário sem cadastro em profiles/coaches. Limpando sessão...');
+              try { await clearCorruptedSession(); } catch {}
+              useAuthStore.setState({
+                user: null,
+                profile: null,
+                isAuthenticated: false,
+                isInitializing: false,
+              });
+              return;
+            }
+          } catch (e) {
+            console.log('⚠️ Erro ao validar cadastro. Permitindo continuação por ora.');
+          }
+
+          useAuthStore.setState({ isInitializing: false });
         } else {
-          console.log('🔍 Nenhuma sessão válida encontrada');
+          console.log('🔍 Sem usuário válido. Limpando sessão local...');
+          try { await clearCorruptedSession(); } catch {}
           useAuthStore.setState({
             user: null,
             profile: null,
             isAuthenticated: false,
-            isInitializing: false
+            isInitializing: false,
           });
         }
       } catch (error) {
-        console.error('🔍 Erro na inicialização:', error);
+        console.error('🔍 Erro na inicialização (getUser):', error);
+        try { await clearCorruptedSession(); } catch {}
         useAuthStore.setState({
           user: null,
           profile: null,
           isAuthenticated: false,
-          isInitializing: false
+          isInitializing: false,
         });
       }
     };
@@ -530,8 +602,12 @@ export default function AppNavigator() {
             isAuthenticated: true,
             isInitializing: false
           });
-          loadProfile();
-          loadCoachProfile(); // Carregar perfil de treinador se existir
+          await loadProfile();
+          await loadCoachProfile(); // Carregar perfil de treinador se existir
+          // Se for treinador, garantir que a primeira tela seja CoachMain
+          if (useCoachStore.getState().currentCoach) {
+            setShowCoachProfileSetup(false);
+          }
         } else {
           useAuthStore.setState({
             user: null,
@@ -539,6 +615,8 @@ export default function AppNavigator() {
             isAuthenticated: false,
             isInitializing: false
           });
+          // Limpa modo treinador ao perder sessão
+          try { useViewStore.getState().exitCoachView(); } catch {}
         }
       } catch (error) {
         console.error('🔍 Erro no auth state change:', error);
@@ -552,7 +630,7 @@ export default function AppNavigator() {
     });
     
     return () => subscription.unsubscribe();
-  }, [loadProfile, setInitializing]);
+  }, [loadProfile, loadCoachProfile, setInitializing]);
 
   if (isInitializing || isLoading) {
     return (
@@ -563,29 +641,41 @@ export default function AppNavigator() {
     );
   }
 
+  // Redirecionamento defensivo: se autenticado e é treinador, garantir CoachMain na primeira renderização
+  if (isAuthenticated && currentCoach && !hasPushedCoachMain) {
+    setHasPushedCoachMain(true);
+  }
+
+  const navigatorKey = `${isAuthenticated ? 'auth' : 'no'}-${currentCoach ? 'coach' : 'ath'}`;
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator key={navigatorKey} screenOptions={{ headerShown: false }} initialRouteName={isAuthenticated ? (currentCoach ? 'CoachMain' : 'Main') : 'Auth'}>
         {isAuthenticated ? (
-          <>
-            {showCoachProfileSetup ? (
-              // Mostrar tela de configuração do perfil de treinador
-              <Stack.Screen name="CoachProfileSetup" component={CoachProfileSetupScreen} />
-            ) : currentCoach ? (
-              <>
-                {/* Usuário é treinador - mostrar interface do treinador */}
-                <Stack.Screen name="CoachMain" component={CoachDashboardScreen} />
-                <Stack.Screen name="CoachProfile" component={CoachProfileScreen} />
-                <Stack.Screen name="CoachRequests" component={CoachRequestsScreen} />
-                <Stack.Screen name="CoachTeams" component={CoachTeamsScreen} />
-                <Stack.Screen name="CoachAthletes" component={CoachAthletesScreen} />
-              </>
-            ) : (
-              // Usuário é atleta - mostrar interface normal
+          currentCoach ? (
+            // Usuário é treinador
+            <>
+              <Stack.Screen name="CoachMain" component={CoachTabsComponent} />
+              <Stack.Screen name="CoachProfile" component={CoachProfileScreen} />
+              {/* Habilita navegação para as abas do atleta em modo treinador */}
               <Stack.Screen name="Main" component={MainTabs} />
-            )}
-            <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
-          </>
+              <Stack.Screen name="CoachRequests" component={CoachRequestsScreen} />
+              <Stack.Screen name="CoachTeams" component={CoachTeamsScreen} />
+              <Stack.Screen name="CoachAthletes" component={CoachAthletesScreen} />
+              <Stack.Screen name="CoachAthleteDetail" component={CoachAthleteDetailScreen} />
+              <Stack.Screen name="CoachViewAthlete" component={CoachViewAthleteScreen} />
+              <Stack.Screen name="CoachAthleteHome" component={CoachViewAthleteScreen as any} />
+              <Stack.Screen name="CoachAthleteTrainings" component={CoachViewAthleteScreen as any} />
+              <Stack.Screen name="CoachAthleteSportsProfile" component={CoachViewAthleteScreen as any} />
+              <Stack.Screen name="CoachAthleteAnalysis" component={CoachViewAthleteScreen as any} />
+              <Stack.Screen name="CoachAthleteInsights" component={CoachViewAthleteScreen as any} />
+            </>
+          ) : (
+            // Usuário é atleta
+            <>
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen name="InitialLoading" component={InitialLoadingScreen} />
+            </>
+          )
         ) : (
           <Stack.Screen 
             name="Auth" 

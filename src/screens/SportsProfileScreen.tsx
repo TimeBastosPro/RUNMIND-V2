@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Title, Paragraph, Button, TextInput, Modal, Portal, Text, SegmentedButtons, IconButton, Chip, DataTable } from 'react-native-paper';
 import { useAuthStore } from '../stores/auth';
+import { useViewStore } from '../stores/view';
+import { supabase } from '../services/supabase';
+import { useNavigation } from '@react-navigation/native';
 import { Race } from '../types/database';
 import { 
   calculateIMC, 
@@ -50,6 +53,8 @@ export default function SportsProfileScreen() {
     deleteRace,
     updateProfile 
   } = useAuthStore();
+  const navigation = useNavigation();
+  const { isCoachView, viewAsAthleteId, exitCoachView, athleteName: athleteNameFromStore } = useViewStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTest, setEditingTest] = useState<any>(null);
   const [selectedProtocol, setSelectedProtocol] = useState<string>('');
@@ -68,6 +73,8 @@ export default function SportsProfileScreen() {
     max_heart_rate: '',
     resting_heart_rate: ''
   });
+  const [coachFitnessTests, setCoachFitnessTests] = useState<any[]>([]);
+  const [coachRaces, setCoachRaces] = useState<any[]>([]);
   const [autoCalculatedMaxHR, setAutoCalculatedMaxHR] = useState(false);
   const [raceModalVisible, setRaceModalVisible] = useState(false);
   const [editingRace, setEditingRace] = useState<Race | null>(null);
@@ -78,16 +85,48 @@ export default function SportsProfileScreen() {
     start_time: '',
     distance_km: ''
   });
+  const [athleteName, setAthleteName] = useState<string | null>(athleteNameFromStore || null);
 
   useEffect(() => {
-    loadProfile();
-    fetchFitnessTests();
-    fetchRaces();
-  }, [loadProfile, fetchFitnessTests, fetchRaces]);
+    if (isCoachView && viewAsAthleteId) {
+      (async () => {
+        // Carregar perfil do atleta alvo
+        const { data: p } = await supabase.from('profiles').select('*').eq('id', viewAsAthleteId).maybeSingle();
+        if (p) {
+          setAthleteName(athleteNameFromStore || p.full_name || p.email || null);
+          setProfileData({
+            height_cm: p.height_cm?.toString() || '',
+            weight_kg: p.weight_kg?.toString() || '',
+            date_of_birth: p.date_of_birth || '',
+            gender: p.gender || '',
+            max_heart_rate: p.max_heart_rate?.toString() || '',
+            resting_heart_rate: p.resting_heart_rate?.toString() || ''
+          });
+        }
+        // Carregar testes
+        const { data: tests } = await supabase.from('fitness_tests').select('*').eq('user_id', viewAsAthleteId).order('test_date', { ascending: false });
+        setCoachFitnessTests(tests || []);
+        // Carregar provas
+        const { data: racesData } = await supabase.from('races').select('*').eq('user_id', viewAsAthleteId).order('start_date', { ascending: true });
+        setCoachRaces(racesData || []);
+      })();
+    } else {
+      loadProfile();
+      fetchFitnessTests();
+      fetchRaces();
+    }
+  }, [isCoachView, viewAsAthleteId, loadProfile, fetchFitnessTests, fetchRaces]);
+
+  const handleExitCoachMode = () => {
+    exitCoachView();
+    // Voltar para a lista de atletas do treinador
+    // @ts-ignore
+    navigation.navigate('CoachAthletes');
+  };
 
   // Sincronizar dados do perfil com estado local
   useEffect(() => {
-    if (profile) {
+    if (!isCoachView && profile) {
       setProfileData({
         height_cm: profile.height_cm?.toString() || '',
         weight_kg: profile.weight_kg?.toString() || '',
@@ -97,7 +136,7 @@ export default function SportsProfileScreen() {
         resting_heart_rate: profile.resting_heart_rate?.toString() || ''
       });
     }
-  }, [profile]);
+  }, [isCoachView, profile]);
 
   // Encontrar o melhor teste para usar como referência (maior VO2max)
   useEffect(() => {
@@ -182,17 +221,25 @@ export default function SportsProfileScreen() {
 
       console.log('Dados do teste a serem salvos:', testDataToSave);
 
-      if (editingTest) {
-        await updateFitnessTest(editingTest.id, testDataToSave);
-        Alert.alert('Sucesso', 'Teste atualizado com sucesso!');
+      if (isCoachView && viewAsAthleteId) {
+        if (editingTest) {
+          await supabase.from('fitness_tests').update(testDataToSave).eq('id', editingTest.id).eq('user_id', viewAsAthleteId);
+        } else {
+          await supabase.from('fitness_tests').insert({ ...testDataToSave, user_id: viewAsAthleteId });
+        }
+        const { data: tests } = await supabase.from('fitness_tests').select('*').eq('user_id', viewAsAthleteId).order('test_date', { ascending: false });
+        setCoachFitnessTests(tests || []);
       } else {
-        await saveFitnessTest(testDataToSave);
-        Alert.alert('Sucesso', 'Teste registrado com sucesso!');
+        if (editingTest) {
+          await updateFitnessTest(editingTest.id, testDataToSave);
+          Alert.alert('Sucesso', 'Teste atualizado com sucesso!');
+        } else {
+          await saveFitnessTest(testDataToSave);
+          Alert.alert('Sucesso', 'Teste registrado com sucesso!');
+        }
+        await loadProfile();
       }
 
-      // Atualizar perfil com novos valores
-      await loadProfile();
-      
       setModalVisible(false);
       resetForm();
     } catch (error) {
@@ -234,7 +281,13 @@ export default function SportsProfileScreen() {
   const deleteTestAsync = async (test: any) => {
     console.log('DEBUG - Iniciando exclusão do teste:', test.id);
     try {
-      await deleteFitnessTest(test.id);
+      if (isCoachView && viewAsAthleteId) {
+        await supabase.from('fitness_tests').delete().eq('id', test.id).eq('user_id', viewAsAthleteId);
+        const { data: tests } = await supabase.from('fitness_tests').select('*').eq('user_id', viewAsAthleteId).order('test_date', { ascending: false });
+        setCoachFitnessTests(tests || []);
+      } else {
+        await deleteFitnessTest(test.id);
+      }
       console.log('DEBUG - Teste excluído com sucesso');
       alert('Teste excluído com sucesso!');
     } catch (error) {
@@ -263,8 +316,11 @@ export default function SportsProfileScreen() {
       };
       
       console.log('DEBUG - updates a serem enviados:', updates);
-      
-      await updateProfile(updates);
+      if (isCoachView && viewAsAthleteId) {
+        await supabase.from('profiles').update(updates).eq('id', viewAsAthleteId);
+      } else {
+        await updateProfile(updates);
+      }
       console.log('DEBUG - updateProfile executado com sucesso');
       Alert.alert('Sucesso', 'Dados fisiológicos atualizados com sucesso!');
     } catch (error) {
@@ -363,7 +419,13 @@ export default function SportsProfileScreen() {
 
   const deleteRaceAsync = async (race: Race) => {
     try {
-      await deleteRace(race.id);
+      if (isCoachView && viewAsAthleteId) {
+        await supabase.from('races').delete().eq('id', race.id).eq('user_id', viewAsAthleteId);
+        const { data: racesData } = await supabase.from('races').select('*').eq('user_id', viewAsAthleteId).order('start_date', { ascending: true });
+        setCoachRaces(racesData || []);
+      } else {
+        await deleteRace(race.id);
+      }
       alert('Prova excluída com sucesso!');
     } catch (error) {
       console.error('Erro ao excluir prova:', error);
@@ -447,8 +509,16 @@ export default function SportsProfileScreen() {
         }))
       : [];
 
+  const testsList = isCoachView ? coachFitnessTests : fitnessTests;
+  const racesList = isCoachView ? coachRaces : races;
   return (
     <ScrollView style={styles.container}>
+      {isCoachView && (
+        <View style={{ padding: 10, marginBottom: 8, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Chip icon="shield-account" mode="outlined">Visualizando como Treinador{athleteName ? ` — ${athleteName}` : ''}</Chip>
+          <Text onPress={handleExitCoachMode} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
+        </View>
+      )}
       <Card style={styles.card}>
         <Card.Content>
           <Title>Dados Fisiológicos</Title>
@@ -638,8 +708,8 @@ export default function SportsProfileScreen() {
             Cadastrar Nova Prova
           </Button>
           
-          {races.length > 0 ? (
-            races.map((race) => (
+          {racesList.length > 0 ? (
+            racesList.map((race) => (
               <View key={race.id} style={styles.raceItem}>
                 <View style={styles.raceHeader}>
                   <View style={styles.raceInfo}>
@@ -686,7 +756,7 @@ export default function SportsProfileScreen() {
             Registrar Novo Teste
           </Button>
           
-          {fitnessTests.map((test) => (
+          {testsList.map((test) => (
             <View key={test.id} style={styles.testItem}>
               <View style={styles.testHeader}>
                 <View style={styles.testInfo}>
@@ -773,81 +843,117 @@ export default function SportsProfileScreen() {
           </View>
         </Modal>
       </Portal>
-
+     
       <Portal>
-        <Modal
-          visible={raceModalVisible}
-          onDismiss={() => {
-            setRaceModalVisible(false);
-            resetRaceForm();
-          }}
-          contentContainerStyle={styles.modal}
-        >
-          <Title style={styles.modalTitle}>
-            {editingRace ? 'Editar Prova' : 'Cadastrar Nova Prova'}
-          </Title>
-          
-          <TextInput
-            label="Nome do Evento"
-            value={raceData.event_name}
-            onChangeText={(text) => setRaceData(prev => ({ ...prev, event_name: text }))}
-            style={styles.input}
-          />
-          
-          <TextInput
-            label="Cidade"
-            value={raceData.city}
-            onChangeText={(text) => setRaceData(prev => ({ ...prev, city: text }))}
-            style={styles.input}
-          />
-          
-          <TextInput
-            label="Data da Largada (YYYY-MM-DD)"
-            value={raceData.start_date}
-            onChangeText={(text) => setRaceData(prev => ({ ...prev, start_date: text }))}
-            placeholder="2024-12-25"
-            style={styles.input}
-          />
-          
-          <TextInput
-            label="Hora da Largada (HH:MM)"
-            value={raceData.start_time}
-            onChangeText={(text) => setRaceData(prev => ({ ...prev, start_time: text }))}
-            placeholder="08:00"
-            style={styles.input}
-          />
-          
-          <TextInput
-            label="Distância (km)"
-            value={raceData.distance_km}
-            onChangeText={(text) => setRaceData(prev => ({ ...prev, distance_km: text }))}
-            keyboardType="numeric"
-            style={styles.input}
-          />
-
-          <View style={styles.modalButtons}>
-            <Button 
-              mode="outlined" 
-              onPress={() => {
-                setRaceModalVisible(false);
-                resetRaceForm();
-              }}
-              style={styles.modalButton}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              mode="contained" 
-              onPress={handleSaveRace}
-              loading={loading}
-              disabled={!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km || loading}
-              style={styles.modalButton}
-            >
-              {editingRace ? 'Atualizar' : 'Salvar'}
-            </Button>
-          </View>
-        </Modal>
-      </Portal>
+         <Modal
+           visible={raceModalVisible}
+           onDismiss={() => {
+             setRaceModalVisible(false);
+             resetRaceForm();
+           }}
+           contentContainerStyle={styles.modal}
+         >
+           <Title style={styles.modalTitle}>
+             {editingRace ? 'Editar Prova' : 'Cadastrar Nova Prova'}
+           </Title>
+           
+           <TextInput
+             label="Nome do Evento"
+             value={raceData.event_name}
+             onChangeText={(text) => setRaceData(prev => ({ ...prev, event_name: text }))}
+             style={styles.input}
+           />
+           
+           <TextInput
+             label="Cidade"
+             value={raceData.city}
+             onChangeText={(text) => setRaceData(prev => ({ ...prev, city: text }))}
+             style={styles.input}
+           />
+           
+           <TextInput
+             label="Data da Largada (YYYY-MM-DD)"
+             value={raceData.start_date}
+             onChangeText={(text) => setRaceData(prev => ({ ...prev, start_date: text }))}
+             placeholder="2024-12-25"
+             style={styles.input}
+           />
+           
+           <TextInput
+             label="Hora da Largada (HH:MM)"
+             value={raceData.start_time}
+             onChangeText={(text) => setRaceData(prev => ({ ...prev, start_time: text }))}
+             placeholder="08:00"
+             style={styles.input}
+           />
+           
+           <TextInput
+             label="Distância (km)"
+             value={raceData.distance_km}
+             onChangeText={(text) => setRaceData(prev => ({ ...prev, distance_km: text }))}
+             keyboardType="numeric"
+             style={styles.input}
+           />
+ 
+           <View style={styles.modalButtons}>
+             <Button 
+               mode="outlined" 
+               onPress={() => {
+                 setRaceModalVisible(false);
+                 resetRaceForm();
+               }}
+               style={styles.modalButton}
+             >
+               Cancelar
+             </Button>
+             <Button 
+               mode="contained" 
+               onPress={async () => {
+                 if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
+                   Alert.alert('Erro', 'Todos os campos são obrigatórios');
+                   return;
+                 }
+                 setLoading(true);
+                 try {
+                   const payload = {
+                     event_name: raceData.event_name,
+                     city: raceData.city,
+                     start_date: raceData.start_date,
+                     start_time: raceData.start_time,
+                     distance_km: Number(raceData.distance_km)
+                   };
+                   if (isCoachView && viewAsAthleteId) {
+                     if (editingRace) {
+                       await supabase.from('races').update(payload).eq('id', editingRace.id).eq('user_id', viewAsAthleteId);
+                     } else {
+                       await supabase.from('races').insert({ ...payload, user_id: viewAsAthleteId });
+                     }
+                     const { data: racesData } = await supabase.from('races').select('*').eq('user_id', viewAsAthleteId).order('start_date', { ascending: true });
+                     setCoachRaces(racesData || []);
+                   } else {
+                     if (editingRace) {
+                       await updateRace(editingRace.id, payload);
+                     } else {
+                       await saveRace(payload);
+                     }
+                   }
+                   setRaceModalVisible(false);
+                   resetRaceForm();
+                 } catch (error) {
+                   Alert.alert('Erro', error instanceof Error ? error.message : 'Erro ao salvar prova');
+                 } finally {
+                   setLoading(false);
+                 }
+               }}
+               loading={loading}
+               disabled={!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km || loading}
+               style={styles.modalButton}
+             >
+               {editingRace ? 'Atualizar' : 'Salvar'}
+             </Button>
+           </View>
+         </Modal>
+       </Portal>
     </ScrollView>
   );
 }

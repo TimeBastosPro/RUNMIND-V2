@@ -6,6 +6,8 @@ import { useAuthStore } from '../../stores/auth';
 import { useNavigation } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useViewStore } from '../../stores/view';
+import { supabase } from '../../services/supabase';
 
 const motivationalQuotes = [
   {
@@ -79,7 +81,17 @@ const sportCuriosities = [
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
+  try {
+    const { currentCoach } = require('../../stores/coach').useCoachStore.getState();
+    const { isCoachView } = require('../../stores/view').useViewStore.getState();
+    if (currentCoach && !isCoachView) {
+      setTimeout(() => {
+        // @ts-ignore
+        navigation.reset({ index: 0, routes: [{ name: 'CoachMain' }] });
+      }, 0);
+    }
+  } catch {}
   const { 
     todayReadinessScore, 
     hasCheckedInToday, 
@@ -90,10 +102,12 @@ export default function HomeScreen() {
     fetchTrainingSessions,
     fetchRaces
   } = useCheckinStore();
+  const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [motivationalQuote, setMotivationalQuote] = useState(motivationalQuotes[0]);
   const [dailyCuriosity, setDailyCuriosity] = useState(sportCuriosities[0]);
+  const [athleteHeaderName, setAthleteHeaderName] = useState<string | null>(athleteNameFromStore || null);
 
   useEffect(() => {
     loadTodayCheckin();
@@ -116,6 +130,36 @@ export default function HomeScreen() {
     setMotivationalQuote(motivationalQuotes[quoteIndex]);
     setDailyCuriosity(sportCuriosities[curiosityIndex]);
   }, []);
+
+  // Carregar nome do atleta para o cabeçalho quando estiver no modo treinador
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (isCoachView && viewAsAthleteId) {
+        if (athleteNameFromStore) {
+          if (isMounted) setAthleteHeaderName(athleteNameFromStore);
+        } else {
+          const { data } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', viewAsAthleteId)
+            .maybeSingle();
+          if (isMounted) setAthleteHeaderName(data?.full_name || data?.email || null);
+        }
+      } else {
+        if (isMounted) setAthleteHeaderName(null);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [isCoachView, viewAsAthleteId, athleteNameFromStore]);
+
+  // Recarregar dados ao alternar modo treinador ↔ atleta
+  useEffect(() => {
+    fetchTrainingSessions();
+    fetchRaces();
+    loadTodayCheckin();
+    loadRecentCheckins();
+  }, [isCoachView, fetchTrainingSessions, fetchRaces, loadTodayCheckin, loadRecentCheckins]);
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
@@ -212,15 +256,30 @@ export default function HomeScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {isCoachView && (
+        <Surface style={{ backgroundColor: '#EDE7F6', padding: 10, margin: 12, borderRadius: 8 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
+            <Button mode="text" onPress={() => { exitCoachView(); navigation.navigate('CoachAthletes' as never); }}>Sair do modo treinador</Button>
+          </View>
+        </Surface>
+      )}
       <Surface style={styles.header} elevation={2}>
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName}>{user?.user_metadata?.full_name || 'Atleta'}! 👋</Text>
+            <Text style={styles.userName}>
+              {(isCoachView && athleteHeaderName)
+                ? athleteHeaderName
+                : (profile?.full_name || user?.email || 'Atleta')}
+              ! 👋
+            </Text>
           </View>
           <Avatar.Text 
             size={50} 
-            label={(user?.user_metadata?.full_name || 'A').charAt(0).toUpperCase()} 
+            label={((isCoachView && athleteHeaderName)
+              ? athleteHeaderName
+              : (profile?.full_name || user?.email || 'A')).charAt(0).toUpperCase()} 
             style={styles.avatar}
           />
         </View>
@@ -256,9 +315,10 @@ export default function HomeScreen() {
               <Button 
                 mode="contained" 
                 style={styles.checkinButton}
-                onPress={() => navigation.navigate('Check-in' as never)}
+                onPress={() => !isCoachView && navigation.navigate('Check-in' as never)}
+                disabled={isCoachView}
               >
-                Fazer Check-in Agora
+                {isCoachView ? 'Apenas visualização' : 'Fazer Check-in Agora'}
               </Button>
             </View>
           )}
