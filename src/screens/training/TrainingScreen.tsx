@@ -250,7 +250,7 @@ export default function TrainingScreen() {
                 intensidade: t.intensidade
             })));
         });
-    }, [fetchTrainingSessions, isCoachView]);
+    }, [fetchTrainingSessions, isCoachView, viewAsAthleteId, displayDate]);
 
     // Carregar nome do atleta para cabeçalho no modo treinador
     useEffect(() => {
@@ -272,8 +272,14 @@ export default function TrainingScreen() {
 
     const handleExitCoachMode = () => {
         exitCoachView();
-        // @ts-ignore
-        navigation.navigate('CoachAthletes');
+        try {
+          // @ts-ignore
+          navigation.reset({ index: 0, routes: [{ name: 'CoachMain' }] });
+        } catch {
+          // fallback
+          // @ts-ignore
+          navigation.navigate('CoachMain');
+        }
     };
 
     function getWeekStart(date: Date) {
@@ -409,13 +415,14 @@ export default function TrainingScreen() {
       });
     };
     
+    const [isSavingPlan, setIsSavingPlan] = useState(false);
+
     const handleSavePlan = async () => {
         if (!selectedDay) {
             Alert.alert("Erro", "Selecione um dia para planejar o treino.");
             return;
         }
         const trainingData: Partial<TrainingSession> = {
-            user_id: userId || '',
             training_date: formatDate(selectedDay),
             title: 'Treino Planejado',
             training_type: 'planned',
@@ -438,6 +445,7 @@ export default function TrainingScreen() {
             observacoes: planningState.observacoes || undefined,
         };
         try {
+            setIsSavingPlan(true);
             console.log('🔍 DEBUG - Salvando treino planejado:', {
                 ...trainingData,
                 'distance_km': trainingData.distance_km,
@@ -457,12 +465,16 @@ export default function TrainingScreen() {
             });
             await saveTrainingSession(trainingData);
             console.log('✅ Treino planejado salvo com sucesso no banco');
-            await fetchTrainingSessions();
+            // Fecha o modal imediatamente para feedback visual
             setModalPlanVisible(false);
+            // Recarrega em background para atualizar cards
+            fetchTrainingSessions();
             Alert.alert("✅ Sucesso", "Treino planejado salvo com sucesso!");
         } catch (err) {
             console.error('Erro ao salvar treino:', err);
             Alert.alert("❌ Erro", "Não foi possível salvar o treino. Tente novamente.");
+        } finally {
+            setIsSavingPlan(false);
         }
     };
 
@@ -471,7 +483,6 @@ export default function TrainingScreen() {
         try {
             const treinoParaSalvar: Partial<TrainingSession> = {
                 ...completedData,
-                user_id: userId || '',
                 training_date: editingSession.training_date,
                 status: 'completed',
                 title: completedData.title || 'Treino Realizado',
@@ -480,7 +491,7 @@ export default function TrainingScreen() {
             
             console.log('Salvando treino realizado:', treinoParaSalvar);
             await saveTrainingSession(treinoParaSalvar);
-            await fetchTrainingSessions();
+            fetchTrainingSessions();
             Alert.alert('✅ Sucesso', 'Treino realizado salvo com sucesso!');
         } catch (err: any) {
             Alert.alert('❌ Erro', 'Erro ao salvar treino: ' + (err.message || String(err)));
@@ -684,9 +695,12 @@ export default function TrainingScreen() {
                         <View style={{ marginTop: 10 }}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                             <Button onPress={() => setModalPlanVisible(false)}>Cancelar</Button>
-                            <Button mode="contained" onPress={handleSavePlan}>
+                            <Button mode="contained" onPress={handleSavePlan} disabled={isCoachView && !viewAsAthleteId}>
                               {editingSession ? 'Salvar Alterações' : 'Salvar Treino'}
                             </Button>
+                            {(isCoachView && !viewAsAthleteId) && (
+                              <Text style={{ color: '#d32f2f', marginLeft: 12 }}>Selecione um atleta para planejar treinos</Text>
+                            )}
                           </View>
                           {editingSession && (
                             <Button 

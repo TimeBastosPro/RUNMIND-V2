@@ -646,12 +646,14 @@ export default function AppNavigator() {
     setHasPushedCoachMain(true);
   }
 
-  const navigatorKey = `${isAuthenticated ? 'auth' : 'no'}-${currentCoach ? 'coach' : 'ath'}`;
+  const isCoachUser = !!(user && (user as any).user_metadata && (user as any).user_metadata.user_type === 'coach');
+  const showCoachStack = isAuthenticated && (isCoachUser || !!currentCoach);
+  const navigatorKey = `${isAuthenticated ? 'auth' : 'no'}-${showCoachStack ? 'coach' : 'ath'}`;
   return (
     <NavigationContainer>
-      <Stack.Navigator key={navigatorKey} screenOptions={{ headerShown: false }} initialRouteName={isAuthenticated ? (currentCoach ? 'CoachMain' : 'Main') : 'Auth'}>
+      <Stack.Navigator key={navigatorKey} screenOptions={{ headerShown: false }} initialRouteName={isAuthenticated ? (showCoachStack ? 'CoachMain' : 'Main') : 'Auth'}>
         {isAuthenticated ? (
-          currentCoach ? (
+          showCoachStack ? (
             // Usuário é treinador
             <>
               <Stack.Screen name="CoachMain" component={CoachTabsComponent} />

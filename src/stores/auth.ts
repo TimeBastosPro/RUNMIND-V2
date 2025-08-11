@@ -136,6 +136,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Carregar dados após garantir registro
       await Promise.allSettled([get().loadProfile()]);
+      // Se for usuário do tipo coach, garantir navegação/coerência de stack
+      try {
+        if ((data.user as any)?.user_metadata?.user_type === 'coach') {
+          useAuthStore.setState({ isAuthenticated: true });
+        }
+      } catch {}
 
       console.log('🔍 signIn concluído com sucesso');
     } catch (error) {

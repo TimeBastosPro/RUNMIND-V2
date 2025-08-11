@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
@@ -26,8 +27,9 @@ console.log('🔧 Supabase Config - Key: [oculta]');
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    // No web, não persistimos a sessão para sempre voltar à tela de login após refresh
+    autoRefreshToken: Platform.OS !== 'web',
+    persistSession: Platform.OS !== 'web',
     detectSessionInUrl: false,
     // ✅ NOVO: Configurações específicas para mobile
     flowType: 'pkce',

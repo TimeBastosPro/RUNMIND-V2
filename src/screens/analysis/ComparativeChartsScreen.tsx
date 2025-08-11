@@ -27,7 +27,7 @@ export default function ComparativeChartsScreen() {
         {isCoachView && (
           <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
-            <Text onPress={exitCoachView} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
+            <Text onPress={() => { exitCoachView(); try { (global as any).navigation?.reset?.({ index: 0, routes: [{ name: 'CoachMain' }] }); } catch {} }} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
           </View>
         )}
       </View>

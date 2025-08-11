@@ -119,9 +119,13 @@ export default function SportsProfileScreen() {
 
   const handleExitCoachMode = () => {
     exitCoachView();
-    // Voltar para a lista de atletas do treinador
-    // @ts-ignore
-    navigation.navigate('CoachAthletes');
+    try {
+      // @ts-ignore
+      navigation.reset({ index: 0, routes: [{ name: 'CoachMain' }] });
+    } catch {
+      // @ts-ignore
+      navigation.navigate('CoachMain');
+    }
   };
 
   // Sincronizar dados do perfil com estado local

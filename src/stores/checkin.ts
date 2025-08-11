@@ -202,8 +202,11 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
-      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      const { viewAsAthleteId, isCoachView } = useViewStore.getState();
+      const targetUserId: string | null = viewAsAthleteId ?? (user && (user as any).id ? (user as any).id : null);
+      if (isCoachView && user?.id && targetUserId === user.id) {
+        throw new Error('Modo treinador ativo, mas nenhum atleta selecionado. Selecione um atleta antes de salvar.');
+      }
       if (!targetUserId) { 
         return; 
       }
@@ -320,17 +323,62 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
-      const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      const targetUserId: string | null = viewAsAthleteId ?? (user && (user as any).id ? (user as any).id : null);
       if (!targetUserId) throw new Error('Usuário não autenticado');
       
-      // Preparar dados para salvamento
-      const upsertData = {
+      // Preparar dados para salvamento (somente colunas existentes na tabela)
+      const allowedKeys = new Set([
+        'user_id',
+        'training_date',
+        'title',
+        'training_type',
+        'status',
+        // planejado
+        'modalidade',
+        'treino_tipo',
+        'terreno',
+        'percurso',
+        'esforco',
+        'intensidade',
+        'distance_km',
+        'duracao_horas',
+        'duracao_minutos',
+        'observacoes',
+        // realizado
+        'elevation_gain_meters',
+        'elevation_loss_meters',
+        'avg_heart_rate',
+        'max_heart_rate',
+        'perceived_effort',
+        'session_satisfaction',
+        // arrays
+        'sensacoes',
+        'clima',
+        // legado opcionais
+        'notes',
+        'effort_level',
+        'duracao_tipo',
+      ]);
+
+      const rawPayload: any = {
         user_id: targetUserId,
         ...trainingData,
-        // Garantir que campos de array sejam salvos como JSON
-        sensacoes: trainingData.sensacoes ? JSON.stringify(trainingData.sensacoes) : null,
-        clima: trainingData.clima ? JSON.stringify(trainingData.clima) : null,
       };
+
+      // Normalizar arrays
+      if (rawPayload.sensacoes && typeof rawPayload.sensacoes === 'string') {
+        rawPayload.sensacoes = [rawPayload.sensacoes];
+      }
+      if (rawPayload.clima && typeof rawPayload.clima === 'string') {
+        rawPayload.clima = [rawPayload.clima];
+      }
+
+      const upsertData: any = {};
+      Object.entries(rawPayload).forEach(([key, value]) => {
+        if (allowedKeys.has(key) && value !== undefined) {
+          upsertData[key] = value;
+        }
+      });
       
       const { data, error } = await supabase
         .from('training_sessions')
@@ -340,17 +388,29 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         
       if (error) throw error;
       
-      // Atualizar o store local
-      set(state => ({
-        trainingSessions: state.trainingSessions.map(t => 
-          t.id === data.id ? data : t
-        ).concat(data.id ? [] : [data])
-      }));
+      // Atualizar o store local: adiciona se novo, ou atualiza se já existir
+      set(state => {
+        const exists = state.trainingSessions.some(t => t.id === data.id);
+        const trainingSessions = exists
+          ? state.trainingSessions.map(t => (t.id === data.id ? (data as any) : t))
+          : [...state.trainingSessions, (data as any)];
+        return { trainingSessions } as any;
+      });
       
+      // Recarregar lista do período atual para garantir sincronização visual (modo treinador ou atleta)
+      try { await get().fetchTrainingSessions(); } catch {}
       set({ isLoading: false, error: null });
       return data;
-    } catch (error: unknown) {
-      console.error('Erro ao salvar treino (upsert):', error);
+      } catch (error: unknown) {
+        try {
+          const e: any = error;
+          console.error('Erro ao salvar treino (upsert):', {
+            message: e?.message,
+            code: e?.code,
+            details: e?.details,
+            hint: e?.hint,
+          });
+        } catch {}
       const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar treino.';
       set({ isLoading: false, error: errorMessage });
       throw error;
@@ -402,8 +462,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const { viewAsAthleteId, isCoachView } = useViewStore.getState();
       const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
+      // Guarda-fio: no modo treinador, não sobrepor lista se não houver atleta selecionado
+      if (isCoachView && !viewAsAthleteId) {
+        // Evitar piscar dados do usuário anterior
+        set({ trainingSessions: [], isLoading: false, error: null });
+        return;
+      }
       if (!targetUserId) { throw new Error('Usuário não autenticado'); }
       
       // Calcular intervalo amplo se não fornecido
@@ -453,7 +519,13 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     const completedSessions = trainingSessions.filter(t => t.status === 'completed');
 
     // 1. Carga de Treino (trainingLoad) - apenas treinos realizados
-    const completedExt = (completedSessions as any as ExtTrainingSession[]);
+      const completedExt: ExtTrainingSession[] = (completedSessions as any[]).map((s: any) => {
+        const coerced: ExtTrainingSession = {
+          ...s,
+          distance_km: s.distance_km ?? undefined,
+        };
+        return coerced;
+      });
     const trainingLoad = completedExt.map((t) => {
       const duration = getDurationMinutesFrom(t);
       

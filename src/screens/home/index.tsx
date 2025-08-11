@@ -260,7 +260,7 @@ export default function HomeScreen() {
         <Surface style={{ backgroundColor: '#EDE7F6', padding: 10, margin: 12, borderRadius: 8 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
-            <Button mode="text" onPress={() => { exitCoachView(); navigation.navigate('CoachAthletes' as never); }}>Sair do modo treinador</Button>
+            <Button mode="text" onPress={() => { exitCoachView(); navigation.reset({ index: 0, routes: [{ name: 'CoachMain' as never }] } as any); }}>Sair do modo treinador</Button>
           </View>
         </Surface>
       )}

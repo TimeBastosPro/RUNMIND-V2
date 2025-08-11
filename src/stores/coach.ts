@@ -122,13 +122,23 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         .eq('user_id', user.id)
         .single();
 
-      if (error) {
-        // Se coach não encontrado (PGRST116), apenas marcar como não-treinador
-        if ((error as any).code === 'PGRST116') {
-          set({ currentCoach: null, isLoading: false });
-          return;
+      if (error || !data) {
+        // Coach ausente: se o user for do tipo coach, criar registro mínimo idempotente
+        const userType = (user as any)?.user_metadata?.user_type;
+        if (userType === 'coach') {
+          const fullName = (user as any)?.user_metadata?.full_name || (user.email ?? 'Coach');
+          const email = user.email ?? '';
+          // upsert idempotente baseado em user_id
+          const { data: inserted, error: insertError } = await supabase
+            .from('coaches')
+            .upsert({ user_id: user.id, full_name: fullName, email, is_active: true }, { onConflict: 'user_id' })
+            .select('*')
+            .single();
+          if (!insertError && inserted) {
+            set({ currentCoach: inserted, isLoading: false });
+            return;
+          }
         }
-        // Supabase pode lançar erro se tabela vazia para este user
         set({ currentCoach: null, isLoading: false });
         return;
       }

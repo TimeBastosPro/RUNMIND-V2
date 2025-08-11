@@ -136,7 +136,7 @@ export default function InsightsScreen() {
       {isCoachView && (
         <View style={{ padding: 10, marginBottom: 8, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Chip icon="shield-account" mode="outlined">Visualizando como Treinador{athleteName ? ` — ${athleteName}` : ''}</Chip>
-          <Text onPress={exitCoachView} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
+          <Text onPress={() => { exitCoachView(); try { (global as any).navigation?.reset?.({ index: 0, routes: [{ name: 'CoachMain' }] }); } catch {} }} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
         </View>
       )}
       <FlatList
