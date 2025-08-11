@@ -388,7 +388,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                   </View>
                 ) : (
                   relationships.filter(r => isActiveStatus(r.status as string)).map((relationship) => (
-                    <Card key={relationship.id} style={styles.athleteCard} onPress={() => navigation.navigate('CoachViewAthlete', { athleteId: (relationship as any).athlete_id, relationshipId: relationship.id, athleteName: (relationship as any).athlete_name, athleteEmail: (relationship as any).athlete_email })}>
+                    <Card key={relationship.id} style={styles.athleteCard}>
                       <Card.Content>
                         <View style={styles.athleteHeader}>
                           <Avatar.Text size={40} label={getInitials(((relationship as any).athlete_name || (relationship as any).athlete_email || '??'))} />
@@ -403,14 +403,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
 
                         {/* Ações rápidas para ativos */}
                         <View style={styles.actionButtons}>
-                          <Button
-                            mode="outlined"
-                            icon="message"
-                            onPress={() => navigation.navigate('CoachViewAthlete', { athleteId: (relationship as any).athlete_id, relationshipId: relationship.id, athleteName: (relationship as any).athlete_name, athleteEmail: (relationship as any).athlete_email })}
-                            style={styles.actionButton}
-                          >
-                            Mensagem
-                          </Button>
+                          {/* Mensageria removida nesta seção para evitar conflito de navegação */}
                           <Button
                             mode="contained"
                             icon="account-off"
@@ -419,6 +412,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                           >
                             Desativar
                           </Button>
+                          {/* Ver Perfil habilitado na Visão Geral: abre o perfil esportivo do atleta no fluxo principal */}
                           <Button
                             mode="outlined"
                             icon="account-details"
@@ -463,7 +457,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
               </View>
             ) : (
               filteredRelationships.map((relationship) => (
-                <Card key={relationship.id} style={styles.athleteCard} onPress={() => navigation.navigate('CoachViewAthlete', { athleteId: (relationship as any).athlete_id, relationshipId: relationship.id, athleteName: (relationship as any).athlete_name, athleteEmail: (relationship as any).athlete_email })}>
+                <Card key={relationship.id} style={styles.athleteCard}>
                   <Card.Content>
                     <View style={styles.athleteHeader}>
                       <Avatar.Text 
