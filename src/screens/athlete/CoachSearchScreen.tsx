@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { Text, Card, Button, Avatar, Chip, Searchbar, TextInput, SegmentedButtons } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Chip, Searchbar, TextInput } from 'react-native-paper';
 import { useCoachStore } from '../../stores/coach';
 import { useAuthStore } from '../../stores/auth';
 import { supabase } from '../../services/supabase';
@@ -20,6 +20,7 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
   
   const { signOut } = useAuthStore();
   const [relationships, setRelationships] = useState<any[]>([]);
+  const [pendingRelationships, setPendingRelationships] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<any[]>([]);
   const [selectedCoach, setSelectedCoach] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,13 +34,27 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
 
   const loadData = async () => {
     try {
-      await loadAthleteRelationships({ status: 'active' });
+      // Carregar todos os relacionamentos (ativos, pendentes, aprovados)
+      await loadAthleteRelationships();
       const { relationships: storeRelationships } = useCoachStore.getState();
-      // Mostrar somente vínculos ativos
-      setRelationships((storeRelationships || []).filter((r: any) => r.status === 'active'));
-      // Buscar treinadores inicialmente sem filtros
-      const found = await searchCoaches({ is_active: true });
-      setCoaches(found || []);
+      
+      // Separar relacionamentos por status
+      const activeRelationships = (storeRelationships || []).filter((r: any) => 
+        r.status === 'active' || r.status === 'approved'
+      );
+      const pendingRelationships = (storeRelationships || []).filter((r: any) => 
+        r.status === 'pending'
+      );
+      
+      console.log('🔍 Relacionamentos carregados:', {
+        total: storeRelationships?.length || 0,
+        active: activeRelationships.length,
+        pending: pendingRelationships.length,
+        all: storeRelationships?.map((r: any) => ({ id: r.id, status: r.status, coach_name: r.coach_name }))
+      });
+      
+      setRelationships(activeRelationships);
+      setPendingRelationships(pendingRelationships);
     } catch (error) {
       console.error('Erro ao carregar vínculos:', error);
     }
@@ -54,14 +69,6 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
   const getInitials = (name: string | undefined | null) => {
     if (!name || typeof name !== 'string') return '??';
     return name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error);
-    }
   };
 
   const handleUnlink = async (relationshipId: string) => {
@@ -86,35 +93,6 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
     );
   };
 
-  const handleDeleteRelationship = async (relationshipId: string) => {
-    Alert.alert(
-      'Excluir Vínculo',
-      'Deseja excluir este vínculo permanentemente? Esta ação não poderá ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (!user) throw new Error('Usuário não autenticado');
-              const { error } = await supabase
-                .from('athlete_coach_relationships')
-                .delete()
-                .eq('id', relationshipId)
-                .eq('athlete_id', user.id);
-              if (error) throw error;
-              await loadData();
-            } catch (e) {
-              Alert.alert('Erro', 'Não foi possível excluir o vínculo.');
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const handleSearch = async () => {
     try {
       const results = await searchCoaches({
@@ -123,9 +101,12 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
         team_name: teamNameQuery.trim() || undefined,
       });
       setCoaches(results || []);
-      // Seleção automática quando há apenas 1 resultado
+      
+      // Se encontrou apenas um treinador, selecionar automaticamente
       if (results && results.length === 1) {
         setSelectedCoach(results[0]);
+      } else {
+        setSelectedCoach(null);
       }
     } catch (e) {
       Alert.alert('Erro', 'Não foi possível buscar treinadores.');
@@ -142,12 +123,24 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
         Alert.alert('Selecione ao menos uma modalidade');
         return;
       }
+      
       // Enviar em lote por modalidade
       // @ts-ignore acessar função do store
       const { requestCoachRelationshipsBulk } = useCoachStore.getState() as any;
       await requestCoachRelationshipsBulk(coachId, selectedModalities);
+      
+      // Recarregar dados para mostrar o novo relacionamento
       await loadData();
-      Alert.alert('Sucesso', 'Solicitação enviada ao treinador.');
+      
+      // Limpar seleção após sucesso
+      setSelectedCoach(null);
+      setSelectedModalities(['Corrida de Rua']);
+      
+      Alert.alert(
+        'Vínculo Solicitado!', 
+        'Sua solicitação foi enviada ao treinador. Você receberá uma notificação quando for aprovada.',
+        [{ text: 'OK' }]
+      );
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Não foi possível enviar a solicitação.');
     }
@@ -182,21 +175,39 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
           </Card.Content>
         </Card>
 
-        {/* Se houver múltiplos resultados, mostrar seletor compacto acima do card principal */}
-        {coaches.length > 1 && (
-          <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
-            <Text style={{ fontWeight: '600', marginBottom: 8 }}>Selecione seu treinador</Text>
-            {coaches.map((coach) => (
-              <Button
-                key={coach.id}
-                mode={selectedCoach?.id === coach.id ? 'contained' : 'outlined'}
-                onPress={() => setSelectedCoach(coach)}
-                style={{ marginBottom: 8 }}
-              >
-                {coach.full_name}
-              </Button>
-            ))}
-          </View>
+        {/* Relacionamentos Pendentes */}
+        {pendingRelationships.length > 0 && (
+          <Card style={styles.relationshipsCard}>
+            <Card.Content>
+              <Text variant="titleLarge" style={styles.relationshipsTitle}>
+                Solicitações Pendentes
+              </Text>
+              {pendingRelationships.map((relationship) => (
+                <Card key={relationship.id} style={styles.relationshipCard}>
+                  <Card.Content>
+                    <View style={styles.relationshipHeader}>
+                      <Avatar.Text 
+                        size={40} 
+                        label={getInitials(relationship.coach_name)}
+                        style={styles.relationshipAvatar}
+                      />
+                      <View style={styles.relationshipInfo}>
+                        <Text variant="titleMedium" style={styles.relationshipName}>
+                          {relationship.coach_name || 'Nome não informado'}
+                        </Text>
+                        <Text variant="bodySmall" style={styles.relationshipEmail}>
+                          {relationship.coach_email || 'Email não informado'}
+                        </Text>
+                        <Chip style={{ alignSelf: 'flex-start', backgroundColor: '#FFF3E0' }} mode="outlined">
+                          Aguardando Aprovação
+                        </Chip>
+                      </View>
+                    </View>
+                  </Card.Content>
+                </Card>
+              ))}
+            </Card.Content>
+          </Card>
         )}
 
         {/* Vínculo atual (somente dados do treinador vinculado) */}
@@ -218,7 +229,7 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                       </View>
                     </View>
                     <Text style={{ marginBottom: 8, color: '#666' }}>Selecione uma ou mais modalidades</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                       {['Corrida de Rua','Trail Running','Força','Flexibilidade'].map(m => (
                         <Chip
                           key={m}
@@ -229,8 +240,13 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                         </Chip>
                       ))}
                     </View>
-                    <Button mode="contained" icon="account-plus" onPress={() => handleRequestRelationship(selectedCoach.id)}>
-                      Solicitar Vínculo
+                    <Button 
+                      mode="contained" 
+                      icon="account-plus" 
+                      onPress={() => handleRequestRelationship(selectedCoach.id)}
+                      style={styles.vincularButton}
+                    >
+                      Vincular
                     </Button>
                   </>
                 ) : (
@@ -258,7 +274,6 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                           {relationship.coach_email || 'Email não informado'}
                         </Text>
                         <Chip style={{ alignSelf: 'flex-start' }} mode="outlined">Ativo</Chip>
-                        <Button mode="text" onPress={() => Alert.alert('Treinador', `${relationship.coach_name}\n${relationship.coach_email}`)}>Ver informações</Button>
                       </View>
                     </View>
 
@@ -268,37 +283,15 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                         mode="outlined"
                         icon="link-off"
                         onPress={() => handleUnlink(relationship.id)}
+                        style={styles.desvincularButton}
                       >
                         Desvincular
-                      </Button>
-                      <Button
-                        mode="outlined"
-                        icon="delete"
-                        textColor="#F44336"
-                        onPress={() => handleDeleteRelationship(relationship.id)}
-                      >
-                        Excluir
                       </Button>
                     </View>
                   </Card.Content>
                 </Card>
               ))
             )}
-          </Card.Content>
-        </Card>
-
-        {/* Logout */}
-        <Card style={styles.logoutCard}>
-          <Card.Content>
-            <Button 
-              mode="outlined" 
-              onPress={handleLogout}
-              style={styles.logoutButton}
-              icon="logout"
-              textColor="#F44336"
-            >
-              Sair da Conta
-            </Button>
           </Card.Content>
         </Card>
       </ScrollView>
@@ -313,7 +306,6 @@ const styles = StyleSheet.create({
   searchCard: { margin: 16, marginBottom: 8, elevation: 2, borderRadius: 12 },
   relationshipsTitle: { fontWeight: 'bold', marginBottom: 16 },
   relationshipCard: { marginBottom: 12, elevation: 1, borderRadius: 8 },
-  coachCard: { marginBottom: 12, elevation: 1, borderRadius: 8 },
   relationshipHeader: { flexDirection: 'row', alignItems: 'center' },
   relationshipAvatar: { marginRight: 12 },
   relationshipInfo: { flex: 1 },
@@ -322,6 +314,13 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', padding: 32 },
   emptyText: { fontWeight: 'bold', marginBottom: 8 },
   emptySubtext: { textAlign: 'center', color: '#666' },
-  logoutCard: { margin: 16, marginTop: 0, elevation: 2, borderRadius: 12 },
-  logoutButton: { borderRadius: 8, borderColor: '#F44336' },
+  vincularButton: { 
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    marginTop: 8
+  },
+  desvincularButton: { 
+    borderColor: '#FF9800',
+    borderRadius: 8
+  },
 }); 

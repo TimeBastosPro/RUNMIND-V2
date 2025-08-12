@@ -3,6 +3,8 @@ import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Title, Paragraph, Button, TextInput, Modal, Portal, Text, SegmentedButtons, IconButton, Chip, DataTable } from 'react-native-paper';
 import { useAuthStore } from '../stores/auth';
 import { useViewStore } from '../stores/view';
+import { useCoachStore } from '../stores/coach';
+import { resetToCoachMain } from '../navigation/navigationRef';
 import { supabase } from '../services/supabase';
 import { useNavigation } from '@react-navigation/native';
 import { Race } from '../types/database';
@@ -87,6 +89,19 @@ export default function SportsProfileScreen() {
   });
   const [athleteName, setAthleteName] = useState<string | null>(athleteNameFromStore || null);
 
+  // Guard: treinador sem atleta selecionado
+  if (isCoachView && !viewAsAthleteId) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <Chip icon="shield-account" mode="outlined" style={{ marginBottom: 12 }}>Visualizando como Treinador</Chip>
+        <Text style={{ fontSize: 16, textAlign: 'center', marginBottom: 12 }}>
+          Selecione um atleta em Meus Atletas → Ver Perfil para visualizar e editar o perfil esportivo.
+        </Text>
+        <Button mode="contained" onPress={() => { try { resetToCoachMain(); } catch {} }}>Ir para Meus Atletas</Button>
+      </View>
+    );
+  }
+
   useEffect(() => {
     if (isCoachView && viewAsAthleteId) {
       (async () => {
@@ -119,13 +134,13 @@ export default function SportsProfileScreen() {
 
   const handleExitCoachMode = () => {
     exitCoachView();
+    try { resetToCoachMain(); } catch {}
+    // Recarregar contexto do treinador em background
     try {
-      // @ts-ignore
-      navigation.reset({ index: 0, routes: [{ name: 'CoachMain' }] });
-    } catch {
-      // @ts-ignore
-      navigation.navigate('CoachMain');
-    }
+      const { loadCoachProfile, loadCoachRelationships } = useCoachStore.getState();
+      loadCoachProfile();
+      loadCoachRelationships();
+    } catch {}
   };
 
   // Sincronizar dados do perfil com estado local

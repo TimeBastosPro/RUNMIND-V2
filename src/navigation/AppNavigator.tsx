@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from './navigationRef';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
@@ -433,13 +434,11 @@ const CoachTabsNav = createBottomTabNavigator<CoachTabParamList>();
 function CoachTabsComponent() {
   return (
     <CoachTabsNav.Navigator
-      initialRouteName="CoachHome"
+      initialRouteName="CoachAthletes"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
-          let icon: keyof typeof MaterialCommunityIcons.glyphMap = 'view-dashboard';
-          if (route.name === 'CoachHome') icon = 'view-dashboard';
+          let icon: keyof typeof MaterialCommunityIcons.glyphMap = 'account-group';
           if (route.name === 'CoachAthletes') icon = 'account-group';
-          if (route.name === 'CoachTeams') icon = 'trophy';
           if (route.name === 'CoachProfile') icon = 'account-cog';
           return <MaterialCommunityIcons name={icon} size={size} color={color} />;
         },
@@ -448,9 +447,8 @@ function CoachTabsComponent() {
         headerShown: false,
       })}
     >
-      <CoachTabsNav.Screen name="CoachHome" component={CoachDashboardScreen} options={{ title: 'Visão Geral' }} />
+      {/* Visão Geral removida a pedido */}
       <CoachTabsNav.Screen name="CoachAthletes" component={CoachAthletesScreen} options={{ title: 'Atletas' }} />
-      <CoachTabsNav.Screen name="CoachTeams" component={CoachTeamsScreen} options={{ title: 'Equipes' }} />
       <CoachTabsNav.Screen name="CoachProfile" component={CoachProfileScreen} options={{ title: 'Perfil' }} />
     </CoachTabsNav.Navigator>
   );
@@ -650,7 +648,7 @@ export default function AppNavigator() {
   const showCoachStack = isAuthenticated && (isCoachUser || !!currentCoach);
   const navigatorKey = `${isAuthenticated ? 'auth' : 'no'}-${showCoachStack ? 'coach' : 'ath'}`;
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator key={navigatorKey} screenOptions={{ headerShown: false }} initialRouteName={isAuthenticated ? (showCoachStack ? 'CoachMain' : 'Main') : 'Auth'}>
         {isAuthenticated ? (
           showCoachStack ? (

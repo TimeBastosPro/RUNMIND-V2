@@ -11,6 +11,7 @@ import { UniversalDocumentPicker } from '../../components/ui/UniversalDocumentPi
 import Papa from 'papaparse';
 import { useAuthStore } from '../../stores/auth';
 import { useViewStore } from '../../stores/view';
+import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 import { useNavigation } from '@react-navigation/native';
 
@@ -272,14 +273,13 @@ export default function TrainingScreen() {
 
     const handleExitCoachMode = () => {
         exitCoachView();
+        try { resetToCoachMain(); } catch { /* noop */ }
+        // Recarregar contexto do treinador em background
         try {
-          // @ts-ignore
-          navigation.reset({ index: 0, routes: [{ name: 'CoachMain' }] });
-        } catch {
-          // fallback
-          // @ts-ignore
-          navigation.navigate('CoachMain');
-        }
+          const { loadCoachProfile, loadCoachRelationships } = useCoachStore.getState() as any;
+          loadCoachProfile();
+          loadCoachRelationships();
+        } catch {}
     };
 
     function getWeekStart(date: Date) {
@@ -536,12 +536,25 @@ export default function TrainingScreen() {
         }
     };
 
+    // Guard: treinador sem atleta selecionado
+    if (isCoachView && !viewAsAthleteId) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Chip icon="shield-account" mode="outlined" style={{ marginBottom: 12 }}>Visualizando como Treinador</Chip>
+          <Text style={{ fontSize: 16, textAlign: 'center', marginBottom: 12 }}>
+            Selecione um atleta em Meus Atletas → Ver Perfil para gerenciar treinos.
+          </Text>
+          <Button mode="contained" onPress={() => { try { resetToCoachMain(); } catch {} }}>Ir para Meus Atletas</Button>
+        </View>
+      );
+    }
+
     return (
         <ScrollView style={{ flex: 1 }}>
             {isCoachView && (
               <View style={{ padding: 10, margin: 12, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
-                <Button mode="text" onPress={exitCoachView}>Sair do modo treinador</Button>
+                <Button mode="text" onPress={handleExitCoachMode}>Sair do modo treinador</Button>
               </View>
             )}
             <View style={[styles.headerContainer, isMobile && styles.headerContainerMobile]}>

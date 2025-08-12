@@ -817,21 +817,38 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   },
   // Novas funções para insights
   loadSavedInsights: async () => {
+    console.log('🚀 loadSavedInsights chamada');
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
+      const { viewAsAthleteId, isCoachView } = useViewStore.getState();
       const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
-      if (!targetUserId) { return; }
+      
+      console.log('🔍 DEBUG loadSavedInsights:', {
+        user: user?.id,
+        viewAsAthleteId,
+        isCoachView,
+        targetUserId
+      });
+      
+      if (!targetUserId) { 
+        console.log('❌ No targetUserId found');
+        set({ savedInsights: [], isLoading: false, error: null });
+        return; 
+      }
+      
       const { data, error } = await supabase
         .from('insights')
         .select('*')
         .eq('user_id', targetUserId)
         .order('created_at', { ascending: false });
+        
+      console.log('🔍 DEBUG insights query result:', { data, error, count: data?.length });
+      
       if (error) throw error;
       set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
     } catch (error: unknown) {
-      console.error('Error loading saved insights:', error);
+      console.error('❌ Error loading saved insights:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar insights salvos.';
       set({ isLoading: false, error: errorMessage });
     }

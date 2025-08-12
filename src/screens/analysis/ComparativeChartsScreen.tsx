@@ -3,6 +3,7 @@ import { View, StyleSheet, Dimensions } from 'react-native';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { Text, Chip } from 'react-native-paper';
 import { useViewStore } from '../../stores/view';
+import { resetToCoachMain } from '../../navigation/navigationRef';
 
 // Tabs que vamos criar
 import WellbeingChartsTab from './tabs/WellbeingChartsTab';
@@ -27,7 +28,7 @@ export default function ComparativeChartsScreen() {
         {isCoachView && (
           <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
-            <Text onPress={() => { exitCoachView(); try { (global as any).navigation?.reset?.({ index: 0, routes: [{ name: 'CoachMain' }] }); } catch {} }} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
+            <Text onPress={() => { exitCoachView(); try { resetToCoachMain(); } catch {}; try { const { loadCoachProfile, loadCoachRelationships } = (require('../../stores/coach') as any).useCoachStore.getState(); loadCoachProfile(); loadCoachRelationships(); } catch {} }} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
           </View>
         )}
       </View>

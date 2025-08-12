@@ -24,6 +24,7 @@ export const useViewStore = create<ViewState>((set) => ({
   isCoachView: false,
   athleteName: null,
   enterCoachView: (athleteId: string, athleteName?: string | null) => {
+    console.log('🔍 DEBUG enterCoachView:', { athleteId, athleteName });
     persistState({ viewAsAthleteId: athleteId, isCoachView: true, athleteName: athleteName || null });
     set({ viewAsAthleteId: athleteId, isCoachView: true, athleteName: athleteName || null });
   },

@@ -322,12 +322,14 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error('Você já possui um treinador ativo para esta modalidade. Desvincule antes de solicitar outro.');
       }
 
-      // Verificar se já existe um relacionamento com este treinador (qualquer status)
-      const { data: existingRelationship, error: checkError } = await supabase
+      // Verificar se já existe um relacionamento PENDENTE com este treinador na mesma modalidade
+      const { data: existingPendingRelationship, error: checkError } = await supabase
         .from('athlete_coach_relationships')
         .select('*')
         .eq('athlete_id', user.id)
         .eq('coach_id', coachId)
+        .eq('modality', normalizedModality)
+        .eq('status', 'pending')
         .maybeSingle();
 
       if (checkError) {
@@ -335,9 +337,9 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw checkError;
       }
 
-      if (existingRelationship) {
-        console.log('⚠️ Relacionamento já existe:', existingRelationship);
-        throw new Error('Você já possui uma solicitação para este treinador');
+      if (existingPendingRelationship) {
+        console.log('⚠️ Relacionamento pendente já existe:', existingPendingRelationship);
+        throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com este treinador`);
       }
 
       const { data, error } = await supabase
@@ -384,11 +386,48 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         query = query.eq('team_id', filters.team_id);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data: baseRelationships, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      set({ relationships: data || [], isLoading: false });
+      if (!baseRelationships || baseRelationships.length === 0) {
+        set({ relationships: [], isLoading: false });
+        return;
+      }
+
+      // Buscar dados dos treinadores
+      const coachIds = Array.from(new Set(baseRelationships.map(r => r.coach_id).filter(Boolean)));
+      const { data: coachesData, error: coachesError } = await supabase
+        .from('coaches')
+        .select('id, full_name, email')
+        .in('id', coachIds);
+
+      if (coachesError) throw coachesError;
+
+      // Criar mapa de treinadores por ID
+      const coachesById: Record<string, { id: string; full_name: string; email: string }> = {};
+      for (const coach of (coachesData || [])) {
+        coachesById[coach.id] = coach;
+      }
+
+      // Combinar dados dos relacionamentos com dados dos treinadores
+      const relationships = baseRelationships.map(r => ({
+        ...r,
+        coach_name: coachesById[r.coach_id]?.full_name,
+        coach_email: coachesById[r.coach_id]?.email,
+      }));
+
+      console.log('🔍 Relacionamentos carregados com dados dos treinadores:', {
+        total: relationships.length,
+        coaches: relationships.map(r => ({ 
+          id: r.coach_id, 
+          name: r.coach_name, 
+          email: r.coach_email,
+          status: r.status 
+        }))
+      });
+
+      set({ relationships, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
@@ -406,7 +445,8 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       let baseQuery = supabase
         .from('athlete_coach_relationships')
         .select('*')
-        .eq('coach_id', currentCoach.id);
+        .eq('coach_id', currentCoach.id)
+        .not('status', 'in', '(rejected,removed)'); // Não carregar relacionamentos rejeitados ou removidos
 
       if (filters?.status) {
         baseQuery = baseQuery.eq('status', filters.status);
@@ -593,18 +633,50 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       const { currentCoach } = get();
       if (!currentCoach) throw new Error('Perfil de treinador não encontrado');
 
-      // Permite excluir apenas não ativos
-      const { error } = await supabase
+      console.log('🗑️ Tentando remover relacionamento da visualização:', relationshipId);
+
+      // Verificar o status do relacionamento antes de tentar remover
+      const { data: existingRel, error: checkError } = await supabase
         .from('athlete_coach_relationships')
-        .delete()
+        .select('id, status, coach_id, notes')
+        .eq('id', relationshipId)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (!existingRel) throw new Error('Relacionamento não encontrado');
+      if (existingRel.coach_id !== currentCoach.id) throw new Error('Relacionamento não pertence a este treinador');
+      if (existingRel.status === 'active') throw new Error('Não é possível remover relacionamentos ativos');
+
+      console.log('🔍 Status do relacionamento:', existingRel.status);
+
+      // Marcar como rejeitado (soft delete) - não excluir do banco
+      const { data, error } = await supabase
+        .from('athlete_coach_relationships')
+        .update({ 
+          status: 'rejected',
+          updated_at: new Date().toISOString(),
+          notes: existingRel.notes ? `${existingRel.notes} [Removido pelo treinador em ${new Date().toLocaleDateString('pt-BR')}]` : `Removido pelo treinador em ${new Date().toLocaleDateString('pt-BR')}`
+        })
         .eq('id', relationshipId)
         .eq('coach_id', currentCoach.id)
-        .neq('status', 'active');
-      if (error) throw error;
+        .select();
 
+      if (error) {
+        console.error('❌ Erro ao remover relacionamento:', error);
+        throw error;
+      }
+
+      console.log('✅ Relacionamento removido da visualização:', data);
+
+      // Remover da lista local imediatamente
+      const currentRelationships = get().relationships;
+      const updatedRelationships = currentRelationships.filter(rel => rel.id !== relationshipId);
+      set({ relationships: updatedRelationships, isLoading: false });
+
+      // Recarregar para garantir sincronização
       await get().loadCoachRelationships();
-      set({ isLoading: false });
     } catch (error: any) {
+      console.error('❌ Erro na remoção:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }

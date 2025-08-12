@@ -28,6 +28,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
     deactivateRelationship,
     approveRelationship,
     rejectRelationship,
+    deleteRelationship,
     relationships,
     isLoading,
     clearError,
@@ -41,7 +42,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
   const [selectedTab, setSelectedTab] = useState<TabType>('overview');
   const [selectedAthlete, setSelectedAthlete] = useState<ExtendedRelationship | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
-  const [actionType, setActionType] = useState<'approve' | 'reject' | 'deactivate'>('approve');
+  const [actionType, setActionType] = useState<'approve' | 'reject' | 'deactivate' | 'delete'>('approve');
   const [actionNotes, setActionNotes] = useState('');
   const [isActing, setIsActing] = useState<string | null>(null);
   const [showSuccessSnackbar, setShowSuccessSnackbar] = useState(false);
@@ -131,12 +132,16 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
         case 'deactivate':
           result = await deactivateRelationship(selectedAthlete.id);
           break;
+        case 'delete':
+          await deleteRelationship(selectedAthlete.id);
+          result = true;
+          break;
       }
       if (result) {
         setShowActionModal(false);
         setSelectedAthlete(null);
         setActionNotes('');
-        const actionText = { approve: 'aprovado', reject: 'rejeitado', deactivate: 'desativado' }[actionType];
+        const actionText = { approve: 'aprovado', reject: 'rejeitado', deactivate: 'desativado', delete: 'removido' }[actionType];
         setSuccessMessage(`Atleta ${actionText} com sucesso!`);
         setShowSuccessSnackbar(true);
       }
@@ -148,7 +153,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
     }
   };
 
-  const openActionModal = (athlete: ExtendedRelationship, type: 'approve' | 'reject' | 'deactivate') => {
+  const openActionModal = (athlete: ExtendedRelationship, type: 'approve' | 'reject' | 'deactivate' | 'delete') => {
     setSelectedAthlete(athlete);
     setActionType(type);
     setActionNotes('');
@@ -196,12 +201,18 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
       .filter(r => (selectedModality !== 'all' ? (r as any).modality === selectedModality : true));
 
     switch (selectedTab) {
+      case 'overview':
+        // Visão Geral: apenas atletas ativos (para visualização rápida)
+        return extendedRelationships.filter(r => isActiveStatus((r.status as string)));
       case 'active':
+        // Ativos: apenas atletas ativos (para gerenciamento)
         return extendedRelationships.filter(r => isActiveStatus((r.status as string)));
       case 'pending':
+        // Pendentes: apenas solicitações pendentes
         return extendedRelationships.filter(r => r.status === 'pending');
       case 'all':
-        return extendedRelationships;
+        // Inativos: apenas atletas desvinculados/inativos
+        return extendedRelationships.filter(r => !isActiveStatus((r.status as string)) && r.status !== 'pending');
       default:
         return extendedRelationships;
     }
@@ -225,27 +236,30 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
     }
   };
 
-  const getActionModalTitle = (type: 'approve' | 'reject' | 'deactivate') => {
+  const getActionModalTitle = (type: 'approve' | 'reject' | 'deactivate' | 'delete') => {
     switch (type) {
       case 'approve': return '✅ Aprovar Atleta';
       case 'reject': return '❌ Rejeitar Atleta';
       case 'deactivate': return '⚠️ Desativar Atleta';
+      case 'delete': return '🗑️ Remover Atleta';
     }
   };
 
-  const getActionModalDescription = (type: 'approve' | 'reject' | 'deactivate') => {
+  const getActionModalDescription = (type: 'approve' | 'reject' | 'deactivate' | 'delete') => {
     switch (type) {
       case 'approve': return 'Confirma que deseja aprovar este atleta? Ele terá acesso ao seu perfil e poderá ver seus dados de treino.';
       case 'reject': return 'Confirma que deseja rejeitar este atleta? A solicitação será cancelada e o atleta será notificado.';
       case 'deactivate': return 'Confirma que deseja desativar este atleta? Ele perderá acesso ao seu perfil, mas a relação poderá ser reativada posteriormente.';
+      case 'delete': return 'Confirma que deseja remover este atleta da sua lista? O atleta não será excluído do sistema e poderá se vincular a outros treinadores.';
     }
   };
 
-  const getActionNotesPlaceholder = (type: 'approve' | 'reject' | 'deactivate') => {
+  const getActionNotesPlaceholder = (type: 'approve' | 'reject' | 'deactivate' | 'delete') => {
     switch (type) {
       case 'approve': return 'Mensagem de boas-vindas (opcional)...';
       case 'reject': return 'Motivo da rejeição (opcional)...';
       case 'deactivate': return 'Motivo da desativação (opcional)...';
+      case 'delete': return 'Motivo da remoção (opcional)...';
     }
   };
 
@@ -278,7 +292,7 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
               { value: 'overview', label: 'Visão Geral' },
               { value: 'active', label: `Ativos (${activeCount})` },
               { value: 'pending', label: `Pendentes (${pendingCount})` },
-              { value: 'all', label: `Todos (${totalCount})` },
+              { value: 'all', label: `Inativos (${totalCount - activeCount - pendingCount})` },
             ]}
             style={styles.segmentedButtons}
           />
@@ -403,27 +417,20 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
 
                         {/* Ações rápidas para ativos */}
                         <View style={styles.actionButtons}>
-                          {/* Mensageria removida nesta seção para evitar conflito de navegação */}
-                          <Button
-                            mode="contained"
-                            icon="account-off"
-                            onPress={() => openActionModal(relationship as any, 'deactivate')}
-                            style={[styles.actionButton, { backgroundColor: '#FF9800' }]}
-                          >
-                            Desativar
-                          </Button>
-                          {/* Ver Perfil habilitado na Visão Geral: abre o perfil esportivo do atleta no fluxo principal */}
-                          <Button
-                            mode="outlined"
-                            icon="account-details"
-                            onPress={() => {
-                              useViewStore.getState().enterCoachView((relationship as any).athlete_id, (relationship as any).athlete_name || (relationship as any).athlete_email);
-                              navigation.navigate('Main', { screen: 'Perfil Esportivo' });
-                            }}
-                            style={styles.actionButton}
-                          >
-                            Ver Perfil
-                          </Button>
+                          {/* Ver Perfil habilitado apenas para atletas ativos */}
+                          {isActiveStatus(relationship.status as string) && (
+                            <Button
+                              mode="outlined"
+                              icon="account-details"
+                              onPress={() => {
+                                useViewStore.getState().enterCoachView((relationship as any).athlete_id, (relationship as any).athlete_name || (relationship as any).athlete_email);
+                                navigation.navigate('Main', { screen: 'Perfil Esportivo' });
+                              }}
+                              style={styles.actionButton}
+                            >
+                              Ver Perfil
+                            </Button>
+                          )}
                         </View>
                       </Card.Content>
                     </Card>
@@ -447,12 +454,12 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                 <Text variant="bodyLarge" style={styles.emptyText}>
                   {selectedTab === 'active' ? 'Nenhum atleta ativo' : 
                    selectedTab === 'pending' ? 'Nenhuma solicitação pendente' : 
-                   'Nenhum relacionamento encontrado'}
+                   'Nenhum atleta inativo'}
                 </Text>
                 <Text variant="bodyMedium" style={styles.emptySubtext}>
                   {selectedTab === 'active' ? 'Os atletas aparecerão aqui quando forem aprovados' :
                    selectedTab === 'pending' ? 'As solicitações aparecerão aqui quando atletas solicitarem treinamento' :
-                   'Nenhum relacionamento foi encontrado'}
+                   'Os atletas desvinculados aparecerão aqui'}
                 </Text>
               </View>
             ) : (
@@ -507,7 +514,10 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
 
                     {/* Botões de ação */}
                     <View style={styles.actionButtons}>
-                      {relationship.status === 'pending' && (
+                      {/* Botões específicos para cada aba */}
+                      
+                      {/* Aba "Pendentes" - Aprovar/Rejeitar */}
+                      {selectedTab === 'pending' && relationship.status === 'pending' && (
                         <>
                           <Button 
                             mode="contained" 
@@ -562,21 +572,11 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                           >
                             Rejeitar todas
                           </Button>
-                          <Button
-                            mode="outlined"
-                            icon="account-details"
-                            onPress={() => {
-                              useViewStore.getState().enterCoachView((relationship as any).athlete_id, (relationship as any).athlete_name || (relationship as any).athlete_email);
-                              navigation.navigate('Main', { screen: 'Perfil Esportivo' });
-                            }}
-                            style={styles.actionButton}
-                          >
-                            Ver Perfil
-                          </Button>
                         </>
                       )}
 
-                      {isActiveStatus(relationship.status as string) && (
+                      {/* Aba "Ativos" - Apenas Desvincular */}
+                      {selectedTab === 'active' && isActiveStatus(relationship.status as string) && (
                         <Button 
                           mode="contained" 
                           onPress={() => openActionModal(relationship as any, 'deactivate')}
@@ -585,9 +585,25 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                           loading={isActing === relationship.id}
                           disabled={isActing !== null}
                         >
-                          Desativar
+                          Desvincular
                         </Button>
                       )}
+
+                      {/* Aba "Inativos" - Apenas Remover */}
+                      {selectedTab === 'all' && !isActiveStatus(relationship.status as string) && relationship.status !== 'pending' && (
+                        <Button
+                          mode="contained"
+                          onPress={() => openActionModal(relationship as any, 'delete')}
+                          style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+                          icon="delete-forever"
+                          loading={isActing === relationship.id}
+                          disabled={isActing !== null}
+                        >
+                          Remover
+                        </Button>
+                      )}
+                      
+
                     </View>
                   </Card.Content>
                 </Card>
@@ -656,9 +672,12 @@ export default function CoachAthletesScreen({ navigation, route }: CoachAthletes
                   onPress={handleAction}
                   loading={isActing !== null}
                   disabled={isActing !== null}
-                  style={[styles.modalButton, { backgroundColor: actionType === 'approve' ? '#4CAF50' : actionType === 'reject' ? '#F44336' : '#FF9800' }]}
+                  style={[
+                    styles.modalButton,
+                    { backgroundColor: actionType === 'approve' ? '#4CAF50' : (actionType === 'reject' || actionType === 'delete') ? '#F44336' : '#FF9800' }
+                  ]}
                 >
-                  {actionType === 'approve' ? 'Aprovar' : actionType === 'reject' ? 'Rejeitar' : 'Desativar'}
+                                     {actionType === 'approve' ? 'Aprovar' : actionType === 'reject' ? 'Rejeitar' : actionType === 'delete' ? 'Remover' : 'Desativar'}
                 </Button>
               </View>
             </Card.Content>

@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
-import { Card, Text, ActivityIndicator, IconButton, Chip, FAB } from 'react-native-paper';
+import { Card, Text, ActivityIndicator, IconButton, Chip, FAB, Button } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 import type { Insight } from '../../types/database';
 import { useViewStore } from '../../stores/view';
+import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 
 export default function InsightsScreen() {
@@ -42,8 +43,28 @@ export default function InsightsScreen() {
   }, [isCoachView, viewAsAthleteId, athleteNameFromStore]);
 
   useEffect(() => {
+    console.log('🔍 DEBUG InsightsScreen useEffect:', {
+      isCoachView,
+      viewAsAthleteId,
+      athleteName
+    });
+    
+    // Se estamos no modo treinador mas não temos viewAsAthleteId, aguardar
+    if (isCoachView && !viewAsAthleteId) {
+      console.log('⏳ Aguardando viewAsAthleteId...');
+      return;
+    }
+    
     loadSavedInsights();
-  }, [loadSavedInsights]);
+  }, [loadSavedInsights, isCoachView, viewAsAthleteId]);
+
+  // useEffect específico para recarregar insights quando viewAsAthleteId muda
+  useEffect(() => {
+    if (viewAsAthleteId) {
+      console.log('🔄 viewAsAthleteId mudou, recarregando insights:', viewAsAthleteId);
+      loadSavedInsights();
+    }
+  }, [viewAsAthleteId, loadSavedInsights]);
 
   const handleDeleteInsight = async (insightId: string) => {
     if (isCoachView) return;
@@ -136,7 +157,7 @@ export default function InsightsScreen() {
       {isCoachView && (
         <View style={{ padding: 10, marginBottom: 8, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Chip icon="shield-account" mode="outlined">Visualizando como Treinador{athleteName ? ` — ${athleteName}` : ''}</Chip>
-          <Text onPress={() => { exitCoachView(); try { (global as any).navigation?.reset?.({ index: 0, routes: [{ name: 'CoachMain' }] }); } catch {} }} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
+          <Text onPress={() => { exitCoachView(); try { resetToCoachMain(); } catch {}; try { const { loadCoachProfile, loadCoachRelationships } = (require('../../stores/coach') as any).useCoachStore.getState(); loadCoachProfile(); loadCoachRelationships(); } catch {} }} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
         </View>
       )}
       <FlatList

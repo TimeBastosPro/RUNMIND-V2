@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useViewStore } from '../../stores/view';
+import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 
 const motivationalQuotes = [
@@ -260,7 +261,7 @@ export default function HomeScreen() {
         <Surface style={{ backgroundColor: '#EDE7F6', padding: 10, margin: 12, borderRadius: 8 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Chip icon="shield-account" mode="outlined">Visualizando como Treinador</Chip>
-            <Button mode="text" onPress={() => { exitCoachView(); navigation.reset({ index: 0, routes: [{ name: 'CoachMain' as never }] } as any); }}>Sair do modo treinador</Button>
+            <Button mode="text" onPress={() => { exitCoachView(); try { resetToCoachMain(); } catch {}; try { const { loadCoachProfile, loadCoachRelationships } = (require('../../stores/coach') as any).useCoachStore.getState(); loadCoachProfile(); loadCoachRelationships(); } catch {} }}>Sair do modo treinador</Button>
           </View>
         </Surface>
       )}
