@@ -114,11 +114,34 @@ export default function HomeScreen() {
     loadTodayCheckin();
     loadRecentCheckins();
     fetchTrainingSessions();
-    fetchRaces();
+    
+    // Carregar provas baseado no modo (treinador ou atleta)
+    if (isCoachView && viewAsAthleteId) {
+      // Se é treinador visualizando atleta, carregar provas do atleta
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('races')
+            .select('*')
+            .eq('user_id', viewAsAthleteId)
+            .order('start_date', { ascending: true });
+          
+          if (error) throw error;
+          console.log('DEBUG - HomeScreen - Provas do atleta carregadas:', data);
+          // Atualizar o estado das provas no store
+          useAuthStore.setState({ races: data || [] });
+        } catch (error) {
+          console.error('Erro ao carregar provas do atleta:', error);
+        }
+      })();
+    } else {
+      // Se é atleta, carregar suas próprias provas
+      fetchRaces();
+    }
     
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
-  }, [loadTodayCheckin, loadRecentCheckins, fetchTrainingSessions, fetchRaces]);
+  }, [loadTodayCheckin, loadRecentCheckins, fetchTrainingSessions, fetchRaces, isCoachView, viewAsAthleteId]);
 
   useEffect(() => {
     // Usar o dia do ano para selecionar a frase e curiosidade do dia
@@ -156,11 +179,35 @@ export default function HomeScreen() {
 
   // Recarregar dados ao alternar modo treinador ↔ atleta
   useEffect(() => {
+    console.log('DEBUG - HomeScreen - Recarregando dados, isCoachView:', isCoachView);
     fetchTrainingSessions();
-    fetchRaces();
+    
+    // Carregar provas baseado no modo
+    if (isCoachView && viewAsAthleteId) {
+      // Se é treinador visualizando atleta, carregar provas do atleta
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('races')
+            .select('*')
+            .eq('user_id', viewAsAthleteId)
+            .order('start_date', { ascending: true });
+          
+          if (error) throw error;
+          console.log('DEBUG - HomeScreen - Provas do atleta recarregadas:', data);
+          useAuthStore.setState({ races: data || [] });
+        } catch (error) {
+          console.error('Erro ao recarregar provas do atleta:', error);
+        }
+      })();
+    } else {
+      // Se é atleta, carregar suas próprias provas
+      fetchRaces();
+    }
+    
     loadTodayCheckin();
     loadRecentCheckins();
-  }, [isCoachView, fetchTrainingSessions, fetchRaces, loadTodayCheckin, loadRecentCheckins]);
+  }, [isCoachView, viewAsAthleteId, fetchTrainingSessions, fetchRaces, loadTodayCheckin, loadRecentCheckins]);
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
@@ -246,9 +293,16 @@ export default function HomeScreen() {
   const lastCompletedTraining = sortedCompletedTrainings[0];
 
   // Buscar a próxima prova (a mais próxima)
-  const nextRace = races
-    ?.filter(race => race.start_date >= todayDateString)
+  console.log('DEBUG - HomeScreen - races:', races);
+  console.log('DEBUG - HomeScreen - todayDateString:', todayDateString);
+  
+  const filteredRaces = races?.filter(race => race.start_date >= todayDateString);
+  console.log('DEBUG - HomeScreen - filteredRaces:', filteredRaces);
+  
+  const nextRace = filteredRaces
     ?.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
+  
+  console.log('DEBUG - HomeScreen - nextRace:', nextRace);
 
   // Calcular dias restantes para a próxima prova
   const daysUntilRace = nextRace ? 

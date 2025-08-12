@@ -93,7 +93,9 @@ export default function SportsProfileScreen() {
   if (isCoachView && !viewAsAthleteId) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-        <Chip icon="shield-account" mode="outlined" style={{ marginBottom: 12 }}>Visualizando como Treinador</Chip>
+        <Chip icon="shield-account" mode="outlined" style={{ marginBottom: 12 }}>
+          Visualizando como Treinador
+        </Chip>
         <Text style={{ fontSize: 16, textAlign: 'center', marginBottom: 12 }}>
           Selecione um atleta em Meus Atletas → Ver Perfil para visualizar e editar o perfil esportivo.
         </Text>
@@ -322,13 +324,30 @@ export default function SportsProfileScreen() {
 
   const handleSaveProfile = async () => {
     console.log('DEBUG - handleSaveProfile chamado');
+    console.log('DEBUG - isCoachView:', isCoachView);
+    console.log('DEBUG - viewAsAthleteId:', viewAsAthleteId);
     console.log('DEBUG - profileData:', profileData);
     
     try {
+      // Converter formato de data de DD-MM-YYYY para YYYY-MM-DD
+      let formattedDateOfBirth = undefined;
+      if (profileData.date_of_birth) {
+        const dateParts = profileData.date_of_birth.split('-');
+        if (dateParts.length === 3) {
+          // Se está no formato DD-MM-YYYY, converter para YYYY-MM-DD
+          if (dateParts[0].length === 2 && dateParts[1].length === 2) {
+            formattedDateOfBirth = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+          } else {
+            // Se já está no formato YYYY-MM-DD, usar como está
+            formattedDateOfBirth = profileData.date_of_birth;
+          }
+        }
+      }
+      
       const updates = {
         height_cm: profileData.height_cm ? Number(profileData.height_cm) : undefined,
         weight_kg: profileData.weight_kg ? Number(profileData.weight_kg) : undefined,
-        date_of_birth: profileData.date_of_birth || undefined,
+        date_of_birth: formattedDateOfBirth,
         gender: profileData.gender || undefined,
         max_heart_rate: profileData.max_heart_rate ? Number(profileData.max_heart_rate) : undefined,
         resting_heart_rate: profileData.resting_heart_rate ? Number(profileData.resting_heart_rate) : undefined
@@ -530,11 +549,18 @@ export default function SportsProfileScreen() {
 
   const testsList = isCoachView ? coachFitnessTests : fitnessTests;
   const racesList = isCoachView ? coachRaces : races;
+  
+  console.log('DEBUG - racesList:', racesList);
+  console.log('DEBUG - races (store):', races);
+  console.log('DEBUG - coachRaces:', coachRaces);
+  console.log('DEBUG - isCoachView:', isCoachView);
   return (
     <ScrollView style={styles.container}>
       {isCoachView && (
         <View style={{ padding: 10, marginBottom: 8, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Chip icon="shield-account" mode="outlined">Visualizando como Treinador{athleteName ? ` — ${athleteName}` : ''}</Chip>
+          <Chip icon="shield-account" mode="outlined">
+          {`Visualizando como Treinador${athleteName ? ` — ${athleteName}` : ''}`}
+        </Chip>
           <Text onPress={handleExitCoachMode} style={{ color: '#1976d2' }}>Sair do modo treinador</Text>
         </View>
       )}
@@ -542,10 +568,10 @@ export default function SportsProfileScreen() {
         <Card.Content>
           <Title>Dados Fisiológicos</Title>
           <Paragraph style={styles.formulaInfo}>
-            💡 <Text style={styles.formulaText}>FC Máxima: Calculada automaticamente pela fórmula de Tanaka (208 - 0.7 × idade)</Text>
+            <Text style={styles.formulaText}>💡 FC Máxima: Calculada automaticamente pela fórmula de Tanaka (208 - 0.7 × idade)</Text>
           </Paragraph>
           <Paragraph style={styles.formulaInfo}>
-            💡 <Text style={styles.formulaText}>Zonas de Treino: Calculadas pela fórmula de Karvonen quando FC Repouso estiver preenchida</Text>
+            <Text style={styles.formulaText}>💡 Zonas de Treino: Calculadas pela fórmula de Karvonen quando FC Repouso estiver preenchida</Text>
           </Paragraph>
           <View style={styles.row}>
             <TextInput
@@ -622,10 +648,14 @@ export default function SportsProfileScreen() {
           </View>
           <Button 
             mode="contained" 
-            onPress={handleSaveProfile}
+            onPress={() => {
+              console.log('DEBUG - Botão clicado!');
+              handleSaveProfile();
+            }}
             style={styles.button}
+            disabled={false}
           >
-            Salvar Dados Fisiológicos
+            {isCoachView ? 'Salvar Dados do Atleta' : 'Salvar Dados Fisiológicos'}
           </Button>
         </Card.Content>
       </Card>
@@ -662,7 +692,7 @@ export default function SportsProfileScreen() {
           <Title>Zonas de Treino</Title>
           {profile?.resting_heart_rate && (
             <Paragraph style={styles.formulaInfo}>
-              💡 <Text style={styles.formulaText}>Usando fórmula de Karvonen: FC Treino = FC Repouso + % × (FC Máxima - FC Repouso)</Text>
+              <Text style={styles.formulaText}>💡 Usando fórmula de Karvonen: FC Treino = FC Repouso + % × (FC Máxima - FC Repouso)</Text>
             </Paragraph>
           )}
           {referenceTest && (
@@ -723,8 +753,9 @@ export default function SportsProfileScreen() {
             mode="contained" 
             onPress={() => setRaceModalVisible(true)}
             style={styles.button}
+            disabled={false}
           >
-            Cadastrar Nova Prova
+            {isCoachView ? 'Cadastrar Prova para Atleta' : 'Cadastrar Nova Prova'}
           </Button>
           
           {racesList.length > 0 ? (
@@ -743,12 +774,14 @@ export default function SportsProfileScreen() {
                       size={20}
                       onPress={() => handleEditRace(race)}
                       style={styles.actionButton}
+                      disabled={false}
                     />
                     <IconButton
                       icon="delete"
                       size={20}
                       onPress={() => handleDeleteRace(race)}
                       style={styles.actionButton}
+                      disabled={false}
                     />
                   </View>
                 </View>
@@ -771,8 +804,9 @@ export default function SportsProfileScreen() {
             mode="contained" 
             onPress={() => setModalVisible(true)}
             style={styles.button}
+            disabled={false}
           >
-            Registrar Novo Teste
+            {isCoachView ? 'Registrar Teste para Atleta' : 'Registrar Novo Teste'}
           </Button>
           
           {testsList.map((test) => (
@@ -788,12 +822,14 @@ export default function SportsProfileScreen() {
                     size={20}
                     onPress={() => handleEditTest(test)}
                     style={styles.actionButton}
+                    disabled={false}
                   />
                   <IconButton
                     icon="delete"
                     size={20}
                     onPress={() => handleDeleteTest(test)}
                     style={styles.actionButton}
+                    disabled={false}
                   />
                 </View>
               </View>
@@ -928,10 +964,14 @@ export default function SportsProfileScreen() {
              <Button 
                mode="contained" 
                onPress={async () => {
+                 console.log('DEBUG - Botão Salvar clicado');
+                 console.log('DEBUG - raceData:', raceData);
+                 
                  if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
                    Alert.alert('Erro', 'Todos os campos são obrigatórios');
                    return;
                  }
+                 
                  setLoading(true);
                  try {
                    const payload = {
@@ -941,31 +981,46 @@ export default function SportsProfileScreen() {
                      start_time: raceData.start_time,
                      distance_km: Number(raceData.distance_km)
                    };
+                   
+                   console.log('DEBUG - payload:', payload);
+                   console.log('DEBUG - isCoachView:', isCoachView);
+                   console.log('DEBUG - viewAsAthleteId:', viewAsAthleteId);
+                   
                    if (isCoachView && viewAsAthleteId) {
+                     console.log('DEBUG - Salvando como treinador');
                      if (editingRace) {
+                       console.log('DEBUG - Atualizando prova existente');
                        await supabase.from('races').update(payload).eq('id', editingRace.id).eq('user_id', viewAsAthleteId);
                      } else {
+                       console.log('DEBUG - Inserindo nova prova');
                        await supabase.from('races').insert({ ...payload, user_id: viewAsAthleteId });
                      }
+                     console.log('DEBUG - Recarregando provas do atleta');
                      const { data: racesData } = await supabase.from('races').select('*').eq('user_id', viewAsAthleteId).order('start_date', { ascending: true });
                      setCoachRaces(racesData || []);
-                   } else {
-                     if (editingRace) {
-                       await updateRace(editingRace.id, payload);
-                     } else {
-                       await saveRace(payload);
+                                        } else {
+                       console.log('DEBUG - Salvando como atleta');
+                       if (editingRace) {
+                         await updateRace(editingRace.id, payload);
+                       } else {
+                         await saveRace(payload);
+                       }
+                       // Não precisa chamar fetchRaces pois saveRace já atualiza a lista
                      }
-                   }
+                   
+                   console.log('DEBUG - Salvamento bem-sucedido, fechando modal');
                    setRaceModalVisible(false);
                    resetRaceForm();
+                   Alert.alert('Sucesso', 'Prova salva com sucesso!');
                  } catch (error) {
+                   console.error('DEBUG - Erro ao salvar prova:', error);
                    Alert.alert('Erro', error instanceof Error ? error.message : 'Erro ao salvar prova');
                  } finally {
                    setLoading(false);
                  }
                }}
                loading={loading}
-               disabled={!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km || loading}
+               disabled={false}
                style={styles.modalButton}
              >
                {editingRace ? 'Atualizar' : 'Salvar'}

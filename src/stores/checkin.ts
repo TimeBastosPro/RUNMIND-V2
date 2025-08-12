@@ -425,7 +425,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
       if (!targetUserId) throw new Error('Usuário não autenticado');
       
-      console.log('Usuário autenticado:', user.id);
+      console.log('Usuário autenticado:', user?.id);
       console.log('Tentando excluir treino com ID:', sessionId);
       
       const { data, error } = await supabase

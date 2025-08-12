@@ -85,6 +85,8 @@ export interface Profile {
     distance_m?: string;
     duracao_horas?: string; // Usado tanto para planejado quanto realizado
     duracao_minutos?: string; // Usado tanto para planejado quanto realizado
+    duration_minutes?: number; // Campo para compatibilidade
+    perceived_exertion?: number; // Campo para compatibilidade
     
     // Observações do planejamento
     observacoes?: string;
@@ -198,6 +200,12 @@ export interface Profile {
     notes?: string;
     created_at: string;
     updated_at: string;
+    // Campos processados pelo store
+    athlete_name?: string;
+    athlete_email?: string;
+    coach_name?: string;
+    coach_email?: string;
+    team_name?: string;
   }
 
   export interface ActiveAthleteCoachRelationship {
@@ -220,7 +228,10 @@ export interface Profile {
   export type CreateCoachData = Omit<Coach, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
   export type UpdateCoachData = Partial<CreateCoachData>;
   
-  export type CreateTeamData = Omit<Team, 'id' | 'created_at' | 'updated_at'>;
+  export type CreateTeamData = Omit<Team, 'id' | 'created_at' | 'updated_at'> & {
+    coach_id: string;
+    is_active: boolean;
+  };
   export type UpdateTeamData = Partial<CreateTeamData>;
   
   export type CreateRelationshipData = Omit<AthleteCoachRelationship, 'id' | 'created_at' | 'updated_at'>;

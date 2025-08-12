@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert, useWindowDimensions } from 'react-native';
 import { Portal, Modal, TextInput, Button, Text, Checkbox, RadioButton, List, Chip } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
+import { useCoachStore } from '../../stores/coach';
 import type { TrainingSession } from '../../types/database';
 // @ts-ignore
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -276,7 +277,7 @@ export default function TrainingScreen() {
         try { resetToCoachMain(); } catch { /* noop */ }
         // Recarregar contexto do treinador em background
         try {
-          const { loadCoachProfile, loadCoachRelationships } = useCoachStore.getState() as any;
+          const { loadCoachProfile, loadCoachRelationships } = useCoachStore.getState();
           loadCoachProfile();
           loadCoachRelationships();
         } catch {}

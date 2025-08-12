@@ -48,7 +48,7 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
   useEffect(() => {
     if (plannedData) {
       setDistanceKm(plannedData.distance_km ? String(plannedData.distance_km) : '');
-      setDistanceM(plannedData.distancia_m ? String(plannedData.distancia_m) : '');
+      setDistanceM(plannedData.distance_m ? String(plannedData.distance_m) : '');
       setDurationH(plannedData.duracao_horas ? String(plannedData.duracao_horas) : '0');
       setDurationM(plannedData.duracao_minutos ? String(plannedData.duracao_minutos) : '0');
       setEffort(plannedData.intensidade ? String(plannedData.intensidade) : '5');
@@ -61,7 +61,7 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
     const dataToSave: Partial<TrainingSession> = {
       status: 'completed',
       distance_km: distanceKm ? Number(distanceKm) : undefined,
-      distancia_m: distanceM || undefined,
+      distance_m: distanceM || undefined,
       duracao_horas: durationH || undefined,
       duracao_minutos: durationM || undefined,
       elevation_gain_meters: elevPos ? Number(elevPos) : undefined,
