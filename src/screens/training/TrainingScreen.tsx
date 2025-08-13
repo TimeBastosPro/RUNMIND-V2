@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert, useWindowDimensions } from 'react-native';
-import { Portal, Modal, TextInput, Button, Text, Checkbox, RadioButton, List, Chip } from 'react-native-paper';
+import { Portal, Modal, TextInput, Button, Text, Checkbox, RadioButton, List, Chip, SegmentedButtons } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 import { useCoachStore } from '../../stores/coach';
+import { useCyclesStore } from '../../stores/cycles';
 import type { TrainingSession } from '../../types/database';
 // @ts-ignore
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -15,6 +16,10 @@ import { useViewStore } from '../../stores/view';
 import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 import { useNavigation } from '@react-navigation/native';
+import CreateMacrocicloModal from './CreateMacrocicloModal';
+import CreateMesocicloModal from './CreateMesocicloModal';
+import CreateMicrocicloModal from './CreateMicrocicloModal';
+import CyclesOverview from './CyclesOverview';
 
 // --- Constantes e Funções de Data ---
 const WEEKDAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
@@ -214,6 +219,14 @@ export default function TrainingScreen() {
     const [weeklyReflectionVisible, setWeeklyReflectionVisible] = useState(false);
     const [importModalVisible, setImportModalVisible] = useState(false);
     const [importing, setImporting] = useState(false);
+    
+    // Estados para ciclos de treinamento
+    const [showCycles, setShowCycles] = useState(false);
+    const [macrocicloModalVisible, setMacrocicloModalVisible] = useState(false);
+    const [mesocicloModalVisible, setMesocicloModalVisible] = useState(false);
+    const [microcicloModalVisible, setMicrocicloModalVisible] = useState(false);
+    const [selectedMacrocicloId, setSelectedMacrocicloId] = useState<string>('');
+    const [selectedMesocicloId, setSelectedMesocicloId] = useState<string>('');
 
     const [planningState, setPlanningState] = useState({
       modalidade: 'corrida',
@@ -236,6 +249,17 @@ export default function TrainingScreen() {
     const userId = useAuthStore(s => s.user?.id);
     const { width } = useWindowDimensions();
     const isMobile = width < 600;
+    
+    // Store de ciclos
+    const { 
+      fetchMacrociclos, 
+      fetchMesociclos, 
+      fetchMicrociclos,
+      macrociclos,
+      mesociclos,
+      microciclos,
+      getCurrentCycle
+    } = useCyclesStore();
 
     useEffect(() => {
         setLoading(true);
@@ -253,6 +277,15 @@ export default function TrainingScreen() {
             })));
         });
     }, [fetchTrainingSessions, isCoachView, viewAsAthleteId, displayDate]);
+
+    // Carregar ciclos de treinamento
+    useEffect(() => {
+        if (userId) {
+            fetchMacrociclos();
+            fetchMesociclos();
+            fetchMicrociclos();
+        }
+    }, [userId, fetchMacrociclos, fetchMesociclos, fetchMicrociclos]);
 
     // Carregar nome do atleta para cabeçalho no modo treinador
     useEffect(() => {
@@ -537,6 +570,26 @@ export default function TrainingScreen() {
         }
     };
 
+    // Funções para gerenciar ciclos
+    const handleOpenMacrocicloModal = () => {
+        setMacrocicloModalVisible(true);
+    };
+
+    const handleOpenMesocicloModal = () => {
+        setMesocicloModalVisible(true);
+    };
+
+    const handleOpenMicrocicloModal = () => {
+        setMicrocicloModalVisible(true);
+    };
+
+    const handleCycleSuccess = () => {
+        // Recarregar ciclos após criação
+        fetchMacrociclos();
+        fetchMesociclos();
+        fetchMicrociclos();
+    };
+
     // Guard: treinador sem atleta selecionado
     if (isCoachView && !viewAsAthleteId) {
       return (
@@ -570,6 +623,18 @@ export default function TrainingScreen() {
                 </Button>
                 <Button onPress={() => setImportModalVisible(true)} style={[styles.importButton, isMobile && styles.importButtonMobile]}>
                     Importar Planilha (.csv)
+                </Button>
+            </View>
+            
+            {/* Botões de Ciclos */}
+            <View style={styles.cyclesButtonsContainer}>
+                <Button
+                    mode="outlined"
+                    onPress={() => setShowCycles(!showCycles)}
+                    style={styles.cyclesToggleButton}
+                    icon={showCycles ? "calendar-remove" : "calendar-plus"}
+                >
+                    {showCycles ? "Ocultar Ciclos" : "Gerenciar Ciclos"}
                 </Button>
             </View>
             {!isMobile && (
@@ -780,6 +845,36 @@ export default function TrainingScreen() {
                     onCancel={() => setModalDoneVisible(false)}
                 />
             )}
+
+            {/* Visualização de Ciclos */}
+            {showCycles && (
+                <CyclesOverview
+                    onOpenMacrocicloModal={handleOpenMacrocicloModal}
+                    onOpenMesocicloModal={handleOpenMesocicloModal}
+                    onOpenMicrocicloModal={handleOpenMicrocicloModal}
+                />
+            )}
+
+            {/* Modais de Ciclos */}
+            <CreateMacrocicloModal
+                visible={macrocicloModalVisible}
+                onDismiss={() => setMacrocicloModalVisible(false)}
+                onSuccess={handleCycleSuccess}
+            />
+
+            <CreateMesocicloModal
+                visible={mesocicloModalVisible}
+                onDismiss={() => setMesocicloModalVisible(false)}
+                onSuccess={handleCycleSuccess}
+                selectedMacrocicloId={selectedMacrocicloId}
+            />
+
+            <CreateMicrocicloModal
+                visible={microcicloModalVisible}
+                onDismiss={() => setMicrocicloModalVisible(false)}
+                onSuccess={handleCycleSuccess}
+                selectedMesocicloId={selectedMesocicloId}
+            />
         </ScrollView>
     );
 }
@@ -1003,5 +1098,15 @@ const styles = StyleSheet.create({
   importButtonMobile: {
     marginLeft: 4,
     fontSize: 12,
+  },
+  cyclesButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 12,
+    paddingHorizontal: 12,
+  },
+  cyclesToggleButton: {
+    borderColor: '#2196F3',
+    borderWidth: 1,
   },
 }); 
