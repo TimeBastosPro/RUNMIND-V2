@@ -17,8 +17,6 @@ import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 import { useNavigation } from '@react-navigation/native';
 import CreateMacrocicloModal from './CreateMacrocicloModal';
-import CreateMesocicloModal from './CreateMesocicloModal';
-import CreateMicrocicloModal from './CreateMicrocicloModal';
 import CyclesOverview from './CyclesOverview';
 
 // --- Constantes e Funções de Data ---
@@ -223,10 +221,6 @@ export default function TrainingScreen() {
     // Estados para ciclos de treinamento
     const [showCycles, setShowCycles] = useState(false);
     const [macrocicloModalVisible, setMacrocicloModalVisible] = useState(false);
-    const [mesocicloModalVisible, setMesocicloModalVisible] = useState(false);
-    const [microcicloModalVisible, setMicrocicloModalVisible] = useState(false);
-    const [selectedMacrocicloId, setSelectedMacrocicloId] = useState<string>('');
-    const [selectedMesocicloId, setSelectedMesocicloId] = useState<string>('');
 
     const [planningState, setPlanningState] = useState({
       modalidade: 'corrida',
@@ -575,19 +569,23 @@ export default function TrainingScreen() {
         setMacrocicloModalVisible(true);
     };
 
-    const handleOpenMesocicloModal = () => {
-        setMesocicloModalVisible(true);
-    };
 
-    const handleOpenMicrocicloModal = () => {
-        setMicrocicloModalVisible(true);
-    };
 
-    const handleCycleSuccess = () => {
-        // Recarregar ciclos após criação
-        fetchMacrociclos();
-        fetchMesociclos();
-        fetchMicrociclos();
+    const handleCycleSuccess = async () => {
+        console.log('🔄 DEBUG - TrainingScreen: Recarregando ciclos após criação');
+        
+        try {
+            // Recarregar ciclos após criação
+            await Promise.all([
+                fetchMacrociclos(),
+                fetchMesociclos(),
+                fetchMicrociclos()
+            ]);
+            
+            console.log('✅ DEBUG - TrainingScreen: Ciclos recarregados com sucesso');
+        } catch (error) {
+            console.error('❌ DEBUG - TrainingScreen: Erro ao recarregar ciclos:', error);
+        }
     };
 
     // Guard: treinador sem atleta selecionado
@@ -850,8 +848,6 @@ export default function TrainingScreen() {
             {showCycles && (
                 <CyclesOverview
                     onOpenMacrocicloModal={handleOpenMacrocicloModal}
-                    onOpenMesocicloModal={handleOpenMesocicloModal}
-                    onOpenMicrocicloModal={handleOpenMicrocicloModal}
                 />
             )}
 
@@ -860,20 +856,6 @@ export default function TrainingScreen() {
                 visible={macrocicloModalVisible}
                 onDismiss={() => setMacrocicloModalVisible(false)}
                 onSuccess={handleCycleSuccess}
-            />
-
-            <CreateMesocicloModal
-                visible={mesocicloModalVisible}
-                onDismiss={() => setMesocicloModalVisible(false)}
-                onSuccess={handleCycleSuccess}
-                selectedMacrocicloId={selectedMacrocicloId}
-            />
-
-            <CreateMicrocicloModal
-                visible={microcicloModalVisible}
-                onDismiss={() => setMicrocicloModalVisible(false)}
-                onSuccess={handleCycleSuccess}
-                selectedMesocicloId={selectedMesocicloId}
             />
         </ScrollView>
     );
