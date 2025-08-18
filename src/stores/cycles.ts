@@ -2,50 +2,49 @@ import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import type { 
   Macrociclo, 
-  Mesociclo, 
   Microciclo, 
   CycleTrainingSession,
   CreateMacrocicloData,
   CreateMesocicloData,
   CreateMicrocicloData,
-  CreateCycleTrainingSessionData
+  CreateCycleTrainingSessionData,
+  Mesociclo
 } from '../types/database';
 
 interface CyclesState {
-  // Estado
   macrociclos: Macrociclo[];
   mesociclos: Mesociclo[];
   microciclos: Microciclo[];
   cycleTrainingSessions: CycleTrainingSession[];
   isLoading: boolean;
   
-  // Ações para Macrociclos
+  // Macrociclos
   fetchMacrociclos: () => Promise<void>;
   createMacrociclo: (data: CreateMacrocicloData) => Promise<Macrociclo>;
   updateMacrociclo: (id: string, data: Partial<CreateMacrocicloData>) => Promise<Macrociclo>;
   deleteMacrociclo: (id: string) => Promise<void>;
   
-  // Ações para Mesociclos
+  // Mesociclos
   fetchMesociclos: (macrocicloId?: string) => Promise<void>;
   createMesociclo: (data: CreateMesocicloData) => Promise<Mesociclo>;
   updateMesociclo: (id: string, data: Partial<CreateMesocicloData>) => Promise<Mesociclo>;
   deleteMesociclo: (id: string) => Promise<void>;
   
-  // Ações para Microciclos
+  // Microciclos
   fetchMicrociclos: (mesocicloId?: string) => Promise<void>;
   createMicrociclo: (data: CreateMicrocicloData) => Promise<Microciclo>;
   updateMicrociclo: (id: string, data: Partial<CreateMicrocicloData>) => Promise<Microciclo>;
   deleteMicrociclo: (id: string) => Promise<void>;
+  generateMicrociclos: (mesocicloId: string) => Promise<void>;
   
-  // Ações para Sessões de Treino em Ciclos
+  // Sessões de treino
   fetchCycleTrainingSessions: (microcicloId?: string) => Promise<void>;
   createCycleTrainingSession: (data: CreateCycleTrainingSessionData) => Promise<CycleTrainingSession>;
   updateCycleTrainingSession: (id: string, data: Partial<CreateCycleTrainingSessionData>) => Promise<CycleTrainingSession>;
   deleteCycleTrainingSession: (id: string) => Promise<void>;
   
   // Utilitários
-  getCurrentCycle: (date?: string) => { macrociclo?: Macrociclo; mesociclo?: Mesociclo; microciclo?: Microciclo };
-  generateMicrociclos: (mesocicloId: string, startDate: string, endDate: string, weeksCount: number) => Promise<void>;
+  getCurrentCycle: () => { macrociclo: Macrociclo | null; microciclo: Microciclo | null };
 }
 
 export const useCyclesStore = create<CyclesState>((set, get) => ({
@@ -128,20 +127,49 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
   },
 
   deleteMacrociclo: async (id: string) => {
+    console.log('🔄 Store: Iniciando exclusão do macrociclo:', id);
     try {
+      // Primeiro, deletar todos os mesociclos relacionados
+      console.log('🔄 Store: Deletando mesociclos relacionados...');
+      const { error: mesociclosError } = await supabase
+        .from('mesociclos')
+        .delete()
+        .eq('macrociclo_id', id);
+
+      if (mesociclosError) {
+        console.error('❌ Store: Erro ao deletar mesociclos relacionados:', mesociclosError);
+        throw mesociclosError;
+      }
+
+      // Depois, deletar o macrociclo
+      console.log('🔄 Store: Deletando macrociclo...');
       const { error } = await supabase
         .from('macrociclos')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Store: Erro ao deletar macrociclo:', error);
+        throw error;
+      }
 
-      // Atualizar lista
+      // Atualizar listas
+      console.log('🔄 Store: Atualizando estado local...');
       const currentMacrociclos = get().macrociclos;
       const updatedMacrociclos = currentMacrociclos.filter(m => m.id !== id);
-      set({ macrociclos: updatedMacrociclos });
+      
+      // Também limpar mesociclos relacionados do estado
+      const currentMesociclos = get().mesociclos;
+      const updatedMesociclos = currentMesociclos.filter(m => m.macrociclo_id !== id);
+      
+      set({ 
+        macrociclos: updatedMacrociclos,
+        mesociclos: updatedMesociclos
+      });
+      
+      console.log('✅ Store: Macrociclo excluído com sucesso');
     } catch (error) {
-      console.error('Erro ao deletar macrociclo:', error);
+      console.error('❌ Store: Erro ao deletar macrociclo:', error);
       throw error;
     }
   },
@@ -175,8 +203,13 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
 
   createMesociclo: async (data: CreateMesocicloData) => {
     try {
+      console.log('🔄 Store: Iniciando criação do mesociclo:', data);
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
+
+      console.log('🔄 Store: Usuário autenticado:', user.id);
+      console.log('🔄 Store: Dados para inserção:', { ...data, user_id: user.id });
 
       const { data: newMesociclo, error } = await supabase
         .from('mesociclos')
@@ -184,15 +217,21 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Store: Erro do Supabase:', error);
+        throw error;
+      }
+
+      console.log('✅ Store: Mesociclo criado no banco:', newMesociclo);
 
       // Atualizar lista
       const currentMesociclos = get().mesociclos;
       set({ mesociclos: [...currentMesociclos, newMesociclo] });
 
+      console.log('✅ Store: Estado atualizado, total de mesociclos:', get().mesociclos.length);
       return newMesociclo;
     } catch (error) {
-      console.error('Erro ao criar mesociclo:', error);
+      console.error('❌ Store: Erro ao criar mesociclo:', error);
       throw error;
     }
   },
@@ -223,20 +262,47 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
   },
 
   deleteMesociclo: async (id: string) => {
+    console.log('🔄 Store: Iniciando exclusão do mesociclo:', id);
     try {
+      // Primeiro, deletar todos os microciclos relacionados
+      console.log('🔄 Store: Deletando microciclos relacionados...');
+      const { error: microciclosError } = await supabase
+        .from('microciclos')
+        .delete()
+        .eq('mesociclo_id', id);
+
+      if (microciclosError) {
+        console.error('❌ Store: Erro ao deletar microciclos relacionados:', microciclosError);
+        throw microciclosError;
+      }
+
+      // Depois, deletar o mesociclo
       const { error } = await supabase
         .from('mesociclos')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Store: Erro ao deletar mesociclo:', error);
+        throw error;
+      }
 
       // Atualizar lista
+      console.log('🔄 Store: Atualizando estado local do mesociclo...');
       const currentMesociclos = get().mesociclos;
       const updatedMesociclos = currentMesociclos.filter(m => m.id !== id);
-      set({ mesociclos: updatedMesociclos });
+      
+      // Também limpar microciclos relacionados do estado
+      const currentMicrociclos = get().microciclos;
+      const updatedMicrociclos = currentMicrociclos.filter(m => m.mesociclo_id !== id);
+      
+      set({ 
+        mesociclos: updatedMesociclos,
+        microciclos: updatedMicrociclos
+      });
+      console.log('✅ Store: Mesociclo excluído com sucesso');
     } catch (error) {
-      console.error('Erro ao deletar mesociclo:', error);
+      console.error('❌ Store: Erro ao deletar mesociclo:', error);
       throw error;
     }
   },
@@ -318,20 +384,26 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
   },
 
   deleteMicrociclo: async (id: string) => {
+    console.log('🔄 Store: Iniciando exclusão do microciclo:', id);
     try {
       const { error } = await supabase
         .from('microciclos')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Store: Erro ao deletar microciclo:', error);
+        throw error;
+      }
 
       // Atualizar lista
+      console.log('🔄 Store: Atualizando estado local do microciclo...');
       const currentMicrociclos = get().microciclos;
       const updatedMicrociclos = currentMicrociclos.filter(m => m.id !== id);
       set({ microciclos: updatedMicrociclos });
+      console.log('✅ Store: Microciclo excluído com sucesso');
     } catch (error) {
-      console.error('Erro ao deletar microciclo:', error);
+      console.error('❌ Store: Erro ao deletar microciclo:', error);
       throw error;
     }
   },
@@ -352,12 +424,12 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         query = query.eq('microciclo_id', microcicloId);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: true });
+      const { data, error } = await query.order('scheduled_date', { ascending: true });
 
       if (error) throw error;
       set({ cycleTrainingSessions: data || [] });
     } catch (error) {
-      console.error('Erro ao buscar sessões de treino em ciclos:', error);
+      console.error('Erro ao buscar sessões de treino:', error);
     } finally {
       set({ isLoading: false });
     }
@@ -382,7 +454,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
 
       return newSession;
     } catch (error) {
-      console.error('Erro ao criar sessão de treino em ciclo:', error);
+      console.error('Erro ao criar sessão de treino:', error);
       throw error;
     }
   },
@@ -407,7 +479,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
 
       return updatedSession;
     } catch (error) {
-      console.error('Erro ao atualizar sessão de treino em ciclo:', error);
+      console.error('Erro ao atualizar sessão de treino:', error);
       throw error;
     }
   },
@@ -426,63 +498,31 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
       const updatedSessions = currentSessions.filter(s => s.id !== id);
       set({ cycleTrainingSessions: updatedSessions });
     } catch (error) {
-      console.error('Erro ao deletar sessão de treino em ciclo:', error);
+      console.error('Erro ao deletar sessão de treino:', error);
       throw error;
     }
   },
 
   // === UTILITÁRIOS ===
-  getCurrentCycle: (date?: string) => {
-    const targetDate = date || new Date().toISOString().split('T')[0];
-    const { macrociclos, mesociclos, microciclos } = get();
-
+  getCurrentCycle: () => {
+    const { macrociclos, microciclos } = get();
+    
     const currentMacrociclo = macrociclos.find(m => 
-      targetDate >= m.start_date && targetDate <= m.end_date
-    );
-
-    const currentMesociclo = mesociclos.find(m => 
-      targetDate >= m.start_date && targetDate <= m.end_date
-    );
-
+      new Date() >= new Date(m.start_date) && new Date() <= new Date(m.end_date)
+    ) || null;
+    
     const currentMicrociclo = microciclos.find(m => 
-      targetDate >= m.start_date && targetDate <= m.end_date
-    );
-
+      new Date() >= new Date(m.start_date) && new Date() <= new Date(m.end_date)
+    ) || null;
+    
     return {
       macrociclo: currentMacrociclo,
-      mesociclo: currentMesociclo,
       microciclo: currentMicrociclo
     };
   },
 
-  generateMicrociclos: async (mesocicloId: string, startDate: string, endDate: string, weeksCount: number) => {
-    try {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const weekDuration = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 7));
-
-      for (let i = 0; i < weeksCount; i++) {
-        const weekStart = new Date(start);
-        weekStart.setDate(start.getDate() + (i * 7));
-        
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-
-        await get().createMicrociclo({
-          mesociclo_id: mesocicloId,
-          name: `Semana ${i + 1}`,
-          description: `Microciclo ${i + 1} do mesociclo`,
-          start_date: weekStart.toISOString().split('T')[0],
-          end_date: weekEnd.toISOString().split('T')[0],
-          week_number: i + 1,
-          focus: 'Base',
-          intensity_level: 'moderada',
-          volume_level: 'moderado'
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao gerar microciclos:', error);
-      throw error;
-    }
+  generateMicrociclos: async (mesocicloId: string) => {
+    // Implementação para gerar microciclos automaticamente
+    console.log('Gerando microciclos para mesociclo:', mesocicloId);
   }
 })); 

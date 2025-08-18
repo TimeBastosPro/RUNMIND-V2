@@ -268,65 +268,102 @@ export interface Profile {
     start_date: string;
     end_date: string;
     goal?: string;
-    notes?: string;
     created_at: string;
     updated_at: string;
   }
 
   export interface Mesociclo {
-  id: string;
-  macrociclo_id: string;
-  user_id: string;
-  name: string;
-  description?: string;
-  start_date: string;
-  end_date: string;
-  focus?: string;
-  intensity_level?: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
-  volume_level?: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
-  mesociclo_type?: 'base' | 'desenvolvimento' | 'estabilizador' | 'especifico' | 'pre_competitivo' | 'polimento' | 'competitivo' | 'transicao' | 'recuperativo';
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-}
+    id: string;
+    user_id: string;
+    macrociclo_id: string;
+    name: string;
+    description?: string;
+    start_date: string;
+    end_date: string;
+    focus?: string;
+    intensity_level?: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
+    volume_level?: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    created_at: string;
+    updated_at: string;
+  }
 
   export interface Microciclo {
     id: string;
-    mesociclo_id: string;
     user_id: string;
+    mesociclo_id: string;
     name: string;
     description?: string;
     start_date: string;
     end_date: string;
     week_number?: number;
     focus?: string;
-    intensity_level?: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
-    volume_level?: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    intensity_level: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
+    volume_level: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
     notes?: string;
     created_at: string;
     updated_at: string;
   }
 
   export interface CycleTrainingSession {
-  id: string;
-  training_session_id: string;
-  microciclo_id: string;
-  user_id: string;
-  day_of_week: number;
-  week_number?: number;
-  created_at: string;
-}
+    id: string;
+    user_id: string;
+    microciclo_id: string;
+    name: string;
+    description?: string;
+    scheduled_date: string;
+    duration_minutes?: number;
+    intensity_level: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
+    volume_level: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    focus?: string;
+    notes?: string;
+    is_completed: boolean;
+    completed_at?: string;
+    created_at: string;
+    updated_at: string;
+  }
 
-  // Tipos para criação/atualização de ciclos
-  export type CreateMacrocicloData = Omit<Macrociclo, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
-  export type UpdateMacrocicloData = Partial<CreateMacrocicloData>;
-  
-  export type CreateMesocicloData = Omit<Mesociclo, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
-  export type UpdateMesocicloData = Partial<CreateMesocicloData>;
-  
-  export type CreateMicrocicloData = Omit<Microciclo, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
-  export type UpdateMicrocicloData = Partial<CreateMicrocicloData>;
-  
-  export type CreateCycleTrainingSessionData = Omit<CycleTrainingSession, 'id' | 'user_id' | 'created_at'>;
-  export type UpdateCycleTrainingSessionData = Partial<CreateCycleTrainingSessionData>;
+  // Tipos para criação
+  export interface CreateMacrocicloData {
+    name: string;
+    description?: string;
+    start_date: string;
+    end_date: string;
+    goal?: string;
+  }
+
+  export interface CreateMesocicloData {
+    macrociclo_id: string;
+    name: string;
+    description?: string;
+    start_date: string;
+    end_date: string;
+    focus?: string;
+    intensity_level?: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
+    volume_level?: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+  }
+
+  export interface CreateMicrocicloData {
+    mesociclo_id: string;
+    name: string;
+    description?: string;
+    start_date: string;
+    end_date: string;
+    week_number?: number;
+    focus?: string;
+    intensity_level: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
+    volume_level: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    notes?: string;
+  }
+
+  export interface CreateCycleTrainingSessionData {
+    microciclo_id: string;
+    name: string;
+    description?: string;
+    scheduled_date: string;
+    duration_minutes?: number;
+    intensity_level: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
+    volume_level: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    focus?: string;
+    notes?: string;
+  }
   

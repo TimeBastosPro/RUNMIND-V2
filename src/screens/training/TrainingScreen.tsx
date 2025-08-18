@@ -17,9 +17,10 @@ import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 import { useNavigation } from '@react-navigation/native';
 import CreateMacrocicloModal from './CreateMacrocicloModal';
+
 import CreateMesocicloModal from './CreateMesocicloModal';
-import CreateMicrocicloModal from './CreateMicrocicloModal';
 import CyclesOverview from './CyclesOverview';
+import type { Macrociclo, Mesociclo, Microciclo } from '../../types/database';
 
 // --- Constantes e Funções de Data ---
 const WEEKDAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
@@ -223,11 +224,13 @@ export default function TrainingScreen() {
     // Estados para ciclos de treinamento
     const [showCycles, setShowCycles] = useState(false);
     const [macrocicloModalVisible, setMacrocicloModalVisible] = useState(false);
-    const [mesocicloModalVisible, setMesocicloModalVisible] = useState(false);
-    const [microcicloModalVisible, setMicrocicloModalVisible] = useState(false);
-    const [selectedMacrocicloId, setSelectedMacrocicloId] = useState<string>('');
-    const [selectedMesocicloId, setSelectedMesocicloId] = useState<string>('');
 
+    const [mesocicloModalVisible, setMesocicloModalVisible] = useState(false);
+    const [selectedMacrocicloId, setSelectedMacrocicloId] = useState<string>('');
+    const [macrocicloToEdit, setMacrocicloToEdit] = useState<Macrociclo | null>(null);
+  
+    const [mesocicloToEdit, setMesocicloToEdit] = useState<Mesociclo | null>(null);
+    
     const [planningState, setPlanningState] = useState({
       modalidade: 'corrida',
       esforco: '',
@@ -252,13 +255,13 @@ export default function TrainingScreen() {
     
     // Store de ciclos
     const { 
+      macrociclos, 
+      microciclos, 
+      cycleTrainingSessions,
       fetchMacrociclos, 
-      fetchMesociclos, 
-      fetchMicrociclos,
-      macrociclos,
-      mesociclos,
-      microciclos,
-      getCurrentCycle
+      fetchMicrociclos, 
+      fetchCycleTrainingSessions,
+      getCurrentCycle 
     } = useCyclesStore();
 
     useEffect(() => {
@@ -282,10 +285,9 @@ export default function TrainingScreen() {
     useEffect(() => {
         if (userId) {
             fetchMacrociclos();
-            fetchMesociclos();
             fetchMicrociclos();
         }
-    }, [userId, fetchMacrociclos, fetchMesociclos, fetchMicrociclos]);
+    }, [userId, fetchMacrociclos, fetchMicrociclos]);
 
     // Carregar nome do atleta para cabeçalho no modo treinador
     useEffect(() => {
@@ -575,19 +577,19 @@ export default function TrainingScreen() {
         setMacrocicloModalVisible(true);
     };
 
-    const handleOpenMesocicloModal = () => {
-        setMesocicloModalVisible(true);
-    };
 
-    const handleOpenMicrocicloModal = () => {
-        setMicrocicloModalVisible(true);
-    };
+
+    const handleOpenMesocicloModal = (macrocicloId: string) => {
+    setSelectedMacrocicloId(macrocicloId);
+    setMesocicloModalVisible(true);
+  };
 
     const handleCycleSuccess = () => {
         // Recarregar ciclos após criação
         fetchMacrociclos();
+        // Recarregar todos os mesociclos
+        const { fetchMesociclos } = useCyclesStore.getState();
         fetchMesociclos();
-        fetchMicrociclos();
     };
 
     // Guard: treinador sem atleta selecionado
@@ -849,9 +851,8 @@ export default function TrainingScreen() {
             {/* Visualização de Ciclos */}
             {showCycles && (
                 <CyclesOverview
-                    onOpenMacrocicloModal={handleOpenMacrocicloModal}
+                    onOpenMacrocicloModal={() => setMacrocicloModalVisible(true)}
                     onOpenMesocicloModal={handleOpenMesocicloModal}
-                    onOpenMicrocicloModal={handleOpenMicrocicloModal}
                 />
             )}
 
@@ -867,13 +868,7 @@ export default function TrainingScreen() {
                 onDismiss={() => setMesocicloModalVisible(false)}
                 onSuccess={handleCycleSuccess}
                 selectedMacrocicloId={selectedMacrocicloId}
-            />
-
-            <CreateMicrocicloModal
-                visible={microcicloModalVisible}
-                onDismiss={() => setMicrocicloModalVisible(false)}
-                onSuccess={handleCycleSuccess}
-                selectedMesocicloId={selectedMesocicloId}
+                mesocicloToEdit={mesocicloToEdit}
             />
         </ScrollView>
     );

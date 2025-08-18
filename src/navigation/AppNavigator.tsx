@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { navigationRef } from './navigationRef';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -90,17 +90,6 @@ import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-const loginSchema = z.object({
-  email: z.string().email('E-mail inválido'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
-});
-const signUpSchema = loginSchema.extend({
-  fullName: z.string().min(1, 'O nome completo é obrigatório'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
-type SignUpForm = z.infer<typeof signUpSchema>;
-
 function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
   const { signIn, signUp, isLoading, resetPassword } = useAuthStore();
   const { currentCoach, loadCoachProfile } = useCoachStore();
@@ -109,15 +98,81 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
   const [showUserTypeSelection, setShowUserTypeSelection] = useState(false);
   const [isCoachSignUp, setIsCoachSignUp] = useState(false);
 
+  // ✅ CORRIGIDO: Usar um schema unificado para evitar recriação do formulário
+  const unifiedSchema = z.object({
+    email: z.string().email('E-mail inválido'),
+    password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
+    fullName: z.string().optional(),
+  });
+
   const {
     control,
     handleSubmit,
     setError,
     formState: { errors },
-  } = useForm<LoginForm | SignUpForm>({
-    resolver: zodResolver(isLogin ? loginSchema : signUpSchema),
+    reset,
+  } = useForm<z.infer<typeof unifiedSchema>>({
+    resolver: zodResolver(unifiedSchema),
     defaultValues: { email: '', password: '', fullName: '' },
+    mode: 'onBlur', // ✅ CORRIGIDO: Mudança de 'onChange' para 'onBlur' para reduzir re-renders
+    reValidateMode: 'onBlur', // ✅ NOVO: Revalidação apenas no blur
   });
+
+  // ✅ NOVO: Função para alternar entre login/signup sem resetar o email
+  const toggleLoginMode = (newIsLogin: boolean) => {
+    const currentEmail = control._formValues.email || '';
+    setIsLogin(newIsLogin);
+    
+    // ✅ CORRIGIDO: Manter o email quando alternar entre modos
+    if (currentEmail) {
+      // ✅ NOVO: Usar requestAnimationFrame para evitar conflitos de renderização
+      requestAnimationFrame(() => {
+        reset({ 
+          email: currentEmail, 
+          password: '', 
+          fullName: '' 
+        });
+      });
+    }
+  };
+
+  // ✅ NOVO: Função para alternar para modo treinador
+  const toggleCoachMode = () => {
+    const currentEmail = control._formValues.email || '';
+    setIsCoachSignUp(true);
+    setIsLogin(false);
+    
+    // ✅ CORRIGIDO: Manter o email quando alternar para modo treinador
+    if (currentEmail) {
+      requestAnimationFrame(() => {
+        reset({ 
+          email: currentEmail, 
+          password: '', 
+          fullName: '' 
+        });
+      });
+    }
+  };
+
+  // ✅ NOVO: Função para voltar para modo atleta
+  const toggleAthleteMode = () => {
+    const currentEmail = control._formValues.email || '';
+    setIsLogin(true);
+    setIsCoachSignUp(false);
+    
+    // ✅ CORRIGIDO: Manter o email quando voltar para modo atleta
+    if (currentEmail) {
+      requestAnimationFrame(() => {
+        reset({ 
+          email: currentEmail, 
+          password: '', 
+          fullName: '' 
+        });
+      });
+    }
+  };
+
+  // ✅ REMOVIDO: useEffect que estava causando reset desnecessário
 
   const onSubmit = async (data: any) => {
     try {
@@ -126,6 +181,12 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
         // Após login, carregar perfil de treinador e seguir para área correta
         await loadCoachProfile();
       } else {
+        // ✅ CORRIGIDO: Validar se fullName está presente para signup
+        if (!data.fullName || data.fullName.trim() === '') {
+          setError('fullName', { message: 'Nome completo é obrigatório' });
+          return;
+        }
+        
         await signUp(data.email, data.password, data.fullName, { isCoach: isCoachSignUp });
         if (isCoachSignUp) {
           // Cadastro de treinador: carregar perfil e enviar imediatamente para CoachMain
@@ -336,8 +397,11 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
                   onBlur={onBlur}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
                   style={{ marginBottom: 4 }}
                   mode="outlined"
+                  dense
                 />
                 <HelperText type="error" visible={!!errors.email}>
                   {errors.email?.message}
@@ -391,15 +455,14 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
 
           {isLogin ? (
             <>
-              <Button mode="text" onPress={() => setIsLogin(false)}>
+              <Button mode="text" onPress={() => toggleLoginMode(false)}>
                 Não tem conta? Criar conta de Atleta
               </Button>
               
               <Button 
                 mode="outlined" 
                 onPress={() => {
-                  setIsCoachSignUp(true);
-                  setIsLogin(false);
+                  toggleCoachMode();
                 }}
                 style={{ marginBottom: 8 }}
                 contentStyle={{ paddingVertical: 8 }}
@@ -408,10 +471,7 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
               </Button>
             </>
           ) : (
-            <Button mode="text" onPress={() => {
-              setIsLogin(true);
-              setIsCoachSignUp(false);
-            }}>
+            <Button mode="text" onPress={toggleAthleteMode}>
               Já tem conta? Entrar
             </Button>
           )}
@@ -516,57 +576,62 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, profile, isLoading, isInitializing, isAuthenticated, loadProfile, setInitializing } = useAuthStore();
+  const { 
+    user, 
+    isAuthenticated, 
+    isInitializing, 
+    isLoading, 
+    loadProfile, 
+    setInitializing 
+  } = useAuthStore();
+  
   const { currentCoach, loadCoachProfile, isLoading: coachLoading } = useCoachStore();
   const [showCoachProfileSetup, setShowCoachProfileSetup] = useState(false);
   const [hasPushedCoachMain, setHasPushedCoachMain] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // ✅ NOVO: Timeout de segurança para evitar travamento
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ Timeout de segurança: forçando saída da tela de carregamento');
+      setLoadingTimeout(true);
+      useAuthStore.setState({ isInitializing: false });
+    }, 10000); // 10 segundos
+
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   useEffect(() => {
-    // ✅ Inicialização com validação remota do usuário
+    // ✅ Inicialização simplificada para evitar travamento
     const initializeAuth = async () => {
       try {
-        console.log('🔍 Inicializando autenticação (validação remota)...');
-        // getUser faz chamada de rede; detecta conta removida no servidor
-        const { data: { user }, error } = await supabase.auth.getUser();
-
-        if (user && !error) {
-          console.log('🔍 Usuário autenticado encontrado:', user.id);
+        console.log('🔍 Inicializando autenticação...');
+        
+        // Verificar sessão atual de forma mais simples
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          console.log('🔍 Usuário autenticado encontrado:', session.user.id);
           useAuthStore.setState({
-            user,
+            user: session.user,
             isAuthenticated: true,
-            isInitializing: true,
+            isInitializing: false,
           });
-          try { await loadProfile(); } catch (e) { console.log('Perfil ausente, seguindo como treinador apenas'); }
-          await loadCoachProfile();
-
-          // ✅ Verificação forte de cadastro (profiles ou coaches)
-          try {
-            const userId = user.id;
-            const [profileRes, coachRes] = await Promise.all([
-              supabase.from('profiles').select('id').eq('id', userId).maybeSingle(),
-              supabase.from('coaches').select('id').eq('user_id', userId).maybeSingle(),
-            ]);
-            const hasProfile = !!profileRes.data;
-            const isCoach = !!coachRes.data;
-            if (!hasProfile && !isCoach) {
-              console.log('🔒 Sessão bloqueada: usuário sem cadastro em profiles/coaches. Limpando sessão...');
-              try { await clearCorruptedSession(); } catch {}
-              useAuthStore.setState({
-                user: null,
-                profile: null,
-                isAuthenticated: false,
-                isInitializing: false,
-              });
-              return;
-            }
-          } catch (e) {
-            console.log('⚠️ Erro ao validar cadastro. Permitindo continuação por ora.');
+          
+          // Carregar perfis em background
+          try { 
+            await loadProfile(); 
+          } catch (e) { 
+            console.log('Perfil ausente, seguindo como treinador apenas'); 
           }
-
-          useAuthStore.setState({ isInitializing: false });
+          
+          try {
+            await loadCoachProfile();
+          } catch (e) {
+            console.log('Perfil de treinador ausente');
+          }
         } else {
-          console.log('🔍 Sem usuário válido. Limpando sessão local...');
-          try { await clearCorruptedSession(); } catch {}
+          console.log('🔍 Sem sessão válida');
           useAuthStore.setState({
             user: null,
             profile: null,
@@ -575,8 +640,7 @@ export default function AppNavigator() {
           });
         }
       } catch (error) {
-        console.error('🔍 Erro na inicialização (getUser):', error);
-        try { await clearCorruptedSession(); } catch {}
+        console.error('🔍 Erro na inicialização:', error);
         useAuthStore.setState({
           user: null,
           profile: null,
@@ -594,15 +658,24 @@ export default function AppNavigator() {
       
       try {
         if (session?.user) {
-          // ✅ CORRIGIDO: Unificar setState
           useAuthStore.setState({
             user: session.user,
             isAuthenticated: true,
             isInitializing: false
           });
-          await loadProfile();
-          await loadCoachProfile(); // Carregar perfil de treinador se existir
-          // Se for treinador, garantir que a primeira tela seja CoachMain
+          
+          try { 
+            await loadProfile(); 
+          } catch (e) { 
+            console.log('Perfil ausente'); 
+          }
+          
+          try {
+            await loadCoachProfile();
+          } catch (e) {
+            console.log('Perfil de treinador ausente');
+          }
+          
           if (useCoachStore.getState().currentCoach) {
             setShowCoachProfileSetup(false);
           }
@@ -613,7 +686,6 @@ export default function AppNavigator() {
             isAuthenticated: false,
             isInitializing: false
           });
-          // Limpa modo treinador ao perder sessão
           try { useViewStore.getState().exitCoachView(); } catch {}
         }
       } catch (error) {
@@ -630,11 +702,28 @@ export default function AppNavigator() {
     return () => subscription.unsubscribe();
   }, [loadProfile, loadCoachProfile, setInitializing]);
 
-  if (isInitializing || isLoading) {
+  // ✅ MELHORADO: Condição de carregamento com timeout
+  if ((isInitializing || isLoading) && !loadingTimeout) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#2196F3" />
         <Text style={{ marginTop: 16 }}>Carregando RunMind...</Text>
+        {loadingTimeout && (
+          <TouchableOpacity 
+            style={{ 
+              marginTop: 20, 
+              padding: 10, 
+              backgroundColor: '#2196F3', 
+              borderRadius: 5 
+            }}
+            onPress={() => {
+              setLoadingTimeout(false);
+              useAuthStore.setState({ isInitializing: false });
+            }}
+          >
+            <Text style={{ color: 'white' }}>Continuar</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
