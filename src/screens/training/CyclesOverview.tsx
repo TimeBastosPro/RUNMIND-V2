@@ -51,6 +51,7 @@ export default function CyclesOverview({
 
   // Função para alternar o dropdown de tipo de microciclo
   const toggleMicrocicloTypeDropdown = (mesocicloId: string) => {
+    console.log('🔄 Toggle dropdown para mesociclo:', mesocicloId);
     setShowMicrocicloTypeDropdown(showMicrocicloTypeDropdown === mesocicloId ? null : mesocicloId);
   };
 
@@ -145,8 +146,6 @@ export default function CyclesOverview({
   const handleDeleteMacrociclo = async (macrociclo: Macrociclo) => {
     console.log('🔄 CyclesOverview: Iniciando exclusão do macrociclo:', macrociclo.id, macrociclo.name);
     
-    // Teste direto sem Alert para verificar se o problema é no Alert
-    console.log('🔄 CyclesOverview: Testando exclusão direta...');
     try {
       console.log('🔄 CyclesOverview: Chamando deleteMacrociclo...');
       await deleteMacrociclo(macrociclo.id);
@@ -174,8 +173,6 @@ export default function CyclesOverview({
   const handleDeleteMesociclo = async (mesociclo: Mesociclo) => {
     console.log('🔄 CyclesOverview: Iniciando exclusão do mesociclo:', mesociclo.id, mesociclo.name);
     
-    // Teste direto sem Alert para verificar se o problema é no Alert
-    console.log('🔄 CyclesOverview: Testando exclusão direta de mesociclo...');
     try {
       console.log('🔄 CyclesOverview: Chamando deleteMesociclo...');
       await deleteMesociclo(mesociclo.id);
@@ -228,8 +225,6 @@ export default function CyclesOverview({
     );
   };
 
-
-
   // Obter mesociclos de um macrociclo específico
   const getMesociclosForMacrociclo = (macrocicloId: string): Mesociclo[] => {
     return mesociclos.filter(mesociclo => mesociclo.macrociclo_id === macrocicloId);
@@ -267,8 +262,6 @@ export default function CyclesOverview({
         : [...prev, key]
     );
   };
-
-
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -605,8 +598,17 @@ const styles = StyleSheet.create({
   listSection: {
     marginBottom: 24,
   },
-  listCard: {
-    marginBottom: 12,
+  macrocicloCard: {
+    marginBottom: 16,
+    elevation: 2,
+  },
+  macrocicloHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  macrocicloInfo: {
+    flex: 1,
   },
   cycleName: {
     fontWeight: 'bold',
@@ -622,7 +624,102 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   dateChip: {
+    backgroundColor: '#FFF3E0',
+    alignSelf: 'flex-start',
+  },
+  cycleGoal: {
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  expandButton: {
+    margin: 0,
+  },
+  macrocicloActions: {
+    marginTop: 12,
+  },
+  cardActionButton: {
+    marginTop: 8,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  editButton: {
     flex: 1,
+    borderColor: '#2196F3',
+  },
+  deleteButton: {
+    flex: 1,
+    borderColor: '#D32F2F',
+  },
+  expandedContent: {
+    marginTop: 16,
+  },
+  divider: {
+    marginBottom: 16,
+  },
+  mesociclosContainer: {
+    gap: 12,
+  },
+  mesociclosTitle: {
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  mesocicloCard: {
+    marginBottom: 8,
+    backgroundColor: '#F8F9FA',
+  },
+  mesocicloRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  mesocicloInfo: {
+    flex: 1,
+  },
+  mesocicloName: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  mesocicloDates: {
+    opacity: 0.7,
+    marginBottom: 4,
+  },
+  mesocicloDescription: {
+    opacity: 0.6,
+    fontStyle: 'italic',
+  },
+  mesocicloActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  orderChip: {
+    backgroundColor: '#E3F2FD',
+    alignSelf: 'flex-start',
+  },
+  mesocicloActionButtons: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  mesocicloActionButton: {
+    margin: 0,
+    backgroundColor: '#F5F5F5',
+  },
+  deleteIconButton: {
+    backgroundColor: '#FFEBEE',
+  },
+  emptyMesociclos: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyMesociclosText: {
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  emptyMesociclosSubtext: {
+    textAlign: 'center',
+    opacity: 0.6,
   },
   emptyCard: {
     backgroundColor: '#F5F5F5',
@@ -963,4 +1060,4 @@ const styles = StyleSheet.create({
      gap: 8,
      marginTop: 4,
    },
-});  
+}); 
