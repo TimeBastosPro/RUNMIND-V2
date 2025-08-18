@@ -225,11 +225,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
 
   createMesociclo: async (data: CreateMesocicloData) => {
     try {
-<<<<<<< HEAD
       console.log('🔄 Store: Iniciando criação do mesociclo:', data);
-=======
-      console.log('🔍 DEBUG - Store: Criando mesociclo:', data);
->>>>>>> b055cf1f77ce651f744405fa76c448cdb0c30d26
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
@@ -244,35 +240,21 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .single();
 
       if (error) {
-<<<<<<< HEAD
         console.error('❌ Store: Erro do Supabase:', error);
         throw error;
       }
 
       console.log('✅ Store: Mesociclo criado no banco:', newMesociclo);
-=======
-        console.error('❌ Erro Supabase:', error);
-        throw error;
-      }
->>>>>>> b055cf1f77ce651f744405fa76c448cdb0c30d26
-
-      console.log('✅ DEBUG - Store: Mesociclo criado no banco:', newMesociclo);
 
       // Atualizar lista local
       const currentMesociclos = get().mesociclos;
       const updatedMesociclos = [...currentMesociclos, newMesociclo];
       set({ mesociclos: updatedMesociclos });
 
-      console.log('✅ DEBUG - Store: Lista atualizada, total de mesociclos:', updatedMesociclos.length);
-
       console.log('✅ Store: Estado atualizado, total de mesociclos:', get().mesociclos.length);
       return newMesociclo;
     } catch (error) {
-<<<<<<< HEAD
       console.error('❌ Store: Erro ao criar mesociclo:', error);
-=======
-      console.error('❌ Erro ao criar mesociclo no store:', error);
->>>>>>> b055cf1f77ce651f744405fa76c448cdb0c30d26
       throw error;
     }
   },
