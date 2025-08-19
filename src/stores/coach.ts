@@ -309,7 +309,9 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error('Selecione uma modalidade para solicitar vínculo');
       }
 
-      // Verificar se já possui um relacionamento ATIVO na mesma modalidade
+      // ✅ MELHORADO: Verificar relacionamentos existentes de forma mais robusta
+      
+      // 1. Verificar se já possui um relacionamento ATIVO na mesma modalidade (qualquer treinador)
       const { data: activeRel, error: activeErr } = await supabase
         .from('athlete_coach_relationships')
         .select('id, coach_id, status, modality')
@@ -319,10 +321,10 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         .limit(1);
       if (activeErr) throw activeErr;
       if (activeRel && activeRel.length > 0) {
-        throw new Error('Você já possui um treinador ativo para esta modalidade. Desvincule antes de solicitar outro.');
+        throw new Error(`Você já possui um treinador ativo para ${normalizedModality}. Desvincule antes de solicitar outro.`);
       }
 
-      // Verificar se já existe um relacionamento PENDENTE com este treinador na mesma modalidade
+      // 2. Verificar se já existe um relacionamento PENDENTE com este treinador na mesma modalidade
       const { data: existingPendingRelationship, error: checkError } = await supabase
         .from('athlete_coach_relationships')
         .select('*')
@@ -340,6 +342,26 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       if (existingPendingRelationship) {
         console.log('⚠️ Relacionamento pendente já existe:', existingPendingRelationship);
         throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com este treinador`);
+      }
+
+      // 3. Verificar se já existe um relacionamento ATIVO com este treinador na mesma modalidade
+      const { data: existingActiveRelationship, error: activeCheckError } = await supabase
+        .from('athlete_coach_relationships')
+        .select('*')
+        .eq('athlete_id', user.id)
+        .eq('coach_id', coachId)
+        .eq('modality', normalizedModality)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (activeCheckError) {
+        console.error('❌ Erro ao verificar relacionamento ativo existente:', activeCheckError);
+        throw activeCheckError;
+      }
+
+      if (existingActiveRelationship) {
+        console.log('⚠️ Relacionamento ativo já existe:', existingActiveRelationship);
+        throw new Error(`Você já possui um vínculo ativo para ${normalizedModality} com este treinador`);
       }
 
       const { data, error } = await supabase
@@ -782,12 +804,21 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error('Selecione ao menos uma modalidade');
       }
 
+      console.log('🔍 Iniciando vinculação em lote:', { coachId, modalities, teamId });
+
       const results = await Promise.allSettled(
         modalities.map((m) => get().requestCoachRelationship(coachId, teamId, notes, m))
       );
 
       const successes = results.filter(r => r.status === 'fulfilled');
       const failures = results.filter(r => r.status === 'rejected');
+
+      console.log('🔍 Resultados da vinculação:', {
+        total: results.length,
+        successes: successes.length,
+        failures: failures.length,
+        failureDetails: failures.map((f: any) => f.reason?.message || 'Erro desconhecido')
+      });
 
       // Recarregar relacionamentos ao final
       await get().loadAthleteRelationships();
@@ -798,8 +829,20 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error(firstError?.message || 'Não foi possível enviar as solicitações');
       }
 
-      return { successes: successes.length, failures: failures.length };
+      // ✅ MELHORADO: Retornar informações mais detalhadas
+      const result = { 
+        successes: successes.length, 
+        failures: failures.length,
+        total: results.length
+      };
+
+      if (failures.length > 0) {
+        console.warn('⚠️ Algumas vinculações falharam:', failures.map((f: any) => f.reason?.message));
+      }
+
+      return result;
     } catch (error: any) {
+      console.error('❌ Erro na vinculação em lote:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }

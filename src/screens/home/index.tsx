@@ -255,11 +255,7 @@ export default function HomeScreen() {
   // Buscar treino para hoje e próxima prova
   const todayDateString = new Date().toISOString().split('T')[0];
   
-  // Debug logs
-  console.log('DEBUG - trainingSessions:', trainingSessions);
-  console.log('DEBUG - todayDateString:', todayDateString);
-  console.log('DEBUG - hasCheckedInToday:', hasCheckedInToday);
-  console.log('DEBUG - todayReadinessScore:', todayReadinessScore);
+  // ✅ OTIMIZADO: Reduzir logs para melhorar performance
   
   const todayTraining = trainingSessions?.find(session => 
     session.training_date === todayDateString
@@ -269,9 +265,6 @@ export default function HomeScreen() {
   const nextPlannedTraining = trainingSessions?.find(session => 
     session.status === 'planned' && session.training_date >= todayDateString
   );
-  
-  console.log('DEBUG - todayTraining:', todayTraining);
-  console.log('DEBUG - nextPlannedTraining:', nextPlannedTraining);
   
   // Lógica do próximo treino: se há treino planejado para hoje, mostra ele. Se não, mostra o próximo planejado
   const nextTraining = nextPlannedTraining;
@@ -292,17 +285,12 @@ export default function HomeScreen() {
   
   const lastCompletedTraining = sortedCompletedTrainings[0];
 
-  // Buscar a próxima prova (a mais próxima)
-  console.log('DEBUG - HomeScreen - races:', races);
-  console.log('DEBUG - HomeScreen - todayDateString:', todayDateString);
+  // ✅ OTIMIZADO: Buscar a próxima prova (a mais próxima)
   
   const filteredRaces = races?.filter(race => race.start_date >= todayDateString);
-  console.log('DEBUG - HomeScreen - filteredRaces:', filteredRaces);
   
   const nextRace = filteredRaces
     ?.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
-  
-  console.log('DEBUG - HomeScreen - nextRace:', nextRace);
 
   // Calcular dias restantes para a próxima prova
   const daysUntilRace = nextRace ? 
@@ -504,7 +492,7 @@ export default function HomeScreen() {
               )}
               
               {lastCompletedTraining.avg_heart_rate && (
-                <Text style={styles.trainingDetails}>❤️ FC Média: {lastCompletedTraining.avg_heart_rate}bpm</Text>
+                <Text style={styles.trainingDetails}>💓 FC Média: {lastCompletedTraining.avg_heart_rate}bpm</Text>
               )}
               
               {lastCompletedTraining.perceived_effort && (

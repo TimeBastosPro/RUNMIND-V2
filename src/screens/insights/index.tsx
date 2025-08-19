@@ -43,25 +43,19 @@ export default function InsightsScreen() {
   }, [isCoachView, viewAsAthleteId, athleteNameFromStore]);
 
   useEffect(() => {
-    console.log('🔍 DEBUG InsightsScreen useEffect:', {
-      isCoachView,
-      viewAsAthleteId,
-      athleteName
-    });
+    // ✅ OTIMIZADO: Reduzir logs e melhorar performance
     
     // Se estamos no modo treinador mas não temos viewAsAthleteId, aguardar
     if (isCoachView && !viewAsAthleteId) {
-      console.log('⏳ Aguardando viewAsAthleteId...');
       return;
     }
     
     loadSavedInsights();
   }, [loadSavedInsights, isCoachView, viewAsAthleteId]);
 
-  // useEffect específico para recarregar insights quando viewAsAthleteId muda
+  // ✅ OTIMIZADO: useEffect específico para recarregar insights quando viewAsAthleteId muda
   useEffect(() => {
     if (viewAsAthleteId) {
-      console.log('🔄 viewAsAthleteId mudou, recarregando insights:', viewAsAthleteId);
       loadSavedInsights();
     }
   }, [viewAsAthleteId, loadSavedInsights]);

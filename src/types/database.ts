@@ -283,6 +283,8 @@ export interface Profile {
     focus?: string;
     intensity_level?: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
     volume_level?: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    notes?: string;           // ✅ NOVO: Campo de anotações
+    mesociclo_type?: string;  // ✅ NOVO: Tipo do mesociclo
     created_at: string;
     updated_at: string;
   }
@@ -340,6 +342,8 @@ export interface Profile {
     focus?: string;
     intensity_level?: 'baixa' | 'moderada' | 'alta' | 'muito_alta';
     volume_level?: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
+    notes?: string;           // ✅ NOVO: Campo de anotações
+    mesociclo_type?: string;  // ✅ NOVO: Tipo do mesociclo
   }
 
   export interface CreateMicrocicloData {

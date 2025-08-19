@@ -39,6 +39,7 @@ import UserTypeSelectionScreen from '../screens/auth/UserTypeSelectionScreen';
 // Athlete Screens
 import CoachSearchScreen from '../screens/athlete/CoachSearchScreen';
 import { useViewStore } from '../stores/view';
+import { useCyclesStore } from '../stores/cycles';
 
 // Types
 type TabParamList = {
@@ -590,22 +591,35 @@ export default function AppNavigator() {
   const [hasPushedCoachMain, setHasPushedCoachMain] = useState(false);
   const [loadingTimeout, setLoadingTimeout] = useState(false);
 
-  // ✅ NOVO: Timeout de segurança para evitar travamento
+  // ✅ MELHORADO: Timeout de segurança aumentado para melhor experiência
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       console.warn('⚠️ Timeout de segurança: forçando saída da tela de carregamento');
       setLoadingTimeout(true);
       useAuthStore.setState({ isInitializing: false });
-    }, 10000); // 10 segundos
+    }, 30000); // 30 segundos - tempo mais adequado para conexões lentas
 
     return () => clearTimeout(timeoutId);
   }, []);
 
   useEffect(() => {
-    // ✅ Inicialização simplificada para evitar travamento
+    // ✅ MELHORADO: Inicialização com verificação de sessão corrompida
     const initializeAuth = async () => {
       try {
         console.log('🔍 Inicializando autenticação...');
+        
+        // ✅ NOVO: LIMPEZA IMEDIATA ANTES DE QUALQUER VERIFICAÇÃO
+        console.log('🧹 LIMPEZA IMEDIATA no carregamento da aplicação...');
+        await useAuthStore.getState().clearAllLocalData();
+        
+        // ✅ NOVO: Verificar e reparar sessão corrompida
+        const sessionValid = await useAuthStore.getState().checkAndRepairSession();
+        
+        if (!sessionValid) {
+          console.log('🔍 Sessão corrompida detectada - limpando dados');
+          useAuthStore.setState({ isInitializing: false });
+          return;
+        }
         
         // Verificar sessão atual de forma mais simples
         const { data: { session } } = await supabase.auth.getSession();
@@ -618,17 +632,30 @@ export default function AppNavigator() {
             isInitializing: false,
           });
           
-          // Carregar perfis em background
-          try { 
-            await loadProfile(); 
-          } catch (e) { 
-            console.log('Perfil ausente, seguindo como treinador apenas'); 
-          }
-          
+          // ✅ MELHORADO: Carregar perfis em sequência para evitar conflitos
           try {
             await loadCoachProfile();
           } catch (e) {
             console.log('Perfil de treinador ausente');
+          }
+          
+          // ✅ MELHORADO: Sempre carregar perfil de atleta de forma segura se não for treinador
+          if (!useCoachStore.getState().currentCoach) {
+            try { 
+              console.log('🔍 Carregando perfil de atleta após inicialização...');
+              await useAuthStore.getState().loadProfileSafely(); 
+              
+              // ✅ NOVO: Carregar dados de ciclos após o perfil
+              console.log('🔍 Carregando dados de ciclos...');
+              const { fetchMacrociclos, fetchMesociclos } = useCyclesStore.getState();
+              await Promise.all([
+                fetchMacrociclos(),
+                fetchMesociclos()
+              ]);
+              console.log('✅ Dados de ciclos carregados com sucesso');
+            } catch (e) { 
+              console.log('Perfil de atleta ausente'); 
+            }
           }
         } else {
           console.log('🔍 Sem sessão válida');
@@ -658,22 +685,47 @@ export default function AppNavigator() {
       
       try {
         if (session?.user) {
+          // ✅ NOVO: Verificação imediata de perfil incorreto
+          console.log('🔍 Verificando se o perfil carregado está correto...');
+          
           useAuthStore.setState({
             user: session.user,
             isAuthenticated: true,
             isInitializing: false
           });
           
-          try { 
-            await loadProfile(); 
-          } catch (e) { 
-            console.log('Perfil ausente'); 
-          }
-          
+          // ✅ MELHORADO: Carregar perfis em sequência para evitar conflitos
           try {
             await loadCoachProfile();
           } catch (e) {
             console.log('Perfil de treinador ausente');
+          }
+          
+          // Só carregar perfil de atleta se não for treinador
+          if (!useCoachStore.getState().currentCoach) {
+            try { 
+              console.log('🔍 Carregando perfil de atleta após inicialização...');
+              await useAuthStore.getState().loadProfileSafely(); 
+              
+              // ✅ NOVO: Carregar dados de ciclos após o perfil
+              console.log('🔍 Carregando dados de ciclos...');
+              const { fetchMacrociclos, fetchMesociclos } = useCyclesStore.getState();
+              await Promise.all([
+                fetchMacrociclos(),
+                fetchMesociclos()
+              ]);
+              console.log('✅ Dados de ciclos carregados com sucesso');
+            } catch (e) { 
+              console.log('Perfil de atleta ausente'); 
+            }
+          }
+          
+          // ✅ NOVO: Verificação adicional após carregamento
+          const currentProfile = useAuthStore.getState().profile;
+          if (currentProfile && currentProfile.email !== session.user.email) {
+            console.warn('⚠️ PERFIL INCORRETO DETECTADO - limpando e recarregando');
+            await useAuthStore.getState().clearAllLocalData();
+            await useAuthStore.getState().loadProfileSafely();
           }
           
           if (useCoachStore.getState().currentCoach) {

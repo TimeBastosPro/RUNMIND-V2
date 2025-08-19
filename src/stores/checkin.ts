@@ -141,7 +141,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   races: [],
 
   loadTodayCheckin: async () => {
-    console.log('🔄 loadTodayCheckin chamada');
+    // ✅ OTIMIZADO: Reduzir logs e melhorar performance
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -150,15 +150,12 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const viewAsAthleteId = useViewStore.getState().viewAsAthleteId;
       const targetUserId = viewAsAthleteId ?? safeUserId;
       if (!targetUserId) {
-        console.log('❌ Usuário não autenticado');
         return;
       }
 
       const today = new Date().toISOString().split('T')[0];
-      console.log('📅 Buscando check-in para a data:', today);
-      console.log('👤 Target User ID:', targetUserId);
       
-      // Buscar o check-in mais recente do dia
+      // ✅ OTIMIZADO: Query mais eficiente
       const { data, error } = await supabase
         .from('daily_checkins')
         .select('*')
@@ -168,8 +165,6 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .limit(1)
         .single();
 
-      console.log('🔍 Resultado da busca:', { data, error });
-
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
@@ -178,19 +173,15 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       let readiness = null;
       if (data) {
         readiness = get().calculateReadinessScore(data);
-        console.log('📊 Readiness score calculado:', readiness);
       }
       
-      const newState = { 
+      set({ 
         todayCheckin: data,
         hasCheckedInToday: !!data,
         isLoading: false,
         todayReadinessScore: readiness,
         error: null
-      };
-      
-      console.log('✅ Estado atualizado:', newState);
-      set(newState);
+      });
     } catch (error: unknown) {
       console.error('❌ Error loading today checkin:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar check-in de hoje.';
@@ -198,7 +189,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     }
   },
 
-  loadRecentCheckins: async (days = 180) => {
+  loadRecentCheckins: async (days = 30) => {
+    // ✅ OTIMIZADO: Reduzir período padrão e melhorar performance
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -214,25 +206,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      // Primeiro, verificar se há dados na tabela
-      const { count, error: countError } = await supabase
-        .from('daily_checkins')
-        .select('*', { count: 'exact', head: true });
-      
-      // Buscar TODOS os check-ins do usuário (sem filtro de data)
-      const { data: allData, error: allError } = await supabase
-        .from('daily_checkins')
-        .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
-        .eq('user_id', targetUserId)
-        .order('date', { ascending: false });
-      
-      // Agora buscar com filtro de data
+      // ✅ OTIMIZADO: Query única e mais eficiente
       const { data, error } = await supabase
         .from('daily_checkins')
         .select('sleep_quality, soreness, motivation, confidence, focus, emocional, notes, date')
         .eq('user_id', targetUserId)
         .gte('date', startDate.toISOString().split('T')[0])
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .limit(100); // Limitar para melhor performance
       if (error) throw error;
       
       set({ recentCheckins: (data as RecentCheckin[]) || [], isLoading: false, error: null });
@@ -817,34 +798,26 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   },
   // Novas funções para insights
   loadSavedInsights: async () => {
-    console.log('🚀 loadSavedInsights chamada');
+    // ✅ OTIMIZADO: Reduzir logs e melhorar performance
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const { viewAsAthleteId, isCoachView } = useViewStore.getState();
       const targetUserId = viewAsAthleteId ?? (user ? user.id : null);
       
-      console.log('🔍 DEBUG loadSavedInsights:', {
-        user: user?.id,
-        viewAsAthleteId,
-        isCoachView,
-        targetUserId
-      });
-      
       if (!targetUserId) { 
-        console.log('❌ No targetUserId found');
         set({ savedInsights: [], isLoading: false, error: null });
         return; 
       }
       
+      // ✅ OTIMIZADO: Limitar a 50 insights mais recentes para melhor performance
       const { data, error } = await supabase
         .from('insights')
         .select('*')
         .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
         
-      console.log('🔍 DEBUG insights query result:', { data, error, count: data?.length });
-      
       if (error) throw error;
       set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
     } catch (error: unknown) {

@@ -124,10 +124,14 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
         return;
       }
       
+      console.log('🔍 Iniciando solicitação de vínculo:', { coachId, selectedModalities });
+      
       // Enviar em lote por modalidade
       // @ts-ignore acessar função do store
       const { requestCoachRelationshipsBulk } = useCoachStore.getState() as any;
-      await requestCoachRelationshipsBulk(coachId, selectedModalities);
+      const result = await requestCoachRelationshipsBulk(coachId, selectedModalities);
+      
+      console.log('🔍 Resultado da solicitação:', result);
       
       // Recarregar dados para mostrar o novo relacionamento
       await loadData();
@@ -136,12 +140,28 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
       setSelectedCoach(null);
       setSelectedModalities(['Corrida de Rua']);
       
-      Alert.alert(
-        'Vínculo Solicitado!', 
-        'Sua solicitação foi enviada ao treinador. Você receberá uma notificação quando for aprovada.',
-        [{ text: 'OK' }]
-      );
+      // ✅ MELHORADO: Mensagem mais informativa baseada no resultado
+      if (result.failures > 0 && result.successes > 0) {
+        Alert.alert(
+          'Vínculo Parcialmente Solicitado!', 
+          `${result.successes} modalidade(s) foram solicitadas com sucesso. ${result.failures} modalidade(s) não puderam ser solicitadas.`,
+          [{ text: 'OK' }]
+        );
+      } else if (result.failures > 0) {
+        Alert.alert(
+          'Erro na Solicitação', 
+          'Nenhuma modalidade pôde ser solicitada. Verifique se você já possui vínculos ativos ou pendentes.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Vínculo Solicitado!', 
+          'Sua solicitação foi enviada ao treinador. Você receberá uma notificação quando for aprovada.',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (e: any) {
+      console.error('❌ Erro na solicitação de vínculo:', e);
       Alert.alert('Erro', e?.message || 'Não foi possível enviar a solicitação.');
     }
   };

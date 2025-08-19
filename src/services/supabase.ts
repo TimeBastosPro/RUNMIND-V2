@@ -23,22 +23,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
 console.log('🔧 Supabase Config - URL:', supabaseUrl);
 console.log('🔧 Supabase Config - Key: [oculta]');
 
-// ✅ MELHORADO: Configuração específica para React Native
+// ✅ MELHORADO: Configuração específica para React Native com timeouts otimizados
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    // No web, não persistimos a sessão para sempre voltar à tela de login após refresh
-    autoRefreshToken: Platform.OS !== 'web',
-    persistSession: Platform.OS !== 'web',
+    // ✅ MELHORADO: Configurações otimizadas para mobile
+    autoRefreshToken: true, // Sempre habilitado para melhor experiência
+    persistSession: true, // Sempre persistir sessão
     detectSessionInUrl: false,
-    // ✅ NOVO: Configurações específicas para mobile
     flowType: 'pkce',
     debug: __DEV__, // Logs apenas em desenvolvimento
   },
-  // ✅ NOVO: Configurações de rede para mobile
+  // ✅ MELHORADO: Configurações de rede para mobile com timeouts adequados
   global: {
     headers: {
       'X-Client-Info': 'runmind-mobile',
+    },
+    // ✅ NOVO: Timeouts de rede otimizados
+    fetch: (url, options = {}) => {
+      return fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(30000), // 30 segundos de timeout
+      });
     },
   },
   // ✅ NOVO: Configurações de retry para mobile

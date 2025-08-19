@@ -42,6 +42,13 @@ interface AuthState {
   deleteRace: (raceId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   checkEmailExists: (email: string) => Promise<boolean>;
+  
+  // ✅ NOVO: Funções para correção de dados locais
+  clearAllLocalData: () => Promise<void>;
+  checkAndRepairSession: () => Promise<boolean>;
+  loadProfileSafely: () => Promise<void>;
+  // ✅ NOVO: Função para forçar limpeza completa e recarregamento
+  forceCleanReload: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -57,8 +64,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 signIn iniciado para email:', email);
     set({ isLoading: true });
     try {
-      // ✅ NOVO: Verificar e reparar sessão antes do login
-      await checkAndRepairSession();
+      // ✅ MELHORADO: Limpeza AGESSIVA antes do login
+      console.log('🧹 Limpeza AGESSIVA antes do login...');
+      await get().clearAllLocalData();
+      
+      // ✅ NOVO: Verificar se a limpeza foi efetiva
+      const remainingKeys = await AsyncStorage.getAllKeys();
+      console.log('🔍 Chaves restantes após limpeza:', remainingKeys);
+      
+      if (remainingKeys.some(key => key.includes('supabase') || key.includes('auth'))) {
+        console.warn('⚠️ Ainda há chaves do Supabase após limpeza - forçando limpeza completa');
+        await AsyncStorage.clear();
+      }
       
       console.log('🔍 Chamando supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -134,8 +151,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.log('⚠️ Erro ao garantir registro de domínio:', ensureError);
       }
 
-      // Carregar dados após garantir registro
-      await Promise.allSettled([get().loadProfile()]);
+      // ✅ MELHORADO: Carregar dados com correção automática de perfis duplicados
+      await Promise.allSettled([get().loadProfileSafely()]);
+      
       // Se for usuário do tipo coach, garantir navegação/coerência de stack
       try {
         if ((data.user as any)?.user_metadata?.user_type === 'coach') {
@@ -251,7 +269,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             console.log('🔍 Exceção no signOut, seguirá com limpeza:', (e as Error)?.message);
           }
         })(),
-        new Promise<void>((resolve) => setTimeout(() => resolve(), 2000)),
+        new Promise<void>((resolve) => setTimeout(() => resolve(), 5000)), // Aumentado para 5 segundos
       ]);
 
       await signOutWithTimeout;
@@ -316,6 +334,256 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  // ✅ MELHORADO: Função para limpar todos os dados locais de forma mais agressiva
+  clearAllLocalData: async () => {
+    console.log('🧹 Iniciando limpeza AGESSIVA de dados locais...');
+    try {
+      // ✅ NOVO: Limpeza mais específica do AsyncStorage
+      const allKeys = await AsyncStorage.getAllKeys();
+      console.log('🔍 Chaves encontradas no AsyncStorage:', allKeys);
+      
+      // Remover todas as chaves relacionadas ao Supabase
+      const supabaseKeys = allKeys.filter(key => 
+        key.includes('supabase') || 
+        key.includes('sb-') || 
+        key.includes('auth') ||
+        key.includes('session') ||
+        key.includes('token')
+      );
+      
+      if (supabaseKeys.length > 0) {
+        console.log('🧹 Removendo chaves do Supabase:', supabaseKeys);
+        await AsyncStorage.multiRemove(supabaseKeys);
+      }
+      
+      // ✅ NOVO: Limpar também chaves do Zustand se existirem
+      const zustandKeys = allKeys.filter(key => 
+        key.includes('zustand') || 
+        key.includes('runmind') ||
+        key.includes('auth')
+      );
+      
+      if (zustandKeys.length > 0) {
+        console.log('🧹 Removendo chaves do Zustand:', zustandKeys);
+        await AsyncStorage.multiRemove(zustandKeys);
+      }
+      
+      // ✅ NOVO: Limpeza completa como fallback
+      await AsyncStorage.clear();
+      
+      // Limpar estado do Zustand
+      set({
+        user: null,
+        profile: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isInitializing: false,
+        fitnessTests: [],
+        races: [],
+      });
+      
+      console.log('✅ Limpeza AGESSIVA concluída com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao limpar dados locais:', error);
+      // ✅ NOVO: Fallback para limpeza completa
+      try {
+        await AsyncStorage.clear();
+        console.log('✅ Fallback: AsyncStorage limpo completamente');
+      } catch (fallbackError) {
+        console.error('❌ Erro no fallback:', fallbackError);
+      }
+    }
+  },
+
+  // ✅ MELHORADO: Função para verificar e reparar sessão corrompida
+  checkAndRepairSession: async () => {
+    console.log('🔍 Verificando integridade da sessão...');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Verificar se o usuário no estado local corresponde ao da sessão
+        const localUser = get().user;
+        
+        if (localUser && localUser.id !== session.user.id) {
+          console.warn('⚠️ Sessão corrompida detectada - limpando dados locais');
+          await get().clearAllLocalData();
+          return false;
+        }
+        
+        // ✅ NOVO: Verificar se há inconsistência entre email da sessão e perfil local
+        if (localUser && localUser.email !== session.user.email) {
+          console.warn('⚠️ Email inconsistente detectado - limpando dados locais');
+          await get().clearAllLocalData();
+          return false;
+        }
+        
+        // ✅ NOVO: Verificar se o perfil local está correto
+        const localProfile = get().profile;
+        if (localProfile && localProfile.id !== session.user.id) {
+          console.warn('⚠️ Perfil inconsistente detectado - limpando dados locais');
+          await get().clearAllLocalData();
+          return false;
+        }
+        
+        // ✅ MELHORADO: Verificação específica para aline@gmail.com
+        if (session.user.email === 'aline@gmail.com') {
+          const currentProfile = get().profile;
+          if (currentProfile && currentProfile.full_name === 'aline@gmail.com') {
+            console.warn('⚠️ Perfil incorreto da Aline detectado - recarregando perfil correto');
+            await get().loadProfileSafely();
+          }
+        }
+        
+        // ✅ NOVO: Verificação adicional - se o perfil não corresponde ao email da sessão
+        if (localProfile && localProfile.email !== session.user.email) {
+          console.warn('⚠️ Perfil com email incorreto detectado - limpando dados locais');
+          await get().clearAllLocalData();
+          return false;
+        }
+      }
+      
+      console.log('✅ Sessão válida');
+      return true;
+    } catch (error) {
+      console.error('❌ Erro ao verificar sessão:', error);
+      return false;
+    }
+  },
+
+  // ✅ MELHORADO: Função para carregar perfil de forma segura com correção automática
+  loadProfileSafely: async () => {
+    console.log('🔍 Carregando perfil de forma segura...');
+    try {
+      // Limpar estado atual primeiro
+      set({ profile: null });
+      
+      const { user } = get();
+      if (!user) {
+        console.log('🔍 Usuário não encontrado');
+        return;
+      }
+      
+      // ✅ NOVO: Verificação de segurança - garantir que o usuário atual é válido
+      console.log('🔍 Verificando usuário atual:', {
+        id: user.id,
+        email: user.email,
+        emailVerified: user.email_confirmed_at
+      });
+      
+      // ✅ NOVO: Se o email não estiver verificado, pode ser um problema
+      if (!user.email_confirmed_at) {
+        console.warn('⚠️ Email não verificado - pode causar problemas de perfil');
+      }
+      
+      // ✅ MELHORADO: Correção específica para aline@gmail.com com verificação mais robusta
+      if (user.email === 'aline@gmail.com') {
+        console.log('🔍 Aplicando correção específica para aline@gmail.com');
+        
+        // Buscar todos os perfis da Aline
+        const { data: alineProfiles, error: alineError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', 'aline@gmail.com')
+          .order('created_at', { ascending: false });
+        
+        if (alineError) {
+          console.error('❌ Erro ao buscar perfis da Aline:', alineError);
+          return;
+        }
+        
+        if (alineProfiles && alineProfiles.length > 0) {
+          console.log('🔍 Perfis encontrados para Aline:', alineProfiles.length);
+          
+          // ✅ MELHORADO: Priorizar perfil que corresponde ao usuário atual
+          const matchingProfile = alineProfiles.find(p => p.id === user.id);
+          if (matchingProfile) {
+            set({ profile: matchingProfile });
+            console.log('✅ Perfil da Aline carregado (correspondente):', matchingProfile.full_name);
+            return;
+          }
+          
+          // ✅ MELHORADO: Se não encontrar correspondente, usar o mais recente com dados completos
+          const profilesWithData = alineProfiles.filter(p => p.full_name && p.full_name !== 'aline@gmail.com');
+          if (profilesWithData.length > 0) {
+            const bestProfile = profilesWithData[0];
+            set({ profile: bestProfile });
+            console.log('✅ Perfil da Aline carregado (melhor opção):', bestProfile.full_name);
+            return;
+          }
+          
+          // Última opção: usar o mais recente
+          const latestProfile = alineProfiles[0];
+          set({ profile: latestProfile });
+          console.log('✅ Perfil da Aline carregado (mais recente):', latestProfile.full_name);
+          return;
+        }
+      }
+      
+      // ✅ MELHORADO: Verificar se há múltiplos perfis para o mesmo email
+      const { data: allProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', user.email);
+      
+      if (profilesError) {
+        console.error('❌ Erro ao verificar perfis:', profilesError);
+        return;
+      }
+      
+      // Se há múltiplos perfis, usar o mais recente
+      if (allProfiles && allProfiles.length > 1) {
+        console.warn('⚠️ Múltiplos perfis detectados, usando o mais recente');
+        const sortedProfiles = allProfiles.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        const latestProfile = sortedProfiles[0];
+        
+        // Verificar se o perfil mais recente corresponde ao usuário atual
+        if (latestProfile.id === user.id) {
+          set({ profile: latestProfile });
+          console.log('✅ Perfil mais recente carregado:', latestProfile.full_name);
+        } else {
+          console.warn('⚠️ Perfil mais recente não corresponde ao usuário atual');
+          // Limpar dados locais e recarregar
+          await get().clearAllLocalData();
+          return;
+        }
+        return;
+      }
+      
+      // Verificar se é treinador primeiro
+      const { data: coachData } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (coachData) {
+        console.log('🔍 Usuário é treinador - não carregando perfil de atleta');
+        return;
+      }
+      
+      // Carregar perfil de atleta
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.log('🔍 Perfil não encontrado');
+        return;
+      }
+      
+      set({ profile: profileData });
+      console.log('✅ Perfil carregado com sucesso:', profileData.full_name);
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar perfil:', error);
+    }
+  },
+
   loadProfile: async () => {
     console.log('🔍 Carregando perfil para o usuário:', get().user?.id);
     const { user } = get();
@@ -325,6 +593,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     
     try {
+      // ✅ MELHORADO: Verificar se o usuário é treinador primeiro
+      const { data: coachData } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (coachData) {
+        console.log('🔍 Usuário é treinador, não carregando perfil de atleta');
+        set({ profile: null });
+        return;
+      }
+      
+      // ✅ MELHORADO: Carregar perfil apenas se não for treinador
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -602,6 +884,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('Erro ao deletar prova:', error);
       throw error;
+    }
+  },
+
+  // ✅ NOVO: Função para forçar limpeza completa e recarregamento
+  forceCleanReload: async () => {
+    console.log('🧹 FORÇANDO limpeza completa e recarregamento...');
+    try {
+      // 1. Limpar todos os dados locais
+      await get().clearAllLocalData();
+      
+      // 2. Fazer logout do Supabase
+      await supabase.auth.signOut({ scope: 'global' });
+      
+      // 3. Limpar AsyncStorage novamente
+      await AsyncStorage.clear();
+      
+      // 4. Resetar estado
+      set({
+        user: null,
+        profile: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isInitializing: false,
+        fitnessTests: [],
+        races: [],
+      });
+      
+      console.log('✅ Limpeza completa forçada com sucesso');
+    } catch (error) {
+      console.error('❌ Erro na limpeza forçada:', error);
     }
   },
 }));

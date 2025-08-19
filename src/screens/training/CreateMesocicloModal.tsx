@@ -274,6 +274,7 @@ export default function CreateMesocicloModal({
     setLoading(true);
     try {
       console.log('🔄 Salvando mesociclos:', mesocicloRows);
+      console.log('🔄 Modo de edição:', !!mesocicloToEdit);
       console.log('🔄 Total de linhas:', mesocicloRows.length);
       
       // Filtrar apenas linhas que têm dados válidos
@@ -292,13 +293,12 @@ export default function CreateMesocicloModal({
         return;
       }
       
-      // Testar com apenas o primeiro mesociclo válido
-      const firstValidRow = validRows[0];
-      console.log('🔄 Testando com primeiro mesociclo válido:', firstValidRow);
-      
-      try {
-        const mesocicloData: CreateMesocicloData = {
-          macrociclo_id: selectedMacrocicloId,
+      if (mesocicloToEdit) {
+        // Modo de edição - atualizar mesociclo existente
+        console.log('🔄 Modo de edição - atualizando mesociclo:', mesocicloToEdit.id);
+        
+        const firstValidRow = validRows[0];
+        const updateData = {
           name: `Mesociclo ${firstValidRow.number}`,
           start_date: convertDateToISO(firstValidRow.startDate),
           end_date: convertDateToISO(firstValidRow.endDate),
@@ -306,34 +306,61 @@ export default function CreateMesocicloModal({
           intensity_level: 'moderada' as const,
           volume_level: 'moderado' as const
         };
-        console.log('📝 Criando mesociclo de teste:', mesocicloData);
-        const result = await createMesociclo(mesocicloData);
-        console.log('✅ Mesociclo de teste criado:', result);
         
-        // Se o primeiro funcionou, salvar todos os outros
-        for (let i = 1; i < validRows.length; i++) {
-          const row = validRows[i];
+        console.log('📝 Atualizando mesociclo:', updateData);
+        const result = await updateMesociclo(mesocicloToEdit.id, updateData);
+        console.log('✅ Mesociclo atualizado:', result);
+        
+        Alert.alert('Sucesso', 'Mesociclo atualizado com sucesso!');
+        onSuccess();
+        onDismiss();
+      } else {
+        // Modo de criação - criar novos mesociclos
+        console.log('🔄 Modo de criação - criando novos mesociclos');
+        
+        // Testar com apenas o primeiro mesociclo válido
+        const firstValidRow = validRows[0];
+        console.log('🔄 Testando com primeiro mesociclo válido:', firstValidRow);
+        
+        try {
           const mesocicloData: CreateMesocicloData = {
             macrociclo_id: selectedMacrocicloId,
-            name: `Mesociclo ${row.number}`,
-            start_date: convertDateToISO(row.startDate),
-            end_date: convertDateToISO(row.endDate),
-            focus: row.type.trim(),
+            name: `Mesociclo ${firstValidRow.number}`,
+            start_date: convertDateToISO(firstValidRow.startDate),
+            end_date: convertDateToISO(firstValidRow.endDate),
+            focus: firstValidRow.type.trim(),
             intensity_level: 'moderada' as const,
             volume_level: 'moderado' as const
           };
-          console.log(`📝 Criando mesociclo ${i + 1}/${validRows.length}:`, mesocicloData);
+          console.log('📝 Criando mesociclo de teste:', mesocicloData);
           const result = await createMesociclo(mesocicloData);
-          console.log(`✅ Mesociclo ${i + 1} criado:`, result);
+          console.log('✅ Mesociclo de teste criado:', result);
+          
+          // Se o primeiro funcionou, salvar todos os outros
+          for (let i = 1; i < validRows.length; i++) {
+            const row = validRows[i];
+            const mesocicloData: CreateMesocicloData = {
+              macrociclo_id: selectedMacrocicloId,
+              name: `Mesociclo ${row.number}`,
+              start_date: convertDateToISO(row.startDate),
+              end_date: convertDateToISO(row.endDate),
+              focus: row.type.trim(),
+              intensity_level: 'moderada' as const,
+              volume_level: 'moderado' as const
+            };
+            console.log(`📝 Criando mesociclo ${i + 1}/${validRows.length}:`, mesocicloData);
+            const result = await createMesociclo(mesocicloData);
+            console.log(`✅ Mesociclo ${i + 1} criado:`, result);
+          }
+          
+          console.log('✅ Todos os mesociclos salvos com sucesso');
+          Alert.alert('Sucesso', `${validRows.length} mesociclos salvos com sucesso!`);
+          onSuccess();
+          onDismiss();
+        } catch (testError) {
+          console.error('❌ Erro no teste de salvamento:', testError);
+          throw testError;
         }
-        
-        console.log('✅ Todos os mesociclos salvos com sucesso');
-        Alert.alert('Sucesso', `${validRows.length} mesociclos salvos com sucesso!`);
-        onSuccess();
-        onDismiss();
-      } catch (testError) {
-        console.error('❌ Erro no teste de salvamento:', testError);
-        throw testError;
       }
     } catch (error) {
       console.error('❌ Erro ao salvar mesociclos:', error);

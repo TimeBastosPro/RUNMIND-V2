@@ -174,6 +174,7 @@ export default function CyclesOverview({
   };
 
   const handleEditMesociclo = (mesociclo: Mesociclo) => {
+    console.log('🔄 CyclesOverview: Editando mesociclo:', mesociclo.id, mesociclo.name);
     setMesocicloToEdit(mesociclo);
     onOpenMesocicloModal(mesociclo.macrociclo_id);
   };
@@ -181,15 +182,35 @@ export default function CyclesOverview({
   const handleDeleteMesociclo = async (mesociclo: Mesociclo) => {
     console.log('🔄 CyclesOverview: Iniciando exclusão do mesociclo:', mesociclo.id, mesociclo.name);
     
-    try {
-      console.log('🔄 CyclesOverview: Chamando deleteMesociclo...');
-      await deleteMesociclo(mesociclo.id);
-      console.log('✅ CyclesOverview: Mesociclo excluído com sucesso');
-      Alert.alert('Sucesso', 'Mesociclo excluído com sucesso!');
-    } catch (error) {
-      console.error('❌ CyclesOverview: Erro ao excluir mesociclo:', error);
-      Alert.alert('Erro', 'Erro ao excluir mesociclo. Tente novamente.');
-    }
+    Alert.alert(
+      'Confirmar exclusão',
+      `Deseja realmente excluir o mesociclo "${mesociclo.name}"?\n\nEsta ação também excluirá todos os microciclos associados.`,
+      [
+        { 
+          text: 'Cancelar', 
+          style: 'cancel',
+          onPress: () => {
+            console.log('❌ CyclesOverview: Exclusão de mesociclo cancelada pelo usuário');
+          }
+        },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            console.log('🔄 CyclesOverview: Usuário confirmou exclusão de mesociclo, iniciando processo...');
+            try {
+              console.log('🔄 CyclesOverview: Chamando deleteMesociclo...');
+              await deleteMesociclo(mesociclo.id);
+              console.log('✅ CyclesOverview: Mesociclo excluído com sucesso');
+              Alert.alert('Sucesso', 'Mesociclo excluído com sucesso!');
+            } catch (error) {
+              console.error('❌ CyclesOverview: Erro ao excluir mesociclo:', error);
+              Alert.alert('Erro', 'Erro ao excluir mesociclo. Tente novamente.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleDeleteMicrociclo = async (microciclo: Microciclo) => {
@@ -700,6 +721,7 @@ const styles = StyleSheet.create({
   },
   mesocicloInfo: {
     flex: 1,
+    marginRight: 8,
   },
   mesocicloName: {
     fontWeight: 'bold',
@@ -716,6 +738,8 @@ const styles = StyleSheet.create({
   mesocicloActions: {
     alignItems: 'flex-end',
     gap: 8,
+    flexDirection: 'row',
+    minWidth: 80,
   },
   orderChip: {
     backgroundColor: '#E3F2FD',
