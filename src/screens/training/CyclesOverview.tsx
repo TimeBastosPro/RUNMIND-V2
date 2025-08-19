@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Card, Button, Chip, IconButton, useTheme } from 'react-native-paper';
+import { Text, Card, Button, Chip, IconButton, useTheme, Portal } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCyclesStore } from '../../stores/cycles';
 import type { Macrociclo, Mesociclo, Microciclo } from '../../types/database';
@@ -52,7 +52,10 @@ export default function CyclesOverview({
   // Função para alternar o dropdown de tipo de microciclo
   const toggleMicrocicloTypeDropdown = (mesocicloId: string) => {
     console.log('🔄 Toggle dropdown para mesociclo:', mesocicloId);
-    setShowMicrocicloTypeDropdown(showMicrocicloTypeDropdown === mesocicloId ? null : mesocicloId);
+    console.log('🔄 Estado atual do dropdown:', showMicrocicloTypeDropdown);
+    const newState = showMicrocicloTypeDropdown === mesocicloId ? null : mesocicloId;
+    console.log('🔄 Novo estado do dropdown:', newState);
+    setShowMicrocicloTypeDropdown(newState);
   };
 
   // Função para criar microciclo diretamente
@@ -98,6 +101,11 @@ export default function CyclesOverview({
   useEffect(() => {
     // Carregar dados iniciais se necessário
   }, []);
+
+  // Debug do dropdown
+  useEffect(() => {
+    console.log('🔄 Estado do dropdown mudou:', showMicrocicloTypeDropdown);
+  }, [showMicrocicloTypeDropdown]);
 
   // Formatar data para exibição
   const formatDate = (dateString: string): string => {
@@ -412,7 +420,7 @@ export default function CyclesOverview({
                                                   <Text variant="bodyMedium" style={styles.mesocicloName}>
                                                     {microciclosDoMesociclo.length > 0 
                                                       ? microciclosDoMesociclo[0].focus || microciclosDoMesociclo[0].name
-                                                      : mesociclo.name
+                                                      : `Microciclo ${mesociclo.name.split(' ')[1] || '1'}`
                                                     }
                                                   </Text>
                                                   <View style={styles.mesocicloEssentialInfo}>
@@ -428,34 +436,19 @@ export default function CyclesOverview({
                                                   <View style={styles.microciclosSection}>
                                                     <View style={styles.microciclosHeader}>
                                                       <View style={styles.microciclosHeaderActions}>
-                                                        {microciclosDoMesociclo.length === 0 && (
-                                                          <View style={styles.microcicloTypeDropdownContainer}>
-                                                            <Button
-                                                              mode="outlined"
-                                                              onPress={() => toggleMicrocicloTypeDropdown(mesociclo.id)}
-                                                              icon="plus"
-                                                              style={styles.createMicrocicloButton}
-                                                              compact
-                                                            >
-                                                              Escolher Tipo
-                                                            </Button>
-                                                            
-                                                            {showMicrocicloTypeDropdown === mesociclo.id && (
-                                                              <View style={styles.microcicloTypeDropdown}>
-                                                                {MICROCICLO_TYPES.map(type => (
-                                                                  <Button
-                                                                    key={type}
-                                                                    mode="text"
-                                                                    onPress={() => handleCreateMicrociclo(mesociclo.id, type)}
-                                                                    style={styles.microcicloTypeOption}
-                                                                  >
-                                                                    {type}
-                                                                  </Button>
-                                                                ))}
-                                                              </View>
-                                                            )}
-                                                          </View>
-                                                        )}
+                                                                                                                 {microciclosDoMesociclo.length === 0 && (
+                                                           <View style={styles.microcicloTypeDropdownContainer}>
+                                                             <Button
+                                                               mode="outlined"
+                                                               onPress={() => toggleMicrocicloTypeDropdown(mesociclo.id)}
+                                                               icon="plus"
+                                                               style={styles.createMicrocicloButton}
+                                                               compact
+                                                             >
+                                                               Escolher Tipo
+                                                             </Button>
+                                                           </View>
+                                                         )}
                                                         
                                                         {microciclosDoMesociclo.length > 0 && (
                                                           <View style={styles.microcicloActions}>
@@ -525,11 +518,41 @@ export default function CyclesOverview({
               </Card>
             );
           })
-        )}
-      </View>
-    </ScrollView>
-  );
-}
+                 )}
+       </View>
+       
+       {/* Portal para o dropdown de tipo de microciclo */}
+       <Portal>
+         {showMicrocicloTypeDropdown && (
+           <View style={styles.dropdownOverlay} onTouchEnd={() => setShowMicrocicloTypeDropdown(null)}>
+             <View style={styles.microcicloTypeDropdown}>
+               <Text variant="titleMedium" style={styles.dropdownTitle}>
+                 Escolher Tipo de Microciclo
+               </Text>
+               {MICROCICLO_TYPES.map(type => (
+                 <Button
+                   key={type}
+                   mode="text"
+                   onPress={() => handleCreateMicrociclo(showMicrocicloTypeDropdown, type)}
+                   style={styles.microcicloTypeOption}
+                 >
+                   {type}
+                 </Button>
+               ))}
+               <Button
+                 mode="outlined"
+                 onPress={() => setShowMicrocicloTypeDropdown(null)}
+                 style={styles.cancelButton}
+               >
+                 Cancelar
+               </Button>
+             </View>
+           </View>
+         )}
+       </Portal>
+     </ScrollView>
+   );
+ }
 
 const styles = StyleSheet.create({
   container: {
@@ -881,26 +904,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  mesocicloInfo: {
-    flex: 1,
-  },
-  mesocicloName: {
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  mesocicloFocus: {
-    fontStyle: 'italic',
-    marginBottom: 4,
-  },
-  mesocicloDates: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 4,
-  },
-  mesocicloActions: {
-    flexDirection: 'row',
-    gap: 4,
-  },
   mesocicloCharacteristics: {
     flexDirection: 'row',
     gap: 8,
@@ -1007,26 +1010,43 @@ const styles = StyleSheet.create({
    microcicloTypeDropdownContainer: {
      position: 'relative',
    },
-   microcicloTypeDropdown: {
-     position: 'absolute',
-     top: 40, // Adjust as needed for spacing
-     left: 0,
-     backgroundColor: '#FFFFFF',
-     borderRadius: 8,
-     padding: 8,
-     shadowColor: '#000',
-     shadowOffset: { width: 0, height: 2 },
-     shadowOpacity: 0.1,
-     shadowRadius: 4,
-     elevation: 3,
-     zIndex: 100,
-   },
-   microcicloTypeOption: {
-     paddingVertical: 8,
-     paddingHorizontal: 12,
-     borderRadius: 6,
-     marginVertical: 4,
-   },
+         dropdownOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 9999,
+    },
+    microcicloTypeDropdown: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      padding: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 12,
+      elevation: 12,
+      minWidth: 250,
+      maxWidth: 300,
+    },
+        microcicloTypeOption: {
+       paddingVertical: 8,
+       paddingHorizontal: 12,
+       borderRadius: 6,
+       marginVertical: 4,
+     },
+     dropdownTitle: {
+       fontWeight: 'bold',
+       marginBottom: 16,
+       textAlign: 'center',
+     },
+     cancelButton: {
+       marginTop: 16,
+     },
    actionButton: {
      marginHorizontal: 2,
    },
