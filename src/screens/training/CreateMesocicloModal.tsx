@@ -412,10 +412,11 @@ export default function CreateMesocicloModal({
                      style={styles.dropdownOption}
                      onPress={() => {
                        setSelectedType(type);
-                       // Atualizar o tipo apenas dos mesociclos selecionados
+                       // Atualizar o tipo apenas dos mesociclos selecionados e desmarcar os checkboxes
                        const updatedRows = mesocicloRows.map(row => ({
                          ...row,
-                         type: row.isSelected ? type : row.type
+                         type: row.isSelected ? type : row.type,
+                         isSelected: false // Desmarcar todos os checkboxes após aplicar o tipo
                        }));
                        setMesocicloRows(updatedRows);
                        setShowTypeDropdown(false);
