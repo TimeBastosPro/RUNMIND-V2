@@ -5,7 +5,6 @@ import Slider from '@react-native-community/slider';
 import WeeklyReflectionModal, { WeeklyReflectionAnswers } from '../training/WeeklyReflectionModal';
 import { useCheckinStore } from '../../stores/checkin';
 import { useAuthStore } from '../../stores/auth';
-import { generateInsight } from '../../services/gemini';
 
 type DailyCheckinModalProps = {
   visible: boolean;
@@ -111,7 +110,6 @@ export default function DailyCheckinScreen() {
   const loadTodayCheckin = useCheckinStore(s => s.loadTodayCheckin);
   const submitWeeklyReflection = useCheckinStore(s => s.submitWeeklyReflection);
   const saveDailyCheckin = useCheckinStore(s => s.saveDailyCheckin);
-  const updateCheckinWithInsight = useCheckinStore(s => s.updateCheckinWithInsight);
   const recentCheckins = useCheckinStore(s => s.recentCheckins);
   const trainingSessions = useCheckinStore(s => s.trainingSessions);
   const userProfile = useAuthStore(s => s.profile);
@@ -148,28 +146,11 @@ export default function DailyCheckinScreen() {
     };
     try {
       console.log('Enviando check-in:', checkinData);
-      const saved = await saveDailyCheckin(checkinData);
-      // Insight opcional - dados melhorados com perfil personalizado
-      const athleteData = {
-        context_type: 'solo',
-        last_checkin: {
-          sleep_quality: sleepQuality,
-          soreness: soreness,
-          motivation: emotion ?? 3,
-          confidence: confidence,
-          focus: focus,
-          emocional: emotion ?? 3,
-        },
-        planned_training: null,
-        recent_checkins: recentCheckins || [],
-        recent_trainings: trainingSessions || [],
-        user_profile: userProfile, // Perfil personalizado do usuário
-      };
-      const insight = await generateInsight(athleteData);
-      Alert.alert('Insight de Prontidão', insight);
-      await updateCheckinWithInsight(saved.id, insight);
+      await saveDailyCheckin(checkinData);
+      // ✅ CORRIGIDO: Insight é gerado automaticamente no saveDailyCheckin
       setDailyCheckinVisible(false);
       await loadTodayCheckin();
+      Alert.alert('Sucesso', 'Check-in salvo! Um insight personalizado foi gerado automaticamente.');
     } catch (err) {
       Alert.alert('Erro', err instanceof Error ? err.message : 'Erro desconhecido');
       console.error('Erro ao salvar check-in:', err);

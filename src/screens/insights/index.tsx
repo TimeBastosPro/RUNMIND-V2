@@ -15,6 +15,7 @@ export default function InsightsScreen() {
     loadSavedInsights, 
     deleteInsight,
     generateAndSaveInsight,
+    generateWeeklyInsight,
     recentCheckins,
     trainingSessions
   } = useCheckinStore();
@@ -104,6 +105,21 @@ export default function InsightsScreen() {
       Alert.alert('Sucesso', 'Insight gerado com sucesso!');
     } catch {
       Alert.alert('Erro', 'Não foi possível gerar o insight. Tente novamente.');
+    }
+  };
+
+  const handleGenerateWeeklyInsight = async () => {
+    if (isCoachView) return;
+    if (trainingSessions.length === 0) {
+      Alert.alert('Sem dados', 'É necessário ter pelo menos um treino para gerar insights semanais.');
+      return;
+    }
+
+    try {
+      await generateWeeklyInsight();
+      Alert.alert('Sucesso', 'Insight semanal gerado com sucesso!');
+    } catch {
+      Alert.alert('Erro', 'Não foi possível gerar o insight semanal. Tente novamente.');
     }
   };
 
@@ -207,14 +223,25 @@ export default function InsightsScreen() {
         onRefresh={loadSavedInsights}
       />
       {!isCoachView && (
-        <FAB
-          icon="plus"
-          style={styles.fab}
-          onPress={handleGenerateInsight}
-          loading={isSubmitting}
-          disabled={isSubmitting}
-          label="Gerar Insight"
-        />
+        <>
+          <FAB
+            icon="calendar-week"
+            style={[styles.fab, { bottom: 80 }]}
+            onPress={handleGenerateWeeklyInsight}
+            loading={isSubmitting}
+            disabled={isSubmitting}
+            label="Insight Semanal"
+            small
+          />
+          <FAB
+            icon="plus"
+            style={styles.fab}
+            onPress={handleGenerateInsight}
+            loading={isSubmitting}
+            disabled={isSubmitting}
+            label="Gerar Insight"
+          />
+        </>
       )}
     </View>
   );

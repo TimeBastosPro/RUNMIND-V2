@@ -439,10 +439,7 @@ export default function CyclesOverview({
                                               <View style={styles.mesocicloHeader}>
                                                 <View style={styles.mesocicloInfo}>
                                                   <Text variant="bodyMedium" style={styles.mesocicloName}>
-                                                    {microciclosDoMesociclo.length > 0 
-                                                      ? microciclosDoMesociclo[0].focus || microciclosDoMesociclo[0].name
-                                                      : `Microciclo ${mesociclo.name.split(' ')[1] || '1'}`
-                                                    }
+                                                    {mesociclo.name}
                                                   </Text>
                                                   <View style={styles.mesocicloEssentialInfo}>
                                                     <Text variant="bodySmall" style={styles.mesocicloWeeks}>
@@ -457,19 +454,19 @@ export default function CyclesOverview({
                                                   <View style={styles.microciclosSection}>
                                                     <View style={styles.microciclosHeader}>
                                                       <View style={styles.microciclosHeaderActions}>
-                                                                                                                 {microciclosDoMesociclo.length === 0 && (
-                                                           <View style={styles.microcicloTypeDropdownContainer}>
-                                                             <Button
-                                                               mode="outlined"
-                                                               onPress={() => toggleMicrocicloTypeDropdown(mesociclo.id)}
-                                                               icon="plus"
-                                                               style={styles.createMicrocicloButton}
-                                                               compact
-                                                             >
-                                                               Escolher Tipo
-                                                             </Button>
-                                                           </View>
-                                                         )}
+                                                        {microciclosDoMesociclo.length === 0 && (
+                                                          <View style={styles.microcicloTypeDropdownContainer}>
+                                                            <Button
+                                                              mode="outlined"
+                                                              onPress={() => toggleMicrocicloTypeDropdown(mesociclo.id)}
+                                                              icon="plus"
+                                                              style={styles.createMicrocicloButton}
+                                                              compact
+                                                            >
+                                                              Escolher Tipo
+                                                            </Button>
+                                                          </View>
+                                                        )}
                                                         
                                                         {microciclosDoMesociclo.length > 0 && (
                                                           <View style={styles.microcicloActions}>
@@ -740,6 +737,9 @@ const styles = StyleSheet.create({
     gap: 8,
     flexDirection: 'row',
     minWidth: 80,
+    backgroundColor: '#f5f5f5',
+    padding: 4,
+    borderRadius: 4,
   },
   orderChip: {
     backgroundColor: '#E3F2FD',
@@ -855,7 +855,10 @@ const styles = StyleSheet.create({
   },
   smallActionButton: {
     margin: 0,
-    padding: 4,
+    padding: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   mesociclosSection: {
     marginBottom: 12,

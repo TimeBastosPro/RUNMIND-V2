@@ -72,6 +72,8 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
   };
 
   const handleUnlink = async (relationshipId: string) => {
+    console.log('🔍 handleUnlink chamado com relationshipId:', relationshipId);
+    
     Alert.alert(
       'Desvincular Treinador',
       'Tem certeza que deseja se desvincular deste treinador? Você poderá solicitar novamente depois.',
@@ -82,10 +84,19 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🔍 Iniciando processo de desvincular...');
+              console.log('🔍 RelationshipId:', relationshipId);
+              
               await athleteUnlinkRelationship(relationshipId);
+              console.log('🔍 Desvincular concluído com sucesso');
+              
               await loadData();
-            } catch (e) {
-              Alert.alert('Erro', 'Não foi possível desvincular. Tente novamente.');
+              console.log('🔍 Dados recarregados');
+              
+              Alert.alert('Sucesso', 'Treinador desvinculado com sucesso!');
+            } catch (e: any) {
+              console.error('❌ Erro ao desvincular:', e);
+              Alert.alert('Erro', `Não foi possível desvincular: ${e?.message || 'Erro desconhecido'}`);
             }
           }
         }
@@ -95,21 +106,45 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
 
   const handleSearch = async () => {
     try {
+      console.log('🔍 Iniciando busca de treinadores...');
+      console.log('🔍 Parâmetros de busca:', {
+        search: searchQuery.trim() || 'vazio',
+        team_name: teamNameQuery.trim() || 'vazio',
+        is_active: true
+      });
+      
       const results = await searchCoaches({
         is_active: true,
         search: searchQuery.trim() || undefined,
         team_name: teamNameQuery.trim() || undefined,
       });
-      setCoaches(results || []);
       
-      // Se encontrou apenas um treinador, selecionar automaticamente
-      if (results && results.length === 1) {
-        setSelectedCoach(results[0]);
-      } else {
-        setSelectedCoach(null);
+      console.log('🔍 Resultados da busca:', results?.length || 0, 'treinadores encontrados');
+      if (results && results.length > 0) {
+        console.log('🔍 Treinadores encontrados:', results.map(c => ({ id: c.id, name: c.full_name, email: c.email })));
       }
-    } catch (e) {
-      Alert.alert('Erro', 'Não foi possível buscar treinadores.');
+      
+             setCoaches(results || []);
+       
+       // Se encontrou treinadores, selecionar o primeiro automaticamente
+       if (results && results.length > 0) {
+         console.log('🔍 Selecionando o primeiro treinador encontrado');
+         setSelectedCoach(results[0]);
+       } else {
+         setSelectedCoach(null);
+       }
+      
+      // ✅ MELHORADO: Feedback visual para o usuário
+      if (results && results.length === 0) {
+        Alert.alert(
+          'Nenhum treinador encontrado', 
+          'Tente ajustar os critérios de busca ou verificar se há treinadores cadastrados no sistema.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (e: any) {
+      console.error('❌ Erro na busca de treinadores:', e);
+      Alert.alert('Erro', `Não foi possível buscar treinadores: ${e?.message || 'Erro desconhecido'}`);
     }
   };
 
@@ -191,7 +226,33 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
               onChangeText={setTeamNameQuery}
               style={{ marginBottom: 8 }}
             />
-            <Button mode="contained" onPress={handleSearch} loading={isLoading}>Buscar</Button>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button 
+                mode="outlined" 
+                onPress={async () => {
+                  try {
+                    console.log('🔍 Buscando todos os treinadores ativos...');
+                    const results = await searchCoaches({ is_active: true });
+                    setCoaches(results || []);
+                    console.log('🔍 Total de treinadores ativos:', results?.length || 0);
+                  } catch (e: any) {
+                    console.error('❌ Erro ao buscar todos os treinadores:', e);
+                    Alert.alert('Erro', `Não foi possível buscar treinadores: ${e?.message || 'Erro desconhecido'}`);
+                  }
+                }}
+                style={{ flex: 1 }}
+              >
+                Ver Todos
+              </Button>
+              <Button 
+                mode="contained" 
+                onPress={handleSearch} 
+                loading={isLoading}
+                style={{ flex: 1 }}
+              >
+                Buscar
+              </Button>
+            </View>
           </Card.Content>
         </Card>
 
@@ -230,6 +291,8 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
           </Card>
         )}
 
+        
+
         {/* Vínculo atual (somente dados do treinador vinculado) */}
         <Card style={styles.relationshipsCard}>
           <Card.Content>
@@ -237,45 +300,66 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
               Meu Treinador
             </Text>
 
-            {relationships.length === 0 ? (
-              <View style={styles.emptyState}>
-                {selectedCoach ? (
-                  <>
-                    <View style={styles.relationshipHeader}>
-                      <Avatar.Text size={40} label={getInitials(selectedCoach.full_name)} style={styles.relationshipAvatar} />
-                      <View style={styles.relationshipInfo}>
-                        <Text variant="titleMedium" style={styles.relationshipName}>{selectedCoach.full_name}</Text>
-                        <Text variant="bodySmall" style={styles.relationshipEmail}>{selectedCoach.email}</Text>
-                      </View>
-                    </View>
-                    <Text style={{ marginBottom: 8, color: '#666' }}>Selecione uma ou mais modalidades</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                      {['Corrida de Rua','Trail Running','Força','Flexibilidade'].map(m => (
-                        <Chip
-                          key={m}
-                          selected={selectedModalities.includes(m)}
-                          onPress={() => toggleModality(m)}
-                        >
-                          {m}
-                        </Chip>
-                      ))}
-                    </View>
-                    <Button 
-                      mode="contained" 
-                      icon="account-plus" 
-                      onPress={() => handleRequestRelationship(selectedCoach.id)}
-                      style={styles.vincularButton}
-                    >
-                      Vincular
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Text variant="bodyLarge" style={styles.emptyText}>Nenhum treinador vinculado</Text>
-                    <Text variant="bodyMedium" style={styles.emptySubtext}>Busque e selecione um treinador para vincular.</Text>
-                  </>
-                )}
-              </View>
+                         {relationships.length === 0 ? (
+               <View style={styles.emptyState}>
+                 {selectedCoach ? (
+                   <>
+                     {/* Seletor de treinador quando há múltiplos resultados */}
+                     {coaches.length > 1 && (
+                       <>
+                         <Text style={{ marginBottom: 8, color: '#666', fontWeight: 'bold' }}>
+                           Treinadores encontrados ({coaches.length})
+                         </Text>
+                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                           {coaches.map((coach) => (
+                             <Chip
+                               key={coach.id}
+                               selected={selectedCoach?.id === coach.id}
+                               onPress={() => setSelectedCoach(coach)}
+                               style={{ marginBottom: 4 }}
+                             >
+                               {coach.full_name}
+                             </Chip>
+                           ))}
+                         </View>
+                       </>
+                     )}
+                     
+                     <View style={styles.relationshipHeader}>
+                       <Avatar.Text size={40} label={getInitials(selectedCoach.full_name)} style={styles.relationshipAvatar} />
+                       <View style={styles.relationshipInfo}>
+                         <Text variant="titleMedium" style={styles.relationshipName}>{selectedCoach.full_name}</Text>
+                         <Text variant="bodySmall" style={styles.relationshipEmail}>{selectedCoach.email}</Text>
+                       </View>
+                     </View>
+                     <Text style={{ marginBottom: 8, color: '#666' }}>Selecione uma ou mais modalidades</Text>
+                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                       {['Corrida de Rua','Trail Running','Força','Flexibilidade'].map(m => (
+                         <Chip
+                           key={m}
+                           selected={selectedModalities.includes(m)}
+                           onPress={() => toggleModality(m)}
+                         >
+                           {m}
+                         </Chip>
+                       ))}
+                     </View>
+                     <Button 
+                       mode="contained" 
+                       icon="account-plus" 
+                       onPress={() => handleRequestRelationship(selectedCoach.id)}
+                       style={styles.vincularButton}
+                     >
+                       Vincular
+                     </Button>
+                   </>
+                 ) : (
+                   <>
+                     <Text variant="bodyLarge" style={styles.emptyText}>Nenhum treinador vinculado</Text>
+                     <Text variant="bodyMedium" style={styles.emptySubtext}>Busque e selecione um treinador para vincular.</Text>
+                   </>
+                 )}
+               </View>
             ) : (
               relationships.map((relationship) => (
                 <Card key={relationship.id} style={styles.relationshipCard}>
@@ -302,10 +386,16 @@ export default function CoachSearchScreen({ navigation }: CoachSearchScreenProps
                       <Button
                         mode="outlined"
                         icon="link-off"
-                        onPress={() => handleUnlink(relationship.id)}
+                        onPress={() => {
+                          console.log('🔍 Botão Desvincular clicado para relationship:', relationship);
+                          console.log('🔍 Relationship ID:', relationship.id);
+                          handleUnlink(relationship.id);
+                        }}
                         style={styles.desvincularButton}
+                        disabled={isLoading}
+                        loading={isLoading}
                       >
-                        Desvincular
+                        {isLoading ? 'Desvinculando...' : 'Desvincular'}
                       </Button>
                     </View>
                   </Card.Content>

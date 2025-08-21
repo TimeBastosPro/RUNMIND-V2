@@ -146,7 +146,20 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                         {training.status === 'completed' ? (
                             <>
                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{training.distance_km ? `${training.distance_km} km` : `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min`}</Text></View>
-                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Altimetria: </Text><Text style={styles.cardText}>+{training.elevation_gain_meters || '0'} / -{('elevation_loss_meters' in training && training.elevation_loss_meters != null) ? training.elevation_loss_meters : 0}</Text></View>
+                                                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>Altimetria: </Text><Text style={styles.cardText}>{
+                                   (() => {
+                                     const gain = training.elevation_gain_meters || 0;
+                                     const loss = training.elevation_loss_meters || 0;
+                                     
+                                     if (gain !== null && gain !== undefined || loss !== null && loss !== undefined) {
+                                       const gainText = gain > 0 ? `+${gain}m` : gain === 0 ? '+0m' : '';
+                                       const lossText = loss > 0 ? `-${loss}m` : loss === 0 ? '-0m' : '';
+                                       const separator = (gain > 0 || gain === 0) && (loss > 0 || loss === 0) ? ' / ' : '';
+                                       return `${gainText}${separator}${lossText}`;
+                                     }
+                                     return '-';
+                                   })()
+                                 }</Text></View>
                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>FC Média: </Text><Text style={styles.cardText}>{training.avg_heart_rate || '-'}</Text></View>
                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>PSE: </Text><Text style={styles.cardText}>{training.perceived_effort || '-'}</Text></View>
                             </>

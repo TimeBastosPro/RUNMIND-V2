@@ -111,6 +111,10 @@ export default function HomeScreen() {
   const [athleteHeaderName, setAthleteHeaderName] = useState<string | null>(athleteNameFromStore || null);
 
   useEffect(() => {
+    // Garantir que o perfil seja carregado
+    const { loadProfileSafely } = useAuthStore.getState();
+    loadProfileSafely();
+    
     loadTodayCheckin();
     loadRecentCheckins();
     fetchTrainingSessions();
@@ -250,6 +254,22 @@ export default function HomeScreen() {
     return percursoMap[percurso] || percurso;
   };
 
+  // Função utilitária para formatar altimetria com ganho e perda
+  const formatElevation = (training: any) => {
+    // Verificar campos de altimetria
+    const gain = training.elevation_gain_meters || 0;
+    const loss = training.elevation_loss_meters || 0;
+    
+    // Se há dados de altimetria (mesmo que sejam 0), exibir
+    if (gain !== null && gain !== undefined || loss !== null && loss !== undefined) {
+      const gainText = gain > 0 ? `+${gain}m` : gain === 0 ? '+0m' : '';
+      const lossText = loss > 0 ? `-${loss}m` : loss === 0 ? '-0m' : '';
+      const separator = (gain > 0 || gain === 0) && (loss > 0 || loss === 0) ? ' / ' : '';
+      return `${gainText}${separator}${lossText}`;
+    }
+    return null;
+  };
+
   const readinessPercent = todayReadinessScore !== null ? Math.round((1 - (todayReadinessScore / 28)) * 100) : null;
   
   // Buscar treino para hoje e próxima prova
@@ -284,6 +304,11 @@ export default function HomeScreen() {
   });
   
   const lastCompletedTraining = sortedCompletedTrainings[0];
+  
+  // Debug: Log do objeto para identificar a propriedade problemática
+  if (lastCompletedTraining) {
+    console.log('DEBUG - lastCompletedTraining object:', JSON.stringify(lastCompletedTraining, null, 2));
+  }
 
   // ✅ OTIMIZADO: Buscar a próxima prova (a mais próxima)
   
@@ -314,7 +339,7 @@ export default function HomeScreen() {
             <Text style={styles.userName}>
               {(isCoachView && athleteHeaderName)
                 ? athleteHeaderName
-                : (profile?.full_name || user?.email || 'Atleta')}
+                : (profile?.full_name || 'Atleta')}
               ! 👋
             </Text>
           </View>
@@ -322,7 +347,7 @@ export default function HomeScreen() {
             size={50} 
             label={((isCoachView && athleteHeaderName)
               ? athleteHeaderName
-              : (profile?.full_name || user?.email || 'A')).charAt(0).toUpperCase()} 
+              : (profile?.full_name || 'A')).charAt(0).toUpperCase()} 
             style={styles.avatar}
           />
         </View>
@@ -442,6 +467,18 @@ export default function HomeScreen() {
                 <Text style={styles.trainingDetails}>🛣️ Percurso: {getPercursoText(nextTraining.percurso)}</Text>
               )}
               
+              {(() => {
+                const elevationText = formatElevation(nextTraining);
+                if (elevationText) {
+                  return (
+                    <Text style={styles.trainingDetails}>
+                      ⛰️ Altimetria: {elevationText}
+                    </Text>
+                  );
+                }
+                return null;
+              })()}
+              
               {nextTraining.observacoes && (
                 <Text style={styles.trainingDetails}>📝 Observações: {nextTraining.observacoes}</Text>
               )}
@@ -473,35 +510,57 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.trainingInfo}>
-              <Text style={styles.trainingType}>{lastCompletedTraining.modalidade ? lastCompletedTraining.modalidade.charAt(0).toUpperCase() + lastCompletedTraining.modalidade.slice(1) : 'Treino'}</Text>
-              
-              {lastCompletedTraining.treino_tipo && (
-                <Text style={styles.trainingDetails}>🎯 Tipo: {lastCompletedTraining.treino_tipo.charAt(0).toUpperCase() + lastCompletedTraining.treino_tipo.slice(1)}</Text>
-              )}
-              
-              {lastCompletedTraining.distance_km && (
-                <Text style={styles.trainingDetails}>📏 Distância: {lastCompletedTraining.distance_km}km</Text>
-              )}
-              
-              {lastCompletedTraining.duration_minutes && (
-                <Text style={styles.trainingDetails}>⏱️ Duração: {lastCompletedTraining.duration_minutes}min</Text>
-              )}
-              
-              {lastCompletedTraining.elevation_gain_meters && (
-                <Text style={styles.trainingDetails}>⛰️ Altimetria: +{lastCompletedTraining.elevation_gain_meters}m</Text>
-              )}
-              
-              {lastCompletedTraining.avg_heart_rate && (
-                <Text style={styles.trainingDetails}>💓 FC Média: {lastCompletedTraining.avg_heart_rate}bpm</Text>
-              )}
-              
-              {lastCompletedTraining.perceived_effort && (
-                <Text style={styles.trainingDetails}>💪 PSE: {lastCompletedTraining.perceived_effort}/10</Text>
-              )}
-              
-              <Text style={styles.trainingDate}>
-                📅 {format(new Date(lastCompletedTraining.training_date + 'T00:00:00'), "dd 'de' MMMM", { locale: ptBR })}
-              </Text>
+              <Text style={styles.trainingType}>Treino</Text>
+                             {(() => {
+                 const details = [];
+                 if (lastCompletedTraining.treino_tipo && lastCompletedTraining.treino_tipo.trim() !== '') {
+                   details.push(
+                     <Text key="tipo" style={styles.trainingDetails}>
+                       🎯 Tipo: {lastCompletedTraining.treino_tipo.charAt(0).toUpperCase() + lastCompletedTraining.treino_tipo.slice(1)}
+                     </Text>
+                   );
+                 }
+                 if (lastCompletedTraining.distance_km && lastCompletedTraining.distance_km > 0) {
+                   details.push(
+                     <Text key="distancia" style={styles.trainingDetails}>
+                       📏 Distância: {lastCompletedTraining.distance_km}km
+                     </Text>
+                   );
+                 }
+                 if (lastCompletedTraining.duration_minutes && lastCompletedTraining.duration_minutes > 0) {
+                   details.push(
+                     <Text key="duracao" style={styles.trainingDetails}>
+                       ⏱️ Duração: {lastCompletedTraining.duration_minutes}min
+                     </Text>
+                   );
+                 }
+                 const elevationText = formatElevation(lastCompletedTraining);
+                 if (elevationText) {
+                   details.push(
+                     <Text key="altimetria" style={styles.trainingDetails}>
+                       ⛰️ Altimetria: {elevationText}
+                     </Text>
+                   );
+                 }
+                 if (lastCompletedTraining.avg_heart_rate && lastCompletedTraining.avg_heart_rate > 0) {
+                   details.push(
+                     <Text key="fc" style={styles.trainingDetails}>
+                       💓 FC Média: {lastCompletedTraining.avg_heart_rate}bpm
+                     </Text>
+                   );
+                 }
+                 if (lastCompletedTraining.perceived_effort && lastCompletedTraining.perceived_effort > 0) {
+                   details.push(
+                     <Text key="pse" style={styles.trainingDetails}>
+                       💪 PSE: {lastCompletedTraining.perceived_effort}/10
+                     </Text>
+                   );
+                 }
+                 return details;
+               })()}
+                             <Text style={styles.trainingDate}>
+                 📅 {format(new Date(lastCompletedTraining.training_date + 'T00:00:00'), "dd 'de' MMMM", { locale: ptBR })}
+               </Text>
             </View>
 
             <Button 

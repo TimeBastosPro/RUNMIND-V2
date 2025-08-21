@@ -324,7 +324,64 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error(`Você já possui um treinador ativo para ${normalizedModality}. Desvincule antes de solicitar outro.`);
       }
 
-      // 2. Verificar se já existe um relacionamento PENDENTE com este treinador na mesma modalidade
+      // 2. Verificar se existe um relacionamento INATIVO com este treinador na mesma modalidade
+      const { data: inactiveRel, error: inactiveErr } = await supabase
+        .from('athlete_coach_relationships')
+        .select('id, coach_id, status, modality')
+        .eq('athlete_id', user.id)
+        .eq('coach_id', coachId)
+        .eq('status', 'inactive')
+        .eq('modality', normalizedModality)
+        .limit(1);
+      if (inactiveErr) throw inactiveErr;
+      
+      // Se existe um relacionamento inativo, reativá-lo em vez de criar um novo
+      if (inactiveRel && inactiveRel.length > 0) {
+        console.log('🔍 Reativando relacionamento inativo existente:', inactiveRel[0]);
+        
+        const { data: reactivated, error: reactivateErr } = await supabase
+          .from('athlete_coach_relationships')
+          .update({ 
+            status: 'pending',
+            updated_at: new Date().toISOString(),
+            notes: notes || null
+          })
+          .eq('id', inactiveRel[0].id)
+          .select('*');
+          
+        if (reactivateErr) throw reactivateErr;
+        
+        await get().loadAthleteRelationships();
+        set({ isLoading: false });
+        return reactivated[0];
+      }
+
+      // 3. Verificar se existe um relacionamento INATIVO com este treinador em QUALQUER modalidade
+      // Se existir, excluí-lo para evitar conflitos de constraint
+      const { data: anyInactiveRel, error: anyInactiveErr } = await supabase
+        .from('athlete_coach_relationships')
+        .select('id, coach_id, status, modality')
+        .eq('athlete_id', user.id)
+        .eq('coach_id', coachId)
+        .eq('status', 'inactive');
+      if (anyInactiveErr) throw anyInactiveErr;
+      
+      if (anyInactiveRel && anyInactiveRel.length > 0) {
+        console.log('🔍 Encontrados relacionamentos inativos com este treinador:', anyInactiveRel);
+        
+        // Excluir todos os relacionamentos inativos com este treinador
+        const inactiveIds = anyInactiveRel.map(r => r.id);
+        const { error: deleteErr } = await supabase
+          .from('athlete_coach_relationships')
+          .delete()
+          .in('id', inactiveIds);
+          
+        if (deleteErr) throw deleteErr;
+        
+        console.log('🔍 Relacionamentos inativos excluídos:', inactiveIds);
+      }
+
+      // 4. Verificar se já existe um relacionamento PENDENTE com este treinador na mesma modalidade
       const { data: existingPendingRelationship, error: checkError } = await supabase
         .from('athlete_coach_relationships')
         .select('*')
@@ -344,7 +401,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com este treinador`);
       }
 
-      // 3. Verificar se já existe um relacionamento ATIVO com este treinador na mesma modalidade
+      // 5. Verificar se já existe um relacionamento ATIVO com este treinador na mesma modalidade
       const { data: existingActiveRelationship, error: activeCheckError } = await supabase
         .from('athlete_coach_relationships')
         .select('*')
@@ -773,11 +830,15 @@ export const useCoachStore = create<CoachState>((set, get) => ({
   },
 
   athleteUnlinkRelationship: async (relationshipId: string) => {
+    console.log('🔍 athleteUnlinkRelationship iniciado com relationshipId:', relationshipId);
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
+      
+      console.log('🔍 Usuário autenticado:', user.id);
 
+      console.log('🔍 Executando update no banco...');
       const { data, error } = await supabase
         .from('athlete_coach_relationships')
         .update({ status: 'inactive', updated_at: new Date().toISOString() })
@@ -785,13 +846,26 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         .eq('athlete_id', user.id)
         .select('*');
 
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error('Nenhum registro atualizado');
+      if (error) {
+        console.error('❌ Erro do Supabase:', error);
+        throw error;
+      }
+      
+      console.log('🔍 Resultado do update:', data);
+      
+      if (!data || data.length === 0) {
+        console.error('❌ Nenhum registro foi atualizado');
+        throw new Error('Nenhum registro atualizado');
+      }
 
+      console.log('🔍 Recarregando relacionamentos...');
       await get().loadAthleteRelationships();
       set({ isLoading: false });
+      
+      console.log('🔍 athleteUnlinkRelationship concluído com sucesso');
       return data[0];
     } catch (error: any) {
+      console.error('❌ Erro em athleteUnlinkRelationship:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
@@ -932,64 +1006,101 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     try {
       console.log('🔍 Iniciando busca de treinadores com filtros:', filters);
       
+      // ✅ MELHORADO: Verificar se há treinadores cadastrados primeiro
+      const { data: allCoaches, error: allCoachesError } = await supabase
+        .from('coaches')
+        .select('id, full_name, email, is_active')
+        .order('full_name');
+      
+      if (allCoachesError) {
+        console.error('❌ Erro ao buscar todos os treinadores:', allCoachesError);
+        throw allCoachesError;
+      }
+      
+      console.log('🔍 Total de treinadores cadastrados:', allCoaches?.length || 0);
+      if (allCoaches && allCoaches.length > 0) {
+        console.log('🔍 Treinadores disponíveis:', allCoaches.map(c => ({ id: c.id, name: c.full_name, email: c.email, active: c.is_active })));
+      }
+      
       let query = supabase
         .from('coaches')
         .select('*');
 
+      // ✅ MELHORADO: Aplicar filtros de forma mais robusta
       if (filters?.is_active !== undefined) {
         query = query.eq('is_active', filters.is_active);
         console.log('🔍 Aplicando filtro is_active:', filters.is_active);
       }
+      
       if (filters?.experience_years_min) {
         query = query.gte('experience_years', filters.experience_years_min);
         console.log('🔍 Aplicando filtro experience_years_min:', filters.experience_years_min);
       }
+      
       if (filters?.specialties && filters.specialties.length > 0) {
         query = query.overlaps('specialties', filters.specialties);
         console.log('🔍 Aplicando filtro specialties:', filters.specialties);
       }
       
-      // Busca por texto (nome)
+      // ✅ MELHORADO: Busca por texto mais robusta
       if (filters?.search && filters.search.trim()) {
         const searchTerm = filters.search.trim();
-        query = query.ilike('full_name', `%${searchTerm}%`);
         console.log('🔍 Aplicando busca por texto:', searchTerm);
+        
+        // Buscar por nome ou email
+        query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
       }
 
-      // Filtro por nome de equipe (consultar teams primeiro e usar coach_id)
+      // ✅ MELHORADO: Filtro por nome de equipe
       if (filters?.team_name && filters.team_name.trim()) {
         const teamNameTerm = filters.team_name.trim();
         console.log('🔍 Buscando coach_ids por team_name:', teamNameTerm);
+        
         const { data: teamsByName, error: teamsError } = await supabase
           .from('teams')
           .select('coach_id')
           .ilike('name', `%${teamNameTerm}%`);
-        if (teamsError) throw teamsError;
+          
+        if (teamsError) {
+          console.error('❌ Erro ao buscar equipes:', teamsError);
+          throw teamsError;
+        }
+        
         const coachIds = Array.from(new Set((teamsByName || []).map(t => t.coach_id).filter(Boolean)));
+        console.log('🔍 Coach IDs encontrados por equipe:', coachIds);
+        
         if (coachIds.length === 0) {
+          console.log('🔍 Nenhum coach encontrado para a equipe, retornando lista vazia');
           set({ isLoading: false });
           return [];
         }
         query = query.in('id', coachIds as any);
       }
 
-      console.log('🔍 Executando query...');
+      console.log('🔍 Executando query final...');
       const { data, error } = await query.order('full_name');
 
       if (error) {
-        console.error('🔍 Erro na busca:', error);
+        console.error('❌ Erro na busca final:', error);
         throw error;
       }
 
-      console.log('🔍 Treinadores encontrados:', data?.length || 0);
+      console.log('🔍 Treinadores encontrados na busca:', data?.length || 0);
       if (data && data.length > 0) {
-        console.log('🔍 Primeiros treinadores:', data.slice(0, 3).map(c => ({ id: c.id, name: c.full_name, email: c.email })));
+        console.log('🔍 Primeiros treinadores encontrados:', data.slice(0, 3).map(c => ({ 
+          id: c.id, 
+          name: c.full_name, 
+          email: c.email, 
+          active: c.is_active 
+        })));
+      } else {
+        console.log('🔍 Nenhum treinador encontrado com os filtros aplicados');
       }
 
       set({ isLoading: false });
       return data || [];
     } catch (error: any) {
-      console.error('🔍 Erro na busca de treinadores:', error);
+      console.error('❌ Erro na busca de treinadores:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
