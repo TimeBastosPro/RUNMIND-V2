@@ -114,18 +114,33 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      if (!user) {
+        console.log('⚠️ Usuário não autenticado para loadCoachProfile');
+        set({ currentCoach: null, isLoading: false });
+        return;
+      }
 
+      console.log('🔍 Verificando se usuário é coach...');
       const { data, error } = await supabase
         .from('coaches')
         .select('*')
         .eq('user_id', user.id)
         .single();
 
-      if (error || !data) {
+      if (error) {
+        console.log('⚠️ Erro ao carregar coach profile:', error.message, error.code);
+        
+        // Se for erro 406 (Not Acceptable), pode ser problema de RLS ou estrutura da tabela
+        if (error.code === '406') {
+          console.log('⚠️ Erro 406 - Possível problema de RLS ou estrutura da tabela coaches');
+          set({ currentCoach: null, isLoading: false });
+          return;
+        }
+        
         // Coach ausente: se o user for do tipo coach, criar registro mínimo idempotente
         const userType = (user as any)?.user_metadata?.user_type;
         if (userType === 'coach') {
+          console.log('🛠️ Tentando criar registro de coach...');
           const fullName = (user as any)?.user_metadata?.full_name || (user.email ?? 'Coach');
           const email = user.email ?? '';
           // upsert idempotente baseado em user_id
@@ -137,8 +152,16 @@ export const useCoachStore = create<CoachState>((set, get) => ({
           if (!insertError && inserted) {
             set({ currentCoach: inserted, isLoading: false });
             return;
+          } else if (insertError) {
+            console.log('⚠️ Erro ao criar coach:', insertError.message);
           }
         }
+        set({ currentCoach: null, isLoading: false });
+        return;
+      }
+      
+      if (!data) {
+        console.log('ℹ️ Nenhum coach encontrado para o usuário');
         set({ currentCoach: null, isLoading: false });
         return;
       }
@@ -1150,4 +1173,4 @@ export const useCoachStore = create<CoachState>((set, get) => ({
     isLoading: false,
     error: null
   })
-})); 
+}));

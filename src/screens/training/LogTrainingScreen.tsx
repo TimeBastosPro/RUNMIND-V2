@@ -51,7 +51,7 @@ export default function LogTrainingScreen() {
         title,
         training_type: trainingType,
         distance_km: distance ? Number(distance) : null,
-        duration_minutes: duration ? String(duration) : undefined,
+        duration_minutes: duration ? Number(duration) : undefined,
         elevation_gain_meters: elevation ? Number(elevation) : null,
         avg_heart_rate: avgHeartRate ? Number(avgHeartRate) : null,
         perceived_effort: effort,

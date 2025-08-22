@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { Text, Card, Button, Avatar, Chip, Portal, Modal, TextInput, HelperText, IconButton } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, Alert, RefreshControl } from 'react-native';
+import { Text, Card, Button, TextInput, FAB, Chip, IconButton, Portal, Modal, Avatar } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCoachStore } from '../../stores/coach';
 import { useAuthStore } from '../../stores/auth';
+import { supabase } from '../../services/supabase';
 
 interface CoachTeamsScreenProps {
   navigation: any;
@@ -10,6 +12,7 @@ interface CoachTeamsScreenProps {
 
 export default function CoachTeamsScreen({ navigation }: CoachTeamsScreenProps) {
   const { 
+    currentCoach,
     loadTeams,
     updateTeam,
     deleteTeam,
@@ -60,10 +63,14 @@ export default function CoachTeamsScreen({ navigation }: CoachTeamsScreenProps) 
     
     try {
       // Usar a função createTeam do store
-      await useCoachStore.getState().createTeam({
-        name: teamName.trim(),
-        description: teamDescription.trim() || undefined
-      });
+      const { error: teamError } = await supabase
+        .from('teams')
+        .insert([{
+          name: teamName,
+          description: teamDescription,
+          is_active: true,
+          coach_id: currentCoach?.id,
+        }]);
       
       setShowCreateModal(false);
       setTeamName('');

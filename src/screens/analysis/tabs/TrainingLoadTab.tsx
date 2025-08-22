@@ -168,44 +168,34 @@ export default function TrainingLoadTab() {
         </Card.Content>
       </Card>
 
-      {/* Card de Métricas Detalhadas */}
+      {/* Card de Métricas Detalhadas ATUALIZADO */}
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Métricas Detalhadas</Text>
+          <Text style={styles.sectionTitle}>Métricas de Performance</Text>
           
           <View style={styles.metricsGrid}>
             <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Carga Aguda (7 dias)</Text>
+              <Text style={styles.metricLabel}>Fitness (CTL)</Text>
               <Text style={styles.metricValue}>
-                {Math.round(workloadMetrics.acuteLoad)}
+                {workloadMetrics.fitness_ctl.toFixed(0)}
               </Text>
-              <Text style={styles.metricUnit}>unidades</Text>
+              <Text style={styles.metricUnit}>condicionamento</Text>
             </View>
             
             <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Carga Crônica (28 dias)</Text>
+              <Text style={styles.metricLabel}>Fadiga (ATL)</Text>
               <Text style={styles.metricValue}>
-                {Math.round(workloadMetrics.chronicLoad)}
+                {workloadMetrics.fatigue_atl.toFixed(0)}
               </Text>
-              <Text style={styles.metricUnit}>unidades</Text>
+              <Text style={styles.metricUnit}>cansaço acumulado</Text>
             </View>
             
             <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Tendência</Text>
-              <View style={styles.trendContainer}>
-                <MaterialCommunityIcons 
-                  name={getTrendIcon(workloadMetrics.trend) as any}
-                  size={isMobile ? 16 : 20}
-                  color={getTrendColor(workloadMetrics.trend)}
-                />
-                <Text style={[
-                  styles.trendText,
-                  { color: getTrendColor(workloadMetrics.trend) }
-                ]}>
-                  {workloadMetrics.trend === 'increasing' ? 'Aumentando' :
-                   workloadMetrics.trend === 'decreasing' ? 'Diminuindo' : 'Estável'}
-                </Text>
-              </View>
+              <Text style={styles.metricLabel}>Forma (TSB)</Text>
+              <Text style={[styles.metricValue, { color: workloadMetrics.form_tsb > 0 ? '#4CAF50' : '#D32F2F' }]}>
+                {workloadMetrics.form_tsb > 0 ? `+${workloadMetrics.form_tsb.toFixed(0)}` : workloadMetrics.form_tsb.toFixed(0)}
+              </Text>
+              <Text style={styles.metricUnit}>prontidão</Text>
             </View>
           </View>
         </Card.Content>
@@ -267,6 +257,8 @@ export default function TrainingLoadTab() {
             data={weeklyChartData}
             width={screenWidth - (isMobile ? 40 : 60)}
             height={isMobile ? 180 : 220}
+            yAxisLabel=""
+            yAxisSuffix=""
             chartConfig={{
               backgroundColor: '#ffffff',
               backgroundGradientFrom: '#ffffff',
@@ -283,10 +275,37 @@ export default function TrainingLoadTab() {
         </Card.Content>
       </Card>
 
-      {/* Informações sobre ACWR */}
+      {/* Informações sobre as Métricas */}
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Sobre o ACWR</Text>
+          <Text style={styles.sectionTitle}>Sobre as Métricas</Text>
+          
+          <View style={styles.metricsInfoContainer}>
+            <View style={styles.metricInfoItem}>
+              <Text style={[styles.metricInfoTitle, { color: '#2196F3' }]}>Fitness (CTL)</Text>
+              <Text style={styles.metricInfoText}>
+                Chronic Training Load - Condicionamento de longo prazo (42 dias). 
+                Representa sua capacidade aeróbica e resistência base.
+              </Text>
+            </View>
+            
+            <View style={styles.metricInfoItem}>
+              <Text style={[styles.metricInfoTitle, { color: '#FF5722' }]}>Fadiga (ATL)</Text>
+              <Text style={styles.metricInfoText}>
+                Acute Training Load - Fadiga recente (7 dias). 
+                Indica o estresse agudo do treinamento atual.
+              </Text>
+            </View>
+            
+            <View style={styles.metricInfoItem}>
+              <Text style={[styles.metricInfoTitle, { color: '#4CAF50' }]}>Forma (TSB)</Text>
+              <Text style={styles.metricInfoText}>
+                Training Stress Balance - Prontidão para performance. 
+                Positivo = descansado, Negativo = fadigado.
+              </Text>
+            </View>
+          </View>
+          
           <Text style={styles.infoText}>
             O ACWR (Acute:Chronic Workload Ratio) é um indicador cientificamente validado 
             para prever o risco de lesões. Ele compara sua carga de treino dos últimos 7 dias 
@@ -457,6 +476,25 @@ const styles = StyleSheet.create({
   acwrInfoLabel: {
     fontSize: isMobile ? 10 : 12,
     color: '#666',
+  },
+  metricsInfoContainer: {
+    marginBottom: 16,
+  },
+  metricInfoItem: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+  },
+  metricInfoTitle: {
+    fontSize: isMobile ? 14 : 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  metricInfoText: {
+    fontSize: isMobile ? 12 : 14,
+    color: '#666',
+    lineHeight: isMobile ? 16 : 20,
   },
   noDataContainer: {
     alignItems: 'center',

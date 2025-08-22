@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
-import { Card, Text, ActivityIndicator, IconButton, Chip, FAB, Button } from 'react-native-paper';
+import { Card, Text, ActivityIndicator, IconButton, Chip, Button } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 import type { Insight } from '../../types/database';
 import { useViewStore } from '../../stores/view';
@@ -11,13 +11,8 @@ export default function InsightsScreen() {
   const { 
     savedInsights, 
     isLoading, 
-    isSubmitting,
     loadSavedInsights, 
-    deleteInsight,
-    generateAndSaveInsight,
-    generateWeeklyInsight,
-    recentCheckins,
-    trainingSessions
+    deleteInsight
   } = useCheckinStore();
   const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
   const [athleteName, setAthleteName] = React.useState<string | null>(athleteNameFromStore || null);
@@ -83,45 +78,7 @@ export default function InsightsScreen() {
     );
   };
 
-  const handleGenerateInsight = async () => {
-    if (isCoachView) return;
-    if (recentCheckins.length === 0) {
-      Alert.alert('Sem dados', 'É necessário ter pelo menos um check-in para gerar insights.');
-      return;
-    }
 
-    try {
-      const latestCheckin = recentCheckins[0];
-      const latestTraining = trainingSessions.find(t => t.status === 'completed');
-      
-      await generateAndSaveInsight({
-        context_type: 'solo',
-        last_checkin: latestCheckin,
-        planned_training: latestTraining,
-        recent_checkins: recentCheckins.slice(0, 7), // últimos 7 dias
-        recent_trainings: trainingSessions.filter(t => t.status === 'completed').slice(0, 5) // últimos 5 treinos
-      });
-      
-      Alert.alert('Sucesso', 'Insight gerado com sucesso!');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível gerar o insight. Tente novamente.');
-    }
-  };
-
-  const handleGenerateWeeklyInsight = async () => {
-    if (isCoachView) return;
-    if (trainingSessions.length === 0) {
-      Alert.alert('Sem dados', 'É necessário ter pelo menos um treino para gerar insights semanais.');
-      return;
-    }
-
-    try {
-      await generateWeeklyInsight();
-      Alert.alert('Sucesso', 'Insight semanal gerado com sucesso!');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível gerar o insight semanal. Tente novamente.');
-    }
-  };
 
   const getInsightTypeColor = (type: string) => {
     switch (type) {
@@ -222,27 +179,7 @@ export default function InsightsScreen() {
         refreshing={isLoading}
         onRefresh={loadSavedInsights}
       />
-      {!isCoachView && (
-        <>
-          <FAB
-            icon="calendar-week"
-            style={[styles.fab, { bottom: 80 }]}
-            onPress={handleGenerateWeeklyInsight}
-            loading={isSubmitting}
-            disabled={isSubmitting}
-            label="Insight Semanal"
-            small
-          />
-          <FAB
-            icon="plus"
-            style={styles.fab}
-            onPress={handleGenerateInsight}
-            loading={isSubmitting}
-            disabled={isSubmitting}
-            label="Gerar Insight"
-          />
-        </>
-      )}
+
     </View>
   );
 }
@@ -339,10 +276,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-  },
+
 }); 

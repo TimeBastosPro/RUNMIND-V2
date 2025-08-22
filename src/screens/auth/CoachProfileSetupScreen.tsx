@@ -103,6 +103,7 @@ export default function CoachProfileSetupScreen({ navigation }: CoachProfileSetu
       const result = await createCoachProfile({
         ...data,
         email: user?.email || '',
+        is_active: true,
       });
       
       console.log('✅ Perfil de treinador criado com sucesso:', result);

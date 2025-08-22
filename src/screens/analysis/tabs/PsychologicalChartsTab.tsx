@@ -94,8 +94,8 @@ export default function PsychologicalChartsTab() {
         let numericValue = 0;
         if (field === 'duration_minutes') {
           // Converter duração para minutos
-          const hours = session.duration_hours ? parseInt(session.duration_hours) : 0;
-          const minutes = session.duration_minutes ? parseInt(session.duration_minutes) : 0;
+          const hours = session.duracao_horas ? parseInt(session.duracao_horas) : 0;
+          const minutes = session.duracao_minutos ? parseInt(session.duracao_minutos) : 0;
           numericValue = hours * 60 + minutes;
         } else {
           numericValue = typeof value === 'number' ? value : parseFloat(value as string) || 0;

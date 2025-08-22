@@ -279,7 +279,7 @@ Responda apenas com o texto do insight, sem introduções.`;
 function buildWeeklySummaryPrompt(data: InsightData): string {
   const { weekly_summary, recent_trainings, user_profile } = data;
   
-  const summary = weekly_summary || {};
+  const summary = weekly_summary as Record<string, any> || {};
   const profile = user_profile as Record<string, unknown> || {};
   
   const totalTrainings = summary.total_trainings || 0;

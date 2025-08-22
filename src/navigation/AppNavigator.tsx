@@ -180,7 +180,12 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
       if (isLogin) {
         await signIn(data.email, data.password);
         // Após login, carregar perfil de treinador e seguir para área correta
-        await loadCoachProfile();
+        try {
+          await loadCoachProfile();
+        } catch (error) {
+          console.log('⚠️ Erro ao carregar perfil de coach após login:', error);
+          // Não falhar o login por erro no carregamento do coach
+        }
       } else {
         // ✅ CORRIGIDO: Validar se fullName está presente para signup
         if (!data.fullName || data.fullName.trim() === '') {
@@ -191,7 +196,12 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
         await signUp(data.email, data.password, data.fullName, { isCoach: isCoachSignUp });
         if (isCoachSignUp) {
           // Cadastro de treinador: carregar perfil e enviar imediatamente para CoachMain
-          await loadCoachProfile();
+          try {
+            await loadCoachProfile();
+          } catch (error) {
+            console.log('⚠️ Erro ao carregar perfil de coach após signup:', error);
+            // Não falhar o signup por erro no carregamento do coach
+          }
           try {
             // @ts-ignore
             (props as any)?.navigation?.reset?.({ index: 0, routes: [{ name: 'CoachMain' }] });

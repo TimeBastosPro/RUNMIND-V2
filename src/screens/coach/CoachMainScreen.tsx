@@ -53,9 +53,15 @@ export default function CoachMainScreen({ navigation }: CoachMainScreenProps) {
     if (!newTeamName.trim()) return;
     
     try {
+      if (!currentCoach?.id) {
+        throw new Error('Perfil de treinador não encontrado');
+      }
+      
       await createTeam({
         name: newTeamName.trim(),
         description: newTeamDescription.trim() || undefined,
+        is_active: true,
+        coach_id: currentCoach.id,
       });
       setShowCreateTeamModal(false);
       setNewTeamName('');

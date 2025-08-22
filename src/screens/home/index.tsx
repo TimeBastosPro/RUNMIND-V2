@@ -97,12 +97,12 @@ export default function HomeScreen() {
     todayReadinessScore, 
     hasCheckedInToday, 
     trainingSessions,
-    races,
     loadRecentCheckins,
     loadTodayCheckin,
-    fetchTrainingSessions,
-    fetchRaces
+    fetchTrainingSessions
   } = useCheckinStore();
+  
+  const { races, fetchRaces } = useAuthStore();
   const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -312,10 +312,10 @@ export default function HomeScreen() {
 
   // ✅ OTIMIZADO: Buscar a próxima prova (a mais próxima)
   
-  const filteredRaces = races?.filter(race => race.start_date >= todayDateString);
+  const filteredRaces = races?.filter((race: any) => race.start_date >= todayDateString);
   
   const nextRace = filteredRaces
-    ?.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
+    ?.sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
 
   // Calcular dias restantes para a próxima prova
   const daysUntilRace = nextRace ? 

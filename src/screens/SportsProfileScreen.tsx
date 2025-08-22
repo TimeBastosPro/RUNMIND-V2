@@ -22,6 +22,8 @@ import {
   calculatePaceZones,
   calculateMaxHeartRateTanaka,
   formatPace,
+  formatPaceString,
+  calculateThresholdPace,
   TrainingZone,
   PaceZone
 } from '../utils/sportsCalculations';
@@ -197,7 +199,9 @@ export default function SportsProfileScreen() {
       switch (selectedProtocol) {
         case 'cooper':
           if (!testData.distance) throw new Error('Distância é obrigatória');
-          vo2max = calculateVo2maxFromCooper(Number(testData.distance));
+          const cooperAge = profile.date_of_birth ? new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 0;
+          const cooperGender = (profile.gender as 'male' | 'female') || 'male';
+          vo2max = calculateVo2maxFromCooper(Number(testData.distance), cooperAge, cooperGender);
           break;
 
         case '3km':
@@ -209,11 +213,11 @@ export default function SportsProfileScreen() {
           if (!testData.time || !testData.heartRate || !profile.weight_kg || !profile.date_of_birth || !profile.gender) {
             throw new Error('Todos os campos são obrigatórios para o teste Rockport');
           }
-          const age = profile.date_of_birth ? new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 0;
+          const rockportAge = profile.date_of_birth ? new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear() : 0;
           vo2max = calculateVo2maxFromRockport(
+            rockportAge,
+            profile.gender as 'male' | 'female',
             profile.weight_kg,
-            age,
-            profile.gender,
             parseTimeToSeconds(testData.time),
             Number(testData.heartRate)
           );
@@ -520,30 +524,30 @@ export default function SportsProfileScreen() {
   const trainingZones = profile?.max_heart_rate && profile?.resting_heart_rate 
     ? calculateKarvonenZones(profile.max_heart_rate, profile.resting_heart_rate)
     : [];
-  const paceZones = vo2max ? calculatePaceZones(vo2max) : [];
+  const paceZones = vo2max ? calculatePaceZones(calculateThresholdPace(vo2max, (profile?.gender as 'male' | 'female') || 'male')) : [];
 
   // Combinar zonas de FC com zonas de ritmo
   const combinedZones = trainingZones.length > 0 
     ? trainingZones.map((zone, index) => ({
         zone: `Z${index + 1}`,
         name: zone.name,
-        minHR: zone.minHR,
-        maxHR: zone.maxHR,
-        minHeartRate: zone.minHR,
-        maxHeartRate: zone.maxHR,
+        minHR: zone.min,
+        maxHR: zone.max,
+        minHeartRate: zone.min,
+        maxHeartRate: zone.max,
         description: zone.description,
-        pace: paceZones[index] ? `${formatPace(paceZones[index].minPace)} - ${formatPace(paceZones[index].maxPace)}` : '--'
+        pace: paceZones[index] ? `${formatPaceString(paceZones[index].min)} - ${formatPaceString(paceZones[index].max)}` : '--'
       }))
     : paceZones.length > 0 
       ? paceZones.map((zone) => ({
-          zone: zone.zone,
+          zone: zone.name,
           name: zone.name,
           minHR: 0,
           maxHR: 0,
           minHeartRate: 0,
           maxHeartRate: 0,
           description: zone.description,
-          pace: `${formatPace(zone.minPace)} - ${formatPace(zone.maxPace)}`
+          pace: `${formatPaceString(zone.min)} - ${formatPaceString(zone.max)}`
         }))
       : [];
 

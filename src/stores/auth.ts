@@ -3,6 +3,8 @@ import { supabase, checkAndRepairSession, clearCorruptedSession } from '../servi
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '@supabase/supabase-js';
 import { Profile, FitnessTest, Race } from '../types/database';
+import { validatePassword, validateEmail, validateFullName, sanitizeInput } from '../utils/validation';
+import { logLoginAttempt, logPasswordReset, logProfileUpdate } from '../services/securityLogger';
 
 interface AuthState {
   user: User | null;
@@ -64,6 +66,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 signIn iniciado para email:', email);
     set({ isLoading: true });
     try {
+      // ✅ NOVO: Validação de entrada
+      const emailValidation = validateEmail(email);
+      if (!emailValidation.isValid) {
+        throw new Error(emailValidation.errors[0]);
+      }
+      
+      // ✅ NOVO: Log de tentativa de login
+      try {
+        await logLoginAttempt(email, false, { stage: 'validation' });
+      } catch (logError) {
+        console.warn('⚠️ Erro ao logar tentativa de login:', logError);
+      }
+      
       // ✅ MELHORADO: Limpeza AGESSIVA antes do login
       console.log('🧹 Limpeza AGESSIVA antes do login...');
       await get().clearAllLocalData();
@@ -79,7 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       console.log('🔍 Chamando supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.toLowerCase().trim(),
         password,
       });
       
@@ -91,6 +106,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       if (error) {
         console.error('🔍 Erro do Supabase:', error);
+        
+        // ✅ NOVO: Log de falha de login
+        try {
+          await logLoginAttempt(email, false, { error: error.message });
+        } catch (logError) {
+          console.warn('⚠️ Erro ao logar falha de login:', logError);
+        }
         
         // ✅ MELHORADO: Tratamento específico de erros para mobile
         if (error.message.includes('Invalid login credentials')) {
@@ -108,6 +130,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       console.log('🔍 Login bem-sucedido, atualizando estado...');
       set({ user: data.user, isAuthenticated: true, isLoading: false });
+      
+      // ✅ NOVO: Log de sucesso de login
+      try {
+        await logLoginAttempt(email, true, { userId: data.user?.id });
+      } catch (logError) {
+        console.warn('⚠️ Erro ao logar sucesso de login:', logError);
+      }
 
       // ✅ Garantir imediatamente o registro de domínio conforme o tipo
       const userId = data.user.id;
@@ -116,12 +145,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const userType = (data.user.user_metadata?.user_type || '').toString();
 
       try {
-        const [profileResEnsure, coachResEnsure] = await Promise.all([
+        const [profileResEnsure, coachResEnsure] = await Promise.allSettled([
           supabase.from('profiles').select('id').eq('id', userId).maybeSingle(),
           supabase.from('coaches').select('id').eq('user_id', userId).maybeSingle(),
         ]);
-        const hasProfile = !!profileResEnsure.data;
-        const hasCoach = !!coachResEnsure.data;
+        
+        const hasProfile = profileResEnsure.status === 'fulfilled' && !!profileResEnsure.value.data;
+        const hasCoach = coachResEnsure.status === 'fulfilled' && !!coachResEnsure.value.data;
+        
+        // Log de debug para identificar problemas
+        if (profileResEnsure.status === 'rejected') {
+          console.log('⚠️ Erro ao verificar profile:', profileResEnsure.reason);
+        }
+        if (coachResEnsure.status === 'rejected') {
+          console.log('⚠️ Erro ao verificar coach:', coachResEnsure.reason);
+        }
 
         if (userType === 'coach') {
           if (!hasCoach) {
@@ -173,16 +211,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 signUp iniciado para email:', email);
     set({ isLoading: true });
     try {
+      // ✅ NOVO: Validação robusta de entrada
+      const emailValidation = validateEmail(email);
+      if (!emailValidation.isValid) {
+        throw new Error(emailValidation.errors[0]);
+      }
+      
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.isValid) {
+        throw new Error(passwordValidation.errors[0]);
+      }
+      
+      const nameValidation = validateFullName(fullName);
+      if (!nameValidation.isValid) {
+        throw new Error(nameValidation.errors[0]);
+      }
+      
+      // ✅ NOVO: Sanitizar dados
+      const sanitizedEmail = email.toLowerCase().trim();
+      const sanitizedName = sanitizeInput(fullName);
+      
       // ✅ NOVO: Limpar sessão corrompida antes do cadastro
       await clearCorruptedSession();
       
       console.log('🔍 Chamando supabase.auth.signUp...');
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: sanitizedEmail,
         password,
         options: {
           // Metadados para distinguir o tipo de conta já no Auth
-          data: { full_name: fullName, user_type: options?.isCoach ? 'coach' : 'athlete' }
+          data: { full_name: sanitizedName, user_type: options?.isCoach ? 'coach' : 'athlete' }
         }
       });
       
@@ -199,7 +257,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (error.message.includes('User already registered')) {
           throw new Error('Este email já está cadastrado. Tente fazer login.');
         } else if (error.message.includes('Password should be at least')) {
-          throw new Error('A senha deve ter pelo menos 6 caracteres.');
+          throw new Error('A senha deve atender aos requisitos de segurança.');
         } else if (error.message.includes('Invalid email')) {
           throw new Error('Email inválido. Verifique o formato.');
         } else if (error.message.includes('Network error')) {
@@ -215,9 +273,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           // Para treinador, não criamos row em profiles. O perfil profissional será criado na tela de setup do coach.
           // Criaremos um registro mínimo em coaches para garantir navegação correta após login.
           try {
-            const { error: coachInsertError } = await supabase
-              .from('coaches')
-              .insert([{ user_id: data.user.id, full_name: fullName || email, email }]);
+                      const { error: coachInsertError } = await supabase
+            .from('coaches')
+            .insert([{ user_id: data.user.id, full_name: sanitizedName || sanitizedEmail, email: sanitizedEmail }]);
             if (coachInsertError) {
               console.log('⚠️ Falha ao criar coach minimal no signUp:', coachInsertError.message);
             }
@@ -228,9 +286,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .from('profiles')
           .insert({
             id: data.user.id,
-            email,
-            full_name: fullName,
-              experience_level: 'beginner',
+            email: sanitizedEmail,
+            full_name: sanitizedName,
+            experience_level: 'beginner',
             main_goal: 'health',
             context_type: 'solo',
             onboarding_completed: false,
@@ -296,7 +354,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 Reset de senha iniciado para:', email);
     set({ isLoading: true });
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // ✅ NOVO: Validação de email
+      const emailValidation = validateEmail(email);
+      if (!emailValidation.isValid) {
+        throw new Error(emailValidation.errors[0]);
+      }
+      
+      const sanitizedEmail = email.toLowerCase().trim();
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(sanitizedEmail, {
         redirectTo: 'runmind://reset-password',
       });
       
@@ -305,10 +371,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error('Erro ao enviar email de reset. Tente novamente.');
       }
       
+      // ✅ NOVO: Log de reset de senha
+      try {
+        await logPasswordReset(sanitizedEmail, true);
+      } catch (logError) {
+        console.warn('⚠️ Erro ao logar reset de senha:', logError);
+      }
+      
       console.log('🔍 Email de reset enviado com sucesso');
       set({ isLoading: false });
     } catch (error) {
       console.error('🔍 Erro no reset de senha:', error);
+      
+      // ✅ NOVO: Log de falha de reset de senha
+      try {
+        await logPasswordReset(email, false, { error: error instanceof Error ? error.message : 'Erro desconhecido' });
+      } catch (logError) {
+        console.warn('⚠️ Erro ao logar falha de reset de senha:', logError);
+      }
+      
       set({ isLoading: false });
       throw error;
     }
