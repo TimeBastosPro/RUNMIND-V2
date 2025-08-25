@@ -4,7 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from '@supabase/supabase-js';
 import { Profile, FitnessTest, Race } from '../types/database';
 import { validatePassword, validateEmail, validateFullName, sanitizeInput } from '../utils/validation';
-import { logLoginAttempt, logPasswordReset, logProfileUpdate } from '../services/securityLogger';
+import { logLoginAttempt, logPasswordReset, logProfileUpdate, logAccountCreation, logLogout, logEmailVerification } from '../services/securityLogger';
+import { loginRateLimiter, signupRateLimiter } from '../services/rateLimiter';
+// Temporariamente desabilitado para resolver erro do React
+// import { 
+//   generateSignupConfirmation, 
+//   generateFirstAccessMessage,
+//   generateWelcomeMessage 
+// } from '../utils/notifications';
+// import { useNotificationsStore } from './notifications';
 
 interface AuthState {
   user: User | null;
@@ -17,7 +25,7 @@ interface AuthState {
   
   // Actions
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string, options?: { isCoach?: boolean }) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, options?: { isCoach?: boolean; cref?: string }) => Promise<void>;
   signOut: () => Promise<void>;
   loadProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
@@ -51,6 +59,12 @@ interface AuthState {
   loadProfileSafely: () => Promise<void>;
   // ✅ NOVO: Função para forçar limpeza completa e recarregamento
   forceCleanReload: () => Promise<void>;
+  // ✅ NOVO: Função para verificar se a sessão ainda é válida
+  validateSession: () => Promise<boolean>;
+  // ✅ NOVO: Função para verificar sessão periodicamente
+  startSessionValidation: () => () => void;
+  // ✅ NOVO: Função para validar usuário antes do login
+  validateUserBeforeLogin: (email: string) => Promise<any>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -66,17 +80,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 signIn iniciado para email:', email);
     set({ isLoading: true });
     try {
-      // ✅ NOVO: Validação de entrada
+      // ✅ MELHORADO: Validação de entrada
       const emailValidation = validateEmail(email);
       if (!emailValidation.isValid) {
         throw new Error(emailValidation.errors[0]);
       }
       
-      // ✅ NOVO: Log de tentativa de login
+      const sanitizedEmail = email.toLowerCase().trim();
+      
+      // ✅ MELHORADO: Rate limiting para login
+      const rateLimitResult = await loginRateLimiter.checkRateLimit(sanitizedEmail);
+      if (!rateLimitResult.allowed) {
+        const remainingTime = Math.ceil((rateLimitResult.blockedUntil! - Date.now()) / (1000 * 60));
+        throw new Error(`Muitas tentativas de login. Tente novamente em ${remainingTime} minutos.`);
+      }
+      
+      // ✅ MELHORADO: Log de tentativa de login
       try {
-        await logLoginAttempt(email, false, { stage: 'validation' });
+        await logLoginAttempt(sanitizedEmail, false, { stage: 'validation' });
       } catch (logError) {
         console.warn('⚠️ Erro ao logar tentativa de login:', logError);
+      }
+      
+      // ✅ NOVO: VALIDAÇÃO PRÉ-LOGIN - Verificar se o usuário existe ANTES de fazer login
+      console.log('🔍 VALIDAÇÃO PRÉ-LOGIN: Verificando usuário antes do login...');
+      try {
+        await get().validateUserBeforeLogin(sanitizedEmail);
+        console.log('✅ VALIDAÇÃO PRÉ-LOGIN: Usuário validado com sucesso');
+      } catch (preLoginError) {
+        console.error('❌ ERRO PRÉ-LOGIN:', preLoginError);
+        
+        // ✅ Log de erro de validação pré-login
+        try {
+          await logLoginAttempt(sanitizedEmail, false, { 
+            error: preLoginError instanceof Error ? preLoginError.message : String(preLoginError),
+            stage: 'pre_login_validation'
+          });
+          await loginRateLimiter.recordAttempt(sanitizedEmail, false);
+        } catch (logError) {
+          console.warn('⚠️ Erro ao logar falha pré-login:', logError);
+        }
+        
+        throw preLoginError;
       }
       
       // ✅ MELHORADO: Limpeza AGESSIVA antes do login
@@ -94,7 +139,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       console.log('🔍 Chamando supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
+        email: sanitizedEmail,
         password,
       });
       
@@ -105,13 +150,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       
       if (error) {
-        console.error('🔍 Erro do Supabase:', error);
+        console.error('🔍 Erro no login:', error);
         
-        // ✅ NOVO: Log de falha de login
+        // ✅ MELHORADO: Log de tentativa falhada
         try {
-          await logLoginAttempt(email, false, { error: error.message });
+          await logLoginAttempt(sanitizedEmail, false, { 
+            error: error.message,
+            stage: 'supabase_auth'
+          });
+          await loginRateLimiter.recordAttempt(sanitizedEmail, false);
         } catch (logError) {
-          console.warn('⚠️ Erro ao logar falha de login:', logError);
+          console.warn('⚠️ Erro ao logar tentativa falhada:', logError);
         }
         
         // ✅ MELHORADO: Tratamento específico de erros para mobile
@@ -119,8 +168,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           throw new Error('Email ou senha incorretos. Verifique suas credenciais.');
         } else if (error.message.includes('Email not confirmed')) {
           throw new Error('Confirme seu email antes de fazer login.');
+        } else if (error.message.includes('User not found')) {
+          throw new Error('Usuário não encontrado. Verifique o email ou crie uma conta.');
         } else if (error.message.includes('Too many requests')) {
-          throw new Error('Muitas tentativas de login. Aguarde alguns minutos.');
+          throw new Error('Muitas tentativas. Aguarde alguns minutos.');
         } else if (error.message.includes('Network error')) {
           throw new Error('Erro de conexão. Verifique sua internet.');
         } else {
@@ -128,78 +179,128 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
       
-      console.log('🔍 Login bem-sucedido, atualizando estado...');
-      set({ user: data.user, isAuthenticated: true, isLoading: false });
-      
-      // ✅ NOVO: Log de sucesso de login
-      try {
-        await logLoginAttempt(email, true, { userId: data.user?.id });
-      } catch (logError) {
-        console.warn('⚠️ Erro ao logar sucesso de login:', logError);
-      }
-
-      // ✅ Garantir imediatamente o registro de domínio conforme o tipo
-      const userId = data.user.id;
-      const emailFromAuth = (data.user.email || '').toLowerCase();
-      const fullNameFromMeta = (data.user.user_metadata?.full_name || data.user.user_metadata?.name || '').toString();
-      const userType = (data.user.user_metadata?.user_type || '').toString();
-
-      try {
-        const [profileResEnsure, coachResEnsure] = await Promise.allSettled([
-          supabase.from('profiles').select('id').eq('id', userId).maybeSingle(),
-          supabase.from('coaches').select('id').eq('user_id', userId).maybeSingle(),
-        ]);
+      if (data.user) {
+        // ✅ NOVO: VALIDAÇÃO CRÍTICA - Verificar se o usuário realmente existe no banco
+        console.log('🔍 VALIDAÇÃO CRÍTICA: Verificando existência do usuário no banco...');
         
-        const hasProfile = profileResEnsure.status === 'fulfilled' && !!profileResEnsure.value.data;
-        const hasCoach = coachResEnsure.status === 'fulfilled' && !!coachResEnsure.value.data;
-        
-        // Log de debug para identificar problemas
-        if (profileResEnsure.status === 'rejected') {
-          console.log('⚠️ Erro ao verificar profile:', profileResEnsure.reason);
-        }
-        if (coachResEnsure.status === 'rejected') {
-          console.log('⚠️ Erro ao verificar coach:', coachResEnsure.reason);
-        }
-
-        if (userType === 'coach') {
-          if (!hasCoach) {
-            console.log('🛠️ Criando registro mínimo de coach...');
-            const { error: coachInsertError } = await supabase
+        try {
+          // 1. Verificar se existe na tabela profiles
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, email, full_name, user_type, onboarding_completed')
+            .eq('id', data.user.id)
+            .single();
+          
+          if (profileError) {
+            console.error('🔍 ERRO CRÍTICO: Usuário não encontrado em profiles:', profileError);
+            
+            // ✅ NOVO: Log de tentativa de login com usuário inexistente
+            try {
+              await logLoginAttempt(sanitizedEmail, false, { 
+                error: 'User not found in profiles table',
+                userId: data.user.id,
+                stage: 'profile_validation'
+              });
+            } catch (logError) {
+              console.warn('⚠️ Erro ao logar tentativa inválida:', logError);
+            }
+            
+            // ✅ NOVO: Fazer logout imediatamente
+            await supabase.auth.signOut({ scope: 'global' });
+            await get().clearAllLocalData();
+            
+            throw new Error('Usuário não encontrado no sistema. Entre em contato com o suporte.');
+          }
+          
+          // 2. Verificar se o email corresponde
+          if (profileData.email !== sanitizedEmail) {
+            console.error('🔍 ERRO CRÍTICO: Email não corresponde:', {
+              profileEmail: profileData.email,
+              loginEmail: sanitizedEmail
+            });
+            
+            await supabase.auth.signOut({ scope: 'global' });
+            await get().clearAllLocalData();
+            
+            throw new Error('Dados de usuário inconsistentes. Entre em contato com o suporte.');
+          }
+          
+          // 3. Verificar se user_type está definido
+          if (!profileData.user_type) {
+            console.error('🔍 ERRO CRÍTICO: user_type não definido para usuário:', data.user.id);
+            
+            await supabase.auth.signOut({ scope: 'global' });
+            await get().clearAllLocalData();
+            
+            throw new Error('Tipo de usuário não definido. Entre em contato com o suporte.');
+          }
+          
+          // 4. Se for coach, verificar se existe na tabela coaches
+          if (profileData.user_type === 'coach') {
+            const { data: coachData, error: coachError } = await supabase
               .from('coaches')
-              .insert([{ user_id: userId, full_name: fullNameFromMeta || emailFromAuth, email: emailFromAuth }]);
-            if (coachInsertError) {
-              console.log('⚠️ Falha ao criar coach minimal:', coachInsertError.message);
+              .select('id, user_id, full_name, email, cref')
+              .eq('user_id', data.user.id)
+              .single();
+            
+            if (coachError) {
+              console.error('🔍 ERRO CRÍTICO: Coach não encontrado em coaches:', coachError);
+              
+              await supabase.auth.signOut({ scope: 'global' });
+              await get().clearAllLocalData();
+              
+              throw new Error('Dados de treinador não encontrados. Entre em contato com o suporte.');
             }
           }
-        } else if (userType === 'athlete') {
-          // Atleta
-          if (!hasProfile) {
-            console.log('🛠️ Criando profile mínimo de atleta...');
-            const { error: profileInsertError } = await supabase
-              .from('profiles')
-              .insert([{ id: userId, email: emailFromAuth, full_name: fullNameFromMeta || emailFromAuth, experience_level: 'beginner', main_goal: 'health', context_type: 'solo', onboarding_completed: false }]);
-            if (profileInsertError) {
-              console.log('⚠️ Falha ao criar profile minimal:', profileInsertError.message);
-            }
-          }
-        } else {
-          console.log('ℹ️ user_type ausente. Não criar registros por padrão.');
+          
+          console.log('✅ VALIDAÇÃO CRÍTICA: Usuário validado com sucesso');
+          
+        } catch (validationError) {
+          console.error('🔍 ERRO NA VALIDAÇÃO CRÍTICA:', validationError);
+          
+          // ✅ NOVO: Limpeza de emergência
+          await supabase.auth.signOut({ scope: 'global' });
+          await get().clearAllLocalData();
+          
+          throw validationError;
         }
-      } catch (ensureError) {
-        console.log('⚠️ Erro ao garantir registro de domínio:', ensureError);
+        
+                 // ✅ MELHORADO: Log de login bem-sucedido
+         try {
+           await logLoginAttempt(sanitizedEmail, true, { 
+             userId: data.user.id,
+             userType: 'validated',
+             stage: 'success'
+           });
+           await loginRateLimiter.recordAttempt(sanitizedEmail, true);
+         } catch (logError) {
+           console.warn('⚠️ Erro ao logar login bem-sucedido:', logError);
+         }
+        
+        // ✅ MELHORADO: Garantir registro de domínio se necessário
+        try {
+          const userMetadata = (data.user as any)?.user_metadata;
+          if (userMetadata?.user_type) {
+            console.log('ℹ️ user_type presente nos metadados:', userMetadata.user_type);
+          } else {
+            console.log('ℹ️ user_type ausente. Não criar registros por padrão.');
+          }
+        } catch (ensureError) {
+          console.log('⚠️ Erro ao garantir registro de domínio:', ensureError);
+        }
+
+        // ✅ MELHORADO: Carregar dados com correção automática de perfis duplicados
+        await Promise.allSettled([get().loadProfileSafely()]);
+        
+        // Se for usuário do tipo coach, garantir navegação/coerência de stack
+        try {
+          if ((data.user as any)?.user_metadata?.user_type === 'coach') {
+            useAuthStore.setState({ isAuthenticated: true });
+          }
+        } catch {}
+
+        console.log('🔍 signIn concluído com sucesso');
       }
-
-      // ✅ MELHORADO: Carregar dados com correção automática de perfis duplicados
-      await Promise.allSettled([get().loadProfileSafely()]);
-      
-      // Se for usuário do tipo coach, garantir navegação/coerência de stack
-      try {
-        if ((data.user as any)?.user_metadata?.user_type === 'coach') {
-          useAuthStore.setState({ isAuthenticated: true });
-        }
-      } catch {}
-
-      console.log('🔍 signIn concluído com sucesso');
     } catch (error) {
       console.error('🔍 Erro no signIn:', error);
       set({ isLoading: false });
@@ -207,11 +308,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signUp: async (email: string, password: string, fullName: string, options?: { isCoach?: boolean }) => {
+  signUp: async (email: string, password: string, fullName: string, options?: { isCoach?: boolean; cref?: string }) => {
     console.log('🔍 signUp iniciado para email:', email);
     set({ isLoading: true });
     try {
-      // ✅ NOVO: Validação robusta de entrada
+      // ✅ MELHORADO: Validação robusta de entrada
       const emailValidation = validateEmail(email);
       if (!emailValidation.isValid) {
         throw new Error(emailValidation.errors[0]);
@@ -227,9 +328,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error(nameValidation.errors[0]);
       }
       
-      // ✅ NOVO: Sanitizar dados
+      // ✅ MELHORADO: Sanitizar dados
       const sanitizedEmail = email.toLowerCase().trim();
       const sanitizedName = sanitizeInput(fullName);
+      
+      // ✅ MELHORADO: Rate limiting para cadastro
+      const rateLimitResult = await signupRateLimiter.checkRateLimit(sanitizedEmail);
+      if (!rateLimitResult.allowed) {
+        const remainingTime = Math.ceil((rateLimitResult.blockedUntil! - Date.now()) / (1000 * 60));
+        throw new Error(`Muitas tentativas de cadastro. Tente novamente em ${remainingTime} minutos.`);
+      }
       
       // ✅ NOVO: Limpar sessão corrompida antes do cadastro
       await clearCorruptedSession();
@@ -268,39 +376,95 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       
       if (data.user) {
+        // ✅ MELHORADO: Log de criação de conta
+        try {
+          await logAccountCreation(sanitizedEmail, true, { 
+            userType: options?.isCoach ? 'coach' : 'athlete',
+            userId: data.user.id 
+          });
+          await signupRateLimiter.recordAttempt(sanitizedEmail, true);
+        } catch (logError) {
+          console.warn('⚠️ Erro ao logar criação de conta:', logError);
+        }
+        
         if (options?.isCoach) {
-          console.log('🔍 Cadastro como TREINADOR. Não criar profile de atleta.');
-          // Para treinador, não criamos row em profiles. O perfil profissional será criado na tela de setup do coach.
-          // Criaremos um registro mínimo em coaches para garantir navegação correta após login.
+          console.log('🔍 Cadastro como TREINADOR. Criando perfil de treinador...');
+          
+          // ✅ CORRIGIDO: Para treinador, criar perfil básico em profiles E registro em coaches
           try {
-                      const { error: coachInsertError } = await supabase
-            .from('coaches')
-            .insert([{ user_id: data.user.id, full_name: sanitizedName || sanitizedEmail, email: sanitizedEmail }]);
-            if (coachInsertError) {
-              console.log('⚠️ Falha ao criar coach minimal no signUp:', coachInsertError.message);
+            // 1. Criar perfil básico em profiles (necessário para navegação)
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .insert({
+                id: data.user.id,
+                email: sanitizedEmail,
+                full_name: sanitizedName,
+                experience_level: 'beginner',
+                main_goal: 'health',
+                context_type: 'solo',
+                onboarding_completed: false,
+                user_type: 'coach', // ✅ NOVO: Marcar como treinador
+              });
+            
+            if (profileError) {
+              console.error('🔍 Erro ao criar perfil de treinador:', profileError);
+              throw new Error('Erro ao criar perfil de treinador. Tente novamente.');
             }
-          } catch {}
+            
+            // 2. Criar registro em coaches com CREF
+            const { error: coachInsertError } = await supabase
+              .from('coaches')
+              .insert([{ 
+                user_id: data.user.id, 
+                full_name: sanitizedName || sanitizedEmail, 
+                email: sanitizedEmail,
+                cref: options.cref // ✅ NOVO: Incluir CREF
+              }]);
+              
+            if (coachInsertError) {
+              console.error('🔍 Erro ao criar registro de coach:', coachInsertError);
+              throw new Error('Erro ao criar registro de treinador. Tente novamente.');
+            }
+            
+            console.log('🔍 Perfil de treinador criado com sucesso');
+          } catch (error) {
+            console.error('🔍 Erro na criação do perfil de treinador:', error);
+            throw error;
+          }
         } else {
           console.log('🔍 Cadastro como ATLETA. Criando profile...');
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email: sanitizedEmail,
-            full_name: sanitizedName,
-            experience_level: 'beginner',
-            main_goal: 'health',
-            context_type: 'solo',
-            onboarding_completed: false,
-          });
-          
-        if (profileError) {
-          console.error('🔍 Erro ao criar perfil:', profileError);
-          throw new Error('Erro ao criar perfil. Tente novamente.');
-        }
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              email: sanitizedEmail,
+              full_name: sanitizedName,
+              experience_level: 'beginner',
+              main_goal: 'health',
+              context_type: 'solo',
+              onboarding_completed: false,
+              user_type: 'athlete', // ✅ NOVO: Marcar como atleta
+            });
+            
+          if (profileError) {
+            console.error('🔍 Erro ao criar perfil:', profileError);
+            throw new Error('Erro ao criar perfil. Tente novamente.');
+          }
           console.log('🔍 Perfil (atleta) criado com sucesso');
         }
       }
+      
+      // Temporariamente desabilitado para resolver erro do React
+      // ✅ NOVO: Mostrar notificação de confirmação de cadastro
+      // const userType = options?.isCoach ? 'coach' : 'athlete';
+      // const confirmationNotification = generateSignupConfirmation(sanitizedEmail, userType);
+      // useNotificationsStore.getState().showNotification(confirmationNotification);
+      
+      // ✅ NOVO: Mostrar mensagem de boas-vindas após 2 segundos
+      // setTimeout(() => {
+      //   const welcomeNotification = generateFirstAccessMessage(sanitizedName, userType);
+      //   useNotificationsStore.getState().showNotification(welcomeNotification);
+      // }, 2000);
       
       set({ isLoading: false });
       console.log('🔍 signUp concluído com sucesso');
@@ -313,39 +477,105 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     console.log('🔍 Fazendo logout...');
+    set({ isLoading: true });
+    
     try {
-      // Executa o signOut com timeout para evitar travar a UI em caso de rede ruim
+      // ✅ MELHORADO: Log de logout
+      const currentUser = get().user;
+      if (currentUser) {
+        try {
+          await logLogout(currentUser.id, { method: 'manual' });
+        } catch (logError) {
+          console.warn('⚠️ Erro ao logar logout:', logError);
+        }
+      }
+      
+      // 1. Fazer logout do Supabase com timeout
+      console.log('🔍 Iniciando logout do Supabase...');
       const signOutWithTimeout = Promise.race([
-        // Em alguns ambientes o escopo 'global' pode falhar; usar padrão se necessário
         (async () => {
           try {
-      const { error } = await supabase.auth.signOut({ scope: 'global' } as any);
-      if (error) {
-              console.log('🔍 Logout retornou erro, seguirá com limpeza:', error.message);
+            const { error } = await supabase.auth.signOut({ scope: 'global' } as any);
+            if (error) {
+              console.log('⚠️ Logout do Supabase retornou erro:', error.message);
+            } else {
+              console.log('✅ Logout do Supabase realizado com sucesso');
             }
           } catch (e) {
-            console.log('🔍 Exceção no signOut, seguirá com limpeza:', (e as Error)?.message);
+            console.log('⚠️ Exceção no logout do Supabase:', (e as Error)?.message);
           }
         })(),
-        new Promise<void>((resolve) => setTimeout(() => resolve(), 5000)), // Aumentado para 5 segundos
+        new Promise<void>((resolve) => setTimeout(() => {
+          console.log('⏰ Timeout do logout do Supabase');
+          resolve();
+        }, 3000)),
       ]);
 
       await signOutWithTimeout;
-    } finally {
-      // Sempre limpar sessão e estado, mesmo que signOut falhe ou demore
-      try { await clearCorruptedSession(); } catch {}
-      try { await AsyncStorage.clear(); } catch {}
       
+      // 2. Limpar dados locais
+      console.log('🔍 Limpando dados locais...');
+      try { 
+        await clearCorruptedSession(); 
+        console.log('✅ Sessão corrompida limpa');
+      } catch (e) {
+        console.log('⚠️ Erro ao limpar sessão corrompida:', e);
+      }
+      
+      try { 
+        await AsyncStorage.clear(); 
+        console.log('✅ AsyncStorage limpo');
+      } catch (e) {
+        console.log('⚠️ Erro ao limpar AsyncStorage:', e);
+      }
+      
+      // 3. Resetar estado
+      console.log('🔍 Resetando estado da aplicação...');
       set({ 
         user: null, 
         profile: null, 
         isAuthenticated: false,
         isLoading: false,
         isInitializing: false,
+        fitnessTests: [],
+        races: [],
       });
       
-      console.log('🔍 Logout finalizado (com ou sem erro)');
-      try { if (typeof window !== 'undefined') window.location.replace('/'); } catch {}
+      console.log('✅ Logout finalizado com sucesso');
+      
+      // 4. Redirecionar se estiver no web
+      try { 
+        if (typeof window !== 'undefined') {
+          console.log('🔍 Redirecionando no web...');
+          window.location.replace('/');
+        }
+      } catch (e) {
+        console.log('⚠️ Erro no redirecionamento web:', e);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro crítico no logout:', error);
+      
+      // Mesmo com erro, limpar estado
+      try {
+        await AsyncStorage.clear();
+        set({ 
+          user: null, 
+          profile: null, 
+          isAuthenticated: false,
+          isLoading: false,
+          isInitializing: false,
+          fitnessTests: [],
+          races: [],
+        });
+        console.log('✅ Estado limpo mesmo com erro');
+      } catch (cleanupError) {
+        console.error('❌ Erro na limpeza de emergência:', cleanupError);
+      }
+      
+      throw error;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -412,6 +642,54 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('🔍 Erro ao verificar email:', error);
       return false;
+    }
+  },
+
+  // ✅ NOVO: Função para validar usuário ANTES do login
+  validateUserBeforeLogin: async (email: string) => {
+    console.log('🔍 VALIDAÇÃO PRÉ-LOGIN: Verificando usuário antes do login...');
+    
+    const sanitizedEmail = email.trim().toLowerCase();
+    
+    try {
+      // 1. Verificar se existe na tabela profiles pelo email
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, user_type, onboarding_completed')
+        .eq('email', sanitizedEmail)
+        .single();
+      
+      if (profileError) {
+        console.error('🔍 ERRO PRÉ-LOGIN: Usuário não encontrado em profiles:', profileError);
+        throw new Error('Usuário não cadastrado no sistema. Crie uma conta primeiro.');
+      }
+      
+      // 2. Verificar se user_type está definido
+      if (!profileData.user_type) {
+        console.error('🔍 ERRO PRÉ-LOGIN: user_type não definido para usuário:', profileData.id);
+        throw new Error('Tipo de usuário não definido. Entre em contato com o suporte.');
+      }
+      
+      // 3. Se for coach, verificar se existe na tabela coaches
+      if (profileData.user_type === 'coach') {
+        const { data: coachData, error: coachError } = await supabase
+          .from('coaches')
+          .select('id, user_id, full_name, email, cref')
+          .eq('user_id', profileData.id)
+          .single();
+        
+        if (coachError) {
+          console.error('🔍 ERRO PRÉ-LOGIN: Coach não encontrado em coaches:', coachError);
+          throw new Error('Dados de treinador não encontrados. Entre em contato com o suporte.');
+        }
+      }
+      
+      console.log('✅ VALIDAÇÃO PRÉ-LOGIN: Usuário validado com sucesso');
+      return profileData;
+      
+    } catch (validationError) {
+      console.error('🔍 ERRO NA VALIDAÇÃO PRÉ-LOGIN:', validationError);
+      throw validationError;
     }
   },
 
@@ -996,5 +1274,111 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('❌ Erro na limpeza forçada:', error);
     }
+  },
+
+  // ✅ NOVO: Função para verificar se a sessão ainda é válida
+  validateSession: async () => {
+    console.log('🔍 VALIDANDO SESSÃO ATUAL...');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        console.log('❌ Nenhuma sessão ativa encontrada');
+        await get().clearAllLocalData();
+        return false;
+      }
+      
+      // ✅ VALIDAÇÃO CRÍTICA: Verificar se o usuário ainda existe no banco
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, user_type, onboarding_completed')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profileError) {
+        console.error('🔍 ERRO CRÍTICO: Usuário não encontrado em profiles durante validação:', profileError);
+        
+        // ✅ NOVO: Log de sessão inválida
+        try {
+          await logLoginAttempt(session.user.email || 'unknown', false, { 
+            error: 'User not found in profiles during session validation',
+            userId: session.user.id,
+            stage: 'session_validation'
+          });
+        } catch (logError) {
+          console.warn('⚠️ Erro ao logar sessão inválida:', logError);
+        }
+        
+        // ✅ NOVO: Limpeza de emergência
+        await supabase.auth.signOut({ scope: 'global' });
+        await get().clearAllLocalData();
+        
+        return false;
+      }
+      
+      // ✅ Verificar se o email ainda corresponde
+      if (profileData.email !== session.user.email) {
+        console.error('🔍 ERRO CRÍTICO: Email não corresponde durante validação:', {
+          profileEmail: profileData.email,
+          sessionEmail: session.user.email
+        });
+        
+        await supabase.auth.signOut({ scope: 'global' });
+        await get().clearAllLocalData();
+        
+        return false;
+      }
+      
+      // ✅ Se for coach, verificar se ainda existe na tabela coaches
+      if (profileData.user_type === 'coach') {
+        const { data: coachData, error: coachError } = await supabase
+          .from('coaches')
+          .select('id, user_id, full_name, email, cref')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (coachError) {
+          console.error('🔍 ERRO CRÍTICO: Coach não encontrado em coaches durante validação:', coachError);
+          
+          await supabase.auth.signOut({ scope: 'global' });
+          await get().clearAllLocalData();
+          
+          return false;
+        }
+      }
+      
+      console.log('✅ Sessão validada com sucesso');
+      return true;
+      
+    } catch (error) {
+      console.error('🔍 Erro na validação de sessão:', error);
+      
+      // ✅ NOVO: Limpeza de emergência em caso de erro
+      await supabase.auth.signOut({ scope: 'global' });
+      await get().clearAllLocalData();
+      
+      return false;
+    }
+  },
+
+  // ✅ NOVO: Função para verificar sessão periodicamente
+  startSessionValidation: () => {
+    console.log('🔍 Iniciando validação periódica de sessão...');
+    
+    // ✅ Validar a cada 5 minutos
+    const validationInterval = setInterval(async () => {
+      const isValid = await get().validateSession();
+      
+      if (!isValid) {
+        console.log('❌ Sessão inválida detectada - limpando dados');
+        clearInterval(validationInterval);
+      }
+    }, 5 * 60 * 1000); // 5 minutos
+    
+    // ✅ Retornar função para parar a validação
+    return () => {
+      console.log('🔍 Parando validação periódica de sessão...');
+      clearInterval(validationInterval);
+    };
   },
 }));

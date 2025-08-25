@@ -6,6 +6,7 @@ export interface Profile {
     main_goal: 'health' | 'performance' | 'weight_loss' | 'fun';
     context_type: 'solo' | 'coached' | 'hybrid';
     onboarding_completed: boolean;
+    user_type: 'athlete' | 'coach'; // ✅ NOVO: Tipo de usuário
     created_at: string;
     updated_at: string;
     date_of_birth?: string;
@@ -169,6 +170,7 @@ export interface Profile {
     phone?: string;
     bio?: string;
     experience_years?: number;
+    cref: string; // CREF obrigatório para treinadores
     certifications?: string[];
     specialties?: string[];
     is_active: boolean;

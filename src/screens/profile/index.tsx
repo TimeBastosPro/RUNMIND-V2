@@ -511,17 +511,43 @@ export default function ProfileScreen() {
       <ScrollView style={{ flex: 1 }}>
         {renderTabContent()}
       </ScrollView>
-      <Button mode="outlined" onPress={async () => {
-        try {
-          const { useViewStore } = require('../../stores/view');
-          useViewStore.getState().exitCoachView();
-        } catch {}
-        try {
-          await signOut();
-        } finally {
-          (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
-        }
-      }} style={{ marginTop: 16 }}>
+      <Button 
+        mode="outlined" 
+        onPress={async () => {
+          console.log('🔍 Botão "Sair da conta" clicado');
+          try {
+            // Limpar view de coach se necessário
+            try {
+              const { useViewStore } = require('../../stores/view');
+              useViewStore.getState().exitCoachView();
+              console.log('✅ View de coach limpa');
+            } catch (e) {
+              console.log('⚠️ Erro ao limpar view de coach:', e);
+            }
+            
+            // Fazer logout
+            console.log('🔍 Iniciando processo de logout...');
+            await signOut();
+            console.log('✅ Logout realizado com sucesso');
+            
+            // Navegar para tela de autenticação
+            console.log('🔍 Navegando para tela de autenticação...');
+            (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
+            console.log('✅ Navegação concluída');
+            
+          } catch (error) {
+            console.error('❌ Erro no processo de logout:', error);
+            // Mesmo com erro, tentar navegar para auth
+            try {
+              (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (navError) {
+              console.error('❌ Erro na navegação:', navError);
+            }
+          }
+        }} 
+        style={{ marginTop: 16 }}
+        disabled={false}
+      >
         Sair da conta
       </Button>
     </View>

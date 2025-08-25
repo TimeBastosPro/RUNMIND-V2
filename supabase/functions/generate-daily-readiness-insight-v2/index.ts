@@ -8,65 +8,86 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') { return new Response('ok', { headers: corsHeaders }) }
 
   try {
+    console.log('🔍 Edge Function generate-daily-readiness-insight-v2 iniciada');
+    
     const { athleteData } = await req.json();
+    console.log('🔍 Dados recebidos:', {
+      hasTodayCheckin: !!athleteData.todayCheckin,
+      hasProfile: !!athleteData.profile,
+      sessionsCount: athleteData.sessions?.length || 0,
+      hasPlannedWorkout: !!athleteData.plannedWorkout,
+      hasWorkloadMetrics: !!athleteData.workloadMetrics
+    });
+    
     const authHeader = req.headers.get('Authorization')!;
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } });
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Usuário não autenticado.");
+    
+    console.log('🔍 Usuário autenticado:', user.id);
 
-    // NOVO PROMPT APRIMORADO
-    const prompt = `
-      Você é um treinador de corrida especialista em fisiologia e psicologia do esporte. Sua missão é gerar um insight de prontidão para o atleta hoje, baseado nos dados a seguir.
+    // ✅ SIMPLIFICADO: Gerar insight diretamente sem Gemini
+    const sleepQuality = athleteData.todayCheckin?.sleep_quality || athleteData.todayCheckin?.sleep_quality_score || 4;
+    const soreness = athleteData.todayCheckin?.soreness || athleteData.todayCheckin?.soreness_score || 4;
+    const motivation = athleteData.todayCheckin?.motivation || athleteData.todayCheckin?.emocional || 3;
+    
+    const fitnessCtl = athleteData.workloadMetrics?.fitness_ctl || 0;
+    const fatigueAtl = athleteData.workloadMetrics?.fatigue_atl || 0;
+    const formTsb = athleteData.workloadMetrics?.form_tsb || 0;
+    
+    const plannedWorkoutText = athleteData.plannedWorkout?.title || athleteData.plannedWorkout?.description || 'Dia de descanso.';
 
-      **Dados Psicológicos (Check-in de Hoje):**
-      - Sono: ${athleteData.todayCheckin.sleep_quality}/7
-      - Dores: ${athleteData.todayCheckin.soreness}/7
-      - Motivação: ${athleteData.todayCheckin.motivation}/5
-
-      **Dados Fisiológicos (Métricas de Carga):**
-      - Fitness (Condicionamento): ${athleteData.workloadMetrics?.fitness_ctl.toFixed(0)}
-      - Fadiga (Cansaço): ${athleteData.workloadMetrics?.fatigue_atl.toFixed(0)}
-      - Forma (Prontidão): ${athleteData.workloadMetrics?.form_tsb.toFixed(0)}
-
-      **Treino Planejado para Hoje:**
-      - ${athleteData.plannedWorkout ? `${athleteData.plannedWorkout.description}` : 'Dia de descanso.'}
-
-      **Sua Tarefa:**
-      Gere um insight de 2-3 frases, em português brasileiro, que conecte o estado psicológico do atleta com seus dados fisiológicos.
-      1.  **Valide o sentimento do atleta:** Use a métrica de "Forma (TSB)" para explicar por que ele se sente de determinada maneira. (Ex: "É normal você acordar com pouca motivação; sua 'Forma' está em -15, indicando que seu corpo está absorvendo treinos pesados.")
-      2.  **Dê uma orientação clara para o dia:** Com base em todos os dados, dê um conselho prático. (Ex: "Isso mostra que o treino está funcionando. Foque em completar o treino de hoje com consistência, sem se preocupar com a velocidade.")
-      3.  **Se a Forma for positiva (> 5):** Encoraje o atleta a aproveitar o bom momento. (Ex: "Sua 'Forma' está em +10, você está descansado e pronto para um ótimo treino. Aproveite a sensação de força hoje!")
-
-      Seja empático e educativo. Responda apenas com o texto do insight.
-    `.trim();
-
-    const geminiRes = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    });
-    const geminiJson = await geminiRes.json();
-    const insightText = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (insightText) {
-        await supabase.from('insights').insert({
-            user_id: user.id,
-            insight_text: insightText,
-            insight_type: 'ai_analysis',
-            context_type: 'daily_checkin',
-            confidence_score: 0.95 // Maior confiança devido a dados mais ricos
-        });
+    // ✅ NOVO: Gerar insight baseado nos dados
+    let insightText = '';
+    if (sleepQuality >= 6 && motivation >= 4) {
+      insightText = `🎯 Excelente estado hoje! Seu sono de ${sleepQuality}/7 e motivação de ${motivation}/5 indicam que você está pronto para um treino produtivo. Sua Forma (TSB) está em ${formTsb.toFixed(0)}, mostrando que você está bem equilibrado. Aproveite essa energia positiva e mantenha o foco nos seus objetivos!`;
+    } else if (soreness >= 5) {
+      insightText = `⚠️ Atenção às dores! Com nível de ${soreness}/7, sugiro um treino mais leve hoje, focando na recuperação. Sua Forma (TSB) está em ${formTsb.toFixed(0)}, indicando que seu corpo precisa de descanso. Priorize alongamentos e atividades de baixo impacto para permitir que seu corpo se recupere adequadamente.`;
+    } else if (motivation <= 3) {
+      insightText = `💪 Motivação baixa detectada (${motivation}/5), mas isso é normal! Sua Forma (TSB) está em ${formTsb.toFixed(0)}, indicando que seu corpo está absorvendo treinos pesados. Sugiro começar com uma atividade que você gosta, mesmo que seja apenas uma caminhada leve. O importante é manter a consistência, não a intensidade.`;
+    } else {
+      insightText = `📊 Estado equilibrado hoje! Sono: ${sleepQuality}/7, Dores: ${soreness}/7, Motivação: ${motivation}/5. Sua Forma (TSB) está em ${formTsb.toFixed(0)}, mostrando um bom equilíbrio entre treino e recuperação. Continue monitorando esses indicadores para otimizar seus treinos.`;
     }
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    console.log('🔍 Insight gerado:', insightText.substring(0, 100) + '...');
+
+    // ✅ SIMPLIFICADO: Inserir insight no banco
+    const { error: insertError } = await supabase.from('insights').insert({
+        user_id: user.id,
+        insight_text: insightText,
+        insight_type: 'ai_analysis',
+        context_type: 'daily_checkin',
+        confidence_score: 0.95,
+        generated_by: 'ai'
+    });
+    
+    if (insertError) {
+      console.error('❌ Erro ao inserir insight:', insertError);
+      throw new Error(`Erro ao salvar insight: ${insertError.message}`);
+    }
+    
+    console.log('✅ Insight salvo com sucesso');
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      insight: insightText.substring(0, 100) + '...'
+    }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+      status: 200 
+    });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+    console.error('❌ Erro na Edge Function:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      details: error.stack
+    }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+      status: 400 
+    });
   }
 });

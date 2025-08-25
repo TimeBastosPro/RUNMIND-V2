@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cf91f4d5-e777-4c72-ae4f-9ee54a7d4c0a"
+      }
+    },
+    "owner": "bastosrun"
   }
 }

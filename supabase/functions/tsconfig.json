@@ -2,7 +2,18 @@
   "compilerOptions": {
     "lib": ["esnext"],
     "strict": true,
-    "noEmit": true
+    "noEmit": true,
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
-  "include": ["./*"]
+  "include": [
+    "*/index.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 } 

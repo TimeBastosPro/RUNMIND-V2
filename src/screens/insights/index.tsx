@@ -17,6 +17,15 @@ export default function InsightsScreen() {
   const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
   const [athleteName, setAthleteName] = React.useState<string | null>(athleteNameFromStore || null);
 
+  // ✅ NOVO: Log de debug para insights
+  console.log('🔍 InsightsScreen - Estado atual:', {
+    savedInsightsCount: savedInsights?.length || 0,
+    isLoading,
+    isCoachView,
+    viewAsAthleteId,
+    athleteName
+  });
+
   React.useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -39,22 +48,36 @@ export default function InsightsScreen() {
   }, [isCoachView, viewAsAthleteId, athleteNameFromStore]);
 
   useEffect(() => {
-    // ✅ OTIMIZADO: Reduzir logs e melhorar performance
+    console.log('🔍 InsightsScreen - useEffect principal executado');
     
     // Se estamos no modo treinador mas não temos viewAsAthleteId, aguardar
     if (isCoachView && !viewAsAthleteId) {
+      console.log('🔍 Modo coach sem viewAsAthleteId, aguardando...');
       return;
     }
     
+    console.log('🔍 Carregando insights...');
     loadSavedInsights();
   }, [loadSavedInsights, isCoachView, viewAsAthleteId]);
 
-  // ✅ OTIMIZADO: useEffect específico para recarregar insights quando viewAsAthleteId muda
+  // ✅ NOVO: useEffect específico para recarregar insights quando viewAsAthleteId muda
   useEffect(() => {
     if (viewAsAthleteId) {
+      console.log('🔍 viewAsAthleteId mudou, recarregando insights...');
       loadSavedInsights();
     }
   }, [viewAsAthleteId, loadSavedInsights]);
+
+  // ✅ NOVO: Função para forçar recarregamento
+  const handleRefresh = async () => {
+    console.log('🔍 Recarregamento manual solicitado');
+    try {
+      await loadSavedInsights();
+      console.log('✅ Recarregamento manual concluído');
+    } catch (error) {
+      console.error('❌ Erro no recarregamento manual:', error);
+    }
+  };
 
   const handleDeleteInsight = async (insightId: string) => {
     if (isCoachView) return;
@@ -77,8 +100,6 @@ export default function InsightsScreen() {
       ]
     );
   };
-
-
 
   const getInsightTypeColor = (type: string) => {
     switch (type) {
@@ -121,6 +142,21 @@ export default function InsightsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ✅ NOVO: Botão de debug para forçar recarregamento */}
+      <View style={{ marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 12, color: '#666' }}>
+          Insights: {savedInsights?.length || 0} encontrados
+        </Text>
+        <Button 
+          mode="outlined" 
+          onPress={handleRefresh}
+          style={{ height: 30 }}
+          labelStyle={{ fontSize: 12 }}
+        >
+          🔄 Recarregar
+        </Button>
+      </View>
+
       {isCoachView && (
         <View style={{ padding: 10, marginBottom: 8, borderRadius: 8, backgroundColor: '#EDE7F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Chip icon="shield-account" mode="outlined">Visualizando como Treinador{athleteName ? ` — ${athleteName}` : ''}</Chip>
@@ -173,6 +209,14 @@ export default function InsightsScreen() {
             <Text style={styles.emptyText}>
               Seus insights personalizados aparecerão aqui após alguns check-ins e análises!
             </Text>
+            {/* ✅ NOVO: Botão para forçar recarregamento quando vazio */}
+            <Button 
+              mode="contained" 
+              onPress={handleRefresh}
+              style={{ marginTop: 20 }}
+            >
+              🔄 Tentar Novamente
+            </Button>
           </View>
         }
         contentContainerStyle={savedInsights.length === 0 ? { flex: 1 } : undefined}

@@ -1,81 +1,22 @@
-import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Configuração segura usando variáveis de ambiente (SEM fallback para evitar apontar para projeto incorreto)
-const supabaseUrl = (Constants.expoConfig as any)?.extra?.EXPO_PUBLIC_SUPABASE_URL ||
-                   process.env.EXPO_PUBLIC_SUPABASE_URL ||
-                   '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-const supabaseAnonKey = (Constants.expoConfig as any)?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-                       process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-                       '';
-
-// Validação de segurança
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ ERRO: Variáveis de ambiente do Supabase não configuradas!');
-  console.error('Configure EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY em app.json (extra) ou variáveis de ambiente.');
-  throw new Error('Configuração do Supabase inválida');
-}
-
-console.log('🔧 Supabase Config - URL:', supabaseUrl);
-console.log('🔧 Supabase Config - Key: [oculta]');
-
-// ✅ MELHORADO: Configuração específica para React Native com timeouts otimizados
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    // ✅ MELHORADO: Configurações otimizadas para mobile
-    autoRefreshToken: true, // Sempre habilitado para melhor experiência
-    persistSession: true, // Sempre persistir sessão
+    autoRefreshToken: true,
+    persistSession: true,
     detectSessionInUrl: false,
-    flowType: 'pkce',
-    debug: __DEV__, // Logs apenas em desenvolvimento
-  },
-  // ✅ MELHORADO: Configurações de rede para mobile com timeouts adequados
-  global: {
-    headers: {
-      'X-Client-Info': 'runmind-mobile',
-    },
-    // ✅ NOVO: Timeouts de rede otimizados
-    fetch: (url, options = {}) => {
-      return fetch(url, {
-        ...options,
-        signal: AbortSignal.timeout(30000), // 30 segundos de timeout
-      });
-    },
-  },
-  // ✅ NOVO: Configurações de retry para mobile
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
   },
 });
 
-// ✅ NOVO: Função para limpar dados de sessão corrompidos
-export const clearCorruptedSession = async () => {
-  try {
-    console.log('🧹 Limpando sessão corrompida...');
-    // Remove chaves conhecidas
-    await AsyncStorage.removeItem('supabase.auth.token');
-    await AsyncStorage.removeItem('supabase.auth.refreshToken');
-    // Remove todas as chaves do Supabase (formato sb-<ref>-auth-token)
-    const keys = await AsyncStorage.getAllKeys();
-    const toRemove = keys.filter(k => k.startsWith('sb-') || k.includes('supabase'));
-    if (toRemove.length) {
-      await AsyncStorage.multiRemove(toRemove);
-    }
-    console.log('✅ Sessão limpa com sucesso');
-  } catch (error) {
-    console.error('❌ Erro ao limpar sessão:', error);
-  }
-};
-
-// ✅ NOVO: Função para verificar e reparar sessão
-export const checkAndRepairSession = async () => {
+/**
+ * Verifica se há uma sessão válida
+ */
+export const checkAndRepairSession = async (): Promise<boolean> => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
     
@@ -92,5 +33,34 @@ export const checkAndRepairSession = async () => {
   } catch (error) {
     console.error('❌ Erro ao verificar sessão:', error);
     return false;
+  }
+};
+
+/**
+ * Limpa sessão corrompida
+ */
+export const clearCorruptedSession = async (): Promise<void> => {
+  try {
+    console.log('🧹 Limpando sessão corrompida...');
+    
+    // Limpar AsyncStorage
+    const keys = await AsyncStorage.getAllKeys();
+    const supabaseKeys = keys.filter(key => 
+      key.includes('supabase') || 
+      key.includes('sb-') || 
+      key.includes('auth')
+    );
+    
+    if (supabaseKeys.length > 0) {
+      await AsyncStorage.multiRemove(supabaseKeys);
+      console.log('✅ Chaves do Supabase removidas');
+    }
+    
+    // Fazer logout do Supabase
+    await supabase.auth.signOut();
+    console.log('✅ Logout do Supabase realizado');
+    
+  } catch (error) {
+    console.error('❌ Erro ao limpar sessão corrompida:', error);
   }
 };

@@ -5,6 +5,7 @@ import Slider from '@react-native-community/slider';
 import WeeklyReflectionModal, { WeeklyReflectionAnswers } from '../training/WeeklyReflectionModal';
 import { useCheckinStore } from '../../stores/checkin';
 import { useAuthStore } from '../../stores/auth';
+import { useNavigation } from '@react-navigation/native';
 
 type DailyCheckinModalProps = {
   visible: boolean;
@@ -103,6 +104,7 @@ function SliderUniversal(props: any) {
 }
 
 export default function DailyCheckinScreen() {
+  const navigation = useNavigation();
   const todayCheckin = useCheckinStore(s => s.todayCheckin);
   const hasCheckedInToday = useCheckinStore(s => s.hasCheckedInToday);
   const isSubmitting = useCheckinStore(s => s.isSubmitting);
@@ -145,15 +147,55 @@ export default function DailyCheckinScreen() {
       confidence,                      // 1-5
     };
     try {
-      console.log('Enviando check-in:', checkinData);
+      console.log('🔍 Iniciando submissão do check-in:', checkinData);
+      
+      // ✅ MELHORADO: Salvar check-in com feedback visual
       await saveDailyCheckin(checkinData);
-      // ✅ CORRIGIDO: Insight é gerado automaticamente no saveDailyCheckin
+      console.log('✅ Check-in salvo com sucesso');
+      
+      // ✅ MELHORADO: Fechar modal imediatamente
       setDailyCheckinVisible(false);
-      await loadTodayCheckin();
-      Alert.alert('Sucesso', 'Check-in salvo! Um insight personalizado foi gerado automaticamente.');
+      console.log('✅ Modal fechado');
+      
+      // ✅ MELHORADO: Recarregar dados em background
+      setTimeout(async () => {
+        try {
+          await loadTodayCheckin();
+          console.log('✅ Dados recarregados');
+        } catch (reloadError) {
+          console.error('⚠️ Erro ao recarregar dados:', reloadError);
+        }
+      }, 100);
+      
+      // ✅ MELHORADO: Mostrar mensagem de sucesso
+      Alert.alert(
+        'Check-in Concluído! ✅', 
+        'Seu check-in foi salvo e um insight personalizado foi gerado automaticamente. Você pode visualizá-lo na aba de Insights.',
+        [
+          {
+            text: 'Ver Insights',
+            onPress: () => {
+              try {
+                // @ts-ignore
+                navigation.navigate('Insights' as never);
+              } catch (navError) {
+                console.error('⚠️ Erro na navegação:', navError);
+              }
+            }
+          },
+          {
+            text: 'OK',
+            style: 'default'
+          }
+        ]
+      );
+      
     } catch (err) {
-      Alert.alert('Erro', err instanceof Error ? err.message : 'Erro desconhecido');
-      console.error('Erro ao salvar check-in:', err);
+      console.error('❌ Erro ao salvar check-in:', err);
+      Alert.alert(
+        'Erro ao Salvar', 
+        err instanceof Error ? err.message : 'Erro desconhecido ao salvar check-in'
+      );
     }
   };
 

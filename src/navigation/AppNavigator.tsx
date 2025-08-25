@@ -6,6 +6,10 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Text, Card, TextInput, Button, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { PasswordStrengthIndicator } from '../components/ui/PasswordStrengthIndicator';
+// Temporariamente desabilitado para resolver erro do React
+// import { NotificationToast } from '../components/NotificationToast';
+// import { useNotificationsStore } from '../stores/notifications';
 
 import { useAuthStore } from '../stores/auth';
 import { useCoachStore } from '../stores/coach';
@@ -35,6 +39,7 @@ import CoachAthleteDetailScreen from '../screens/coach/CoachAthleteDetailScreen'
 import CoachViewAthleteScreen from '../screens/coach/CoachViewAthleteScreen';
 import CoachProfileSetupScreen from '../screens/auth/CoachProfileSetupScreen';
 import UserTypeSelectionScreen from '../screens/auth/UserTypeSelectionScreen';
+import UserNotRegisteredScreen from '../screens/auth/UserNotRegisteredScreen';
 
 // Athlete Screens
 import CoachSearchScreen from '../screens/athlete/CoachSearchScreen';
@@ -81,6 +86,7 @@ type StackParamList = {
   CoachAthleteAnalysis: { athleteId: string };
   CoachAthleteInsights: { athleteId: string };
   Calendar: undefined;
+  UserNotRegistered: undefined;
 };
 
 type NavigationProps = {
@@ -94,6 +100,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
   const { signIn, signUp, isLoading, resetPassword } = useAuthStore();
   const { currentCoach, loadCoachProfile } = useCoachStore();
+  
   const [isLogin, setIsLogin] = useState(true);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showUserTypeSelection, setShowUserTypeSelection] = useState(false);
@@ -104,6 +111,7 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
     email: z.string().email('E-mail inválido'),
     password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
     fullName: z.string().optional(),
+    cref: z.string().optional(), // ✅ NOVO: Campo CREF para treinadores
   });
 
   const {
@@ -114,7 +122,7 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
     reset,
   } = useForm<z.infer<typeof unifiedSchema>>({
     resolver: zodResolver(unifiedSchema),
-    defaultValues: { email: '', password: '', fullName: '' },
+    defaultValues: { email: '', password: '', fullName: '', cref: '' }, // ✅ NOVO: Incluir cref
     mode: 'onBlur', // ✅ CORRIGIDO: Mudança de 'onChange' para 'onBlur' para reduzir re-renders
     reValidateMode: 'onBlur', // ✅ NOVO: Revalidação apenas no blur
   });
@@ -131,7 +139,8 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
         reset({ 
           email: currentEmail, 
           password: '', 
-          fullName: '' 
+          fullName: '',
+          cref: '' // ✅ NOVO: Resetar cref também
         });
       });
     }
@@ -149,7 +158,8 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
         reset({ 
           email: currentEmail, 
           password: '', 
-          fullName: '' 
+          fullName: '',
+          cref: '' // ✅ NOVO: Resetar cref também
         });
       });
     }
@@ -167,7 +177,8 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
         reset({ 
           email: currentEmail, 
           password: '', 
-          fullName: '' 
+          fullName: '',
+          cref: '' // ✅ NOVO: Resetar cref também
         });
       });
     }
@@ -193,7 +204,25 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
           return;
         }
         
-        await signUp(data.email, data.password, data.fullName, { isCoach: isCoachSignUp });
+        // ✅ NOVO: Validar CREF para treinadores
+        if (isCoachSignUp) {
+          if (!data.cref || data.cref.trim() === '') {
+            setError('cref', { message: 'CREF é obrigatório para treinadores' });
+            return;
+          }
+          
+          // ✅ NOVO: Validar formato do CREF (123456-GMG ou 123456-PSP)
+          const crefRegex = /^\d{6}-[PG][A-Z]{2}$/;
+          if (!crefRegex.test(data.cref.trim())) {
+            setError('cref', { message: 'CREF deve estar no formato: 123456-GMG ou 123456-PSP' });
+            return;
+          }
+        }
+        
+        await signUp(data.email, data.password, data.fullName, { 
+          isCoach: isCoachSignUp,
+          cref: isCoachSignUp ? data.cref.trim() : undefined // ✅ NOVO: Passar CREF
+        });
         if (isCoachSignUp) {
           // Cadastro de treinador: carregar perfil e enviar imediatamente para CoachMain
           try {
@@ -219,6 +248,14 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
       let errorMessage = 'Erro ao autenticar.';
       
       if (error.message) {
+        // ✅ NOVO: Verificar se é erro de usuário não cadastrado
+        if (error.message.includes('Usuário não cadastrado') || 
+            error.message.includes('não está cadastrado') ||
+            error.message.includes('Crie uma conta primeiro')) {
+          // ✅ NOVO: Mostrar mensagem específica para usuário não cadastrado
+          errorMessage = 'Usuário não cadastrado no sistema. Crie uma conta primeiro.';
+        }
+        
         // ✅ NOVO: Mensagens mais específicas para mobile
         if (error.message.includes('Email ou senha incorretos')) {
           errorMessage = 'Email ou senha incorretos. Verifique suas credenciais.';
@@ -396,6 +433,38 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
             />
           )}
 
+          {/* ✅ NOVO: Campo CREF apenas para treinadores */}
+          {!isLogin && isCoachSignUp && (
+            <Controller
+              control={control}
+              name="cref"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <>
+                  <TextInput
+                    label="CREF (Conselho Regional de Educação Física)"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    placeholder="123456-SP"
+                    style={{ marginBottom: 4 }}
+                    mode="outlined"
+                  />
+                  <HelperText type="info" visible={true}>
+                    Formato: 123456-SP (6 dígitos + hífen + 2 letras do estado)
+                  </HelperText>
+                  <HelperText type="error" visible={
+                    !isLogin &&
+                    typeof errors === 'object' &&
+                    'cref' in errors &&
+                    !!(errors as any).cref
+                  }>
+                    {(!isLogin && typeof errors === 'object' && 'cref' in errors && (errors as any).cref?.message) || ''}
+                  </HelperText>
+                </>
+              )}
+            />
+          )}
+
           <Controller
             control={control}
             name="email"
@@ -435,6 +504,18 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
                   style={{ marginBottom: 4 }}
                   mode="outlined"
                 />
+                {!isLogin && value && (
+                  <PasswordStrengthIndicator 
+                    password={value} 
+                    showRequirements={true}
+                    style={{ marginBottom: 8 }}
+                  />
+                )}
+                {!isLogin && !value && (
+                  <HelperText type="info" visible={true}>
+                    A senha deve ter pelo menos 8 caracteres, incluindo maiúsculas, números e símbolos
+                  </HelperText>
+                )}
                 <HelperText type="error" visible={!!errors.password}>
                   {errors.password?.message}
                 </HelperText>
@@ -636,11 +717,36 @@ export default function AppNavigator() {
         
         if (session?.user) {
           console.log('🔍 Usuário autenticado encontrado:', session.user.id);
+          
+          // ✅ NOVO: VALIDAÇÃO CRÍTICA DE SESSÃO
+          console.log('🔍 Validando sessão antes de permitir acesso...');
+          const isSessionValid = await useAuthStore.getState().validateSession();
+          
+          if (!isSessionValid) {
+            console.error('❌ Sessão inválida detectada - redirecionando para login');
+            useAuthStore.setState({
+              user: null,
+              profile: null,
+              isAuthenticated: false,
+              isInitializing: false,
+            });
+            return;
+          }
+          
+          console.log('✅ Sessão validada - permitindo acesso');
           useAuthStore.setState({
             user: session.user,
             isAuthenticated: true,
             isInitializing: false,
           });
+          
+          // ✅ NOVO: Iniciar validação periódica de sessão
+          const stopValidation = useAuthStore.getState().startSessionValidation();
+          
+          // ✅ NOVO: Limpar validação quando o componente for desmontado
+          return () => {
+            stopValidation();
+          };
           
           // ✅ MELHORADO: Carregar perfis em sequência para evitar conflitos
           try {
@@ -828,15 +934,21 @@ export default function AppNavigator() {
             </>
           )
         ) : (
-          <Stack.Screen 
-            name="Auth" 
-            component={(props: any) => (
-              <AuthScreen 
-                {...props} 
-                onCoachSelected={() => setShowCoachProfileSetup(true)} 
-              />
-            )} 
-          />
+          <>
+            <Stack.Screen 
+              name="Auth" 
+              component={(props: any) => (
+                <AuthScreen 
+                  {...props} 
+                  onCoachSelected={() => setShowCoachProfileSetup(true)} 
+                />
+              )} 
+            />
+            <Stack.Screen 
+              name="UserNotRegistered" 
+              component={UserNotRegisteredScreen} 
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

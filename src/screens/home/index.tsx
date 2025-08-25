@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { Card, Text, Button, Chip, IconButton, Surface, Avatar } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { Card, Text, Button, Chip, IconButton, Surface, Avatar, Snackbar } from 'react-native-paper';
 import { useCheckinStore } from '../../stores/checkin';
 import { useAuthStore } from '../../stores/auth';
 import { useNavigation } from '@react-navigation/native';
@@ -109,6 +109,7 @@ export default function HomeScreen() {
   const [motivationalQuote, setMotivationalQuote] = useState(motivationalQuotes[0]);
   const [dailyCuriosity, setDailyCuriosity] = useState(sportCuriosities[0]);
   const [athleteHeaderName, setAthleteHeaderName] = useState<string | null>(athleteNameFromStore || null);
+  const [showProfileAlert, setShowProfileAlert] = useState(false);
 
   useEffect(() => {
     // Garantir que o perfil seja carregado
@@ -118,6 +119,13 @@ export default function HomeScreen() {
     loadTodayCheckin();
     loadRecentCheckins();
     fetchTrainingSessions();
+    
+    // Verificar se é primeiro acesso e mostrar alerta para completar perfil
+    if (profile && !profile.onboarding_completed) {
+      setTimeout(() => {
+        setShowProfileAlert(true);
+      }, 2000); // Aguardar 2 segundos para carregar a tela
+    }
     
     // Carregar provas baseado no modo (treinador ou atleta)
     if (isCoachView && viewAsAthleteId) {
@@ -650,6 +658,24 @@ export default function HomeScreen() {
 
 
       <View style={styles.bottomSpace} />
+      
+      {/* Alerta para completar perfil no primeiro acesso */}
+      <Snackbar
+        visible={showProfileAlert}
+        onDismiss={() => setShowProfileAlert(false)}
+        duration={8000}
+        style={{ backgroundColor: '#FF9800' }}
+        action={{
+          label: 'Completar Perfil',
+          onPress: () => {
+            setShowProfileAlert(false);
+            // @ts-ignore
+            navigation.navigate('Profile');
+          },
+        }}
+      >
+        🎯 Complete seu perfil para aproveitar melhor o RunMind! Adicione seus dados pessoais e preferências de treino.
+      </Snackbar>
     </ScrollView>
   );
 }

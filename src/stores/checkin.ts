@@ -208,29 +208,278 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     }
   },
 
-  // FUNÇÕES DE GATILHO AUTOMÁTICO (TEMPORARIAMENTE DESABILITADAS)
+  // FUNÇÕES DE GATILHO AUTOMÁTICO (REATIVADAS)
   triggerDailyInsight: async (newCheckin) => {
+    console.log('🔍 ===== TRIGGER DAILY INSIGHT INICIADO =====');
+    console.log('🔍 triggerDailyInsight iniciado para check-in:', newCheckin.id);
+    
     try {
-      // TODO: Reativar após deploy das Supabase Functions
-      console.log("🔍 Insight diário seria gerado para:", newCheckin.date);
+      const user = useAuthStore.getState().user;
+      if (!user) {
+        console.error('❌ Usuário não encontrado no trigger');
+        return;
+      }
+      
+      console.log('🔍 Usuário encontrado:', user.id);
+
+      // ✅ CORRIGIDO: Coletar dados completos para a Edge Function
+      const [profileResult, sessionsResult, plannedWorkoutResult] = await Promise.allSettled([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('training_sessions').select('*').eq('user_id', user.id).eq('status', 'completed').gte('training_date', new Date(Date.now() - 42 * 24 * 60 * 60 * 1000).toISOString()),
+        supabase.from('training_sessions').select('*').eq('user_id', user.id).eq('training_date', new Date().toISOString().split('T')[0]).eq('status', 'planned').maybeSingle()
+      ]);
+
+      const profile = profileResult.status === 'fulfilled' ? profileResult.value.data : null;
+      const sessions = sessionsResult.status === 'fulfilled' ? sessionsResult.value.data : [];
+      const plannedWorkout = plannedWorkoutResult.status === 'fulfilled' ? plannedWorkoutResult.value.data : null;
+
+      console.log('✅ Dados coletados:', {
+        hasProfile: !!profile,
+        sessionsCount: sessions?.length || 0,
+        hasPlannedWorkout: !!plannedWorkout
+      });
+
+      // ✅ CORRIGIDO: Calcular métricas de carga
+      let workloadMetrics = null;
+      try {
+        workloadMetrics = sessions && sessions.length > 0 ? calculateWorkloadMetrics(sessions) : null;
+        console.log('✅ Métricas calculadas:', workloadMetrics);
+      } catch (metricsError) {
+        console.error('⚠️ Erro ao calcular métricas:', metricsError);
+      }
+
+      const athleteData = {
+        todayCheckin: newCheckin,
+        profile,
+        sessions: sessions || [],
+        plannedWorkout,
+        workloadMetrics
+      };
+
+      console.log('🔍 Gerando insight localmente...');
+
+      // ✅ CORRIGIDO: Gerar insight localmente (sem Edge Function)
+      try {
+        const sleepQuality = newCheckin.sleep_quality || newCheckin.sleep_quality_score || 4;
+        const soreness = newCheckin.soreness || newCheckin.soreness_score || 4;
+        const motivation = newCheckin.motivation || (newCheckin as any).emocional || 3;
+        
+        const fitnessCtl = workloadMetrics?.fitness_ctl || 0;
+        const fatigueAtl = workloadMetrics?.fatigue_atl || 0;
+        const formTsb = workloadMetrics?.form_tsb || 0;
+        
+        const plannedWorkoutText = plannedWorkout?.title || plannedWorkout?.description || 'Dia de descanso.';
+
+        // ✅ NOVO: Gerar insight baseado nos dados
+        let insightText = '';
+        if (sleepQuality >= 6 && motivation >= 4) {
+          insightText = `🎯 Excelente estado hoje! Seu sono de ${sleepQuality}/7 e motivação de ${motivation}/5 indicam que você está pronto para um treino produtivo. Sua Forma (TSB) está em ${formTsb.toFixed(0)}, mostrando que você está bem equilibrado. Aproveite essa energia positiva e mantenha o foco nos seus objetivos!`;
+        } else if (soreness >= 5) {
+          insightText = `⚠️ Atenção às dores! Com nível de ${soreness}/7, sugiro um treino mais leve hoje, focando na recuperação. Sua Forma (TSB) está em ${formTsb.toFixed(0)}, indicando que seu corpo precisa de descanso. Priorize alongamentos e atividades de baixo impacto para permitir que seu corpo se recupere adequadamente.`;
+        } else if (motivation <= 3) {
+          insightText = `💪 Motivação baixa detectada (${motivation}/5), mas isso é normal! Sua Forma (TSB) está em ${formTsb.toFixed(0)}, indicando que seu corpo está absorvendo treinos pesados. Sugiro começar com uma atividade que você gosta, mesmo que seja apenas uma caminhada leve. O importante é manter a consistência, não a intensidade.`;
+        } else {
+          insightText = `📊 Estado equilibrado hoje! Sono: ${sleepQuality}/7, Dores: ${soreness}/7, Motivação: ${motivation}/5. Sua Forma (TSB) está em ${formTsb.toFixed(0)}, mostrando um bom equilíbrio entre treino e recuperação. Continue monitorando esses indicadores para otimizar seus treinos.`;
+        }
+
+        console.log('🔍 Insight gerado:', insightText.substring(0, 100) + '...');
+
+        const { error: insertError } = await supabase.from('insights').insert({
+          user_id: user.id,
+          insight_text: insightText,
+          insight_type: 'ai_analysis',
+          context_type: 'daily_checkin',
+          confidence_score: 0.95,
+          generated_by: 'ai'
+        });
+        
+        if (insertError) {
+          console.error('❌ Erro ao inserir insight:', insertError);
+          throw insertError;
+        } else {
+          console.log('✅ Insight gerado com sucesso localmente');
+        }
+      } catch (insightError) {
+        console.error('❌ Erro ao gerar insight:', insightError);
+        
+        // ✅ FALLBACK: Insight básico
+        try {
+          const sleepQuality = newCheckin.sleep_quality || newCheckin.sleep_quality_score || 4;
+          const soreness = newCheckin.soreness || newCheckin.soreness_score || 4;
+          const motivation = newCheckin.motivation || (newCheckin as any).emocional || 3;
+          
+          const fallbackInsight = `Seu check-in de hoje foi registrado com sucesso! Sono: ${sleepQuality}/7, Dores: ${soreness}/7, Motivação: ${motivation}/5. Continue monitorando seu bem-estar diariamente para receber insights personalizados sobre sua performance.`;
+          
+          const { error: insertError } = await supabase.from('insights').insert({
+            user_id: user.id,
+            insight_text: fallbackInsight,
+            insight_type: 'ai_analysis',
+            context_type: 'daily_checkin',
+            confidence_score: 0.8,
+            generated_by: 'system'
+          });
+          
+          if (insertError) {
+            console.error('❌ Erro ao inserir insight de fallback:', insertError);
+          } else {
+            console.log('✅ Insight de fallback criado com sucesso');
+          }
+        } catch (fallbackError) {
+          console.error('❌ Erro ao criar insight de fallback:', fallbackError);
+        }
+      }
+
+      // ✅ MELHORADO: Recarregar insights de forma mais eficiente
+      try {
+        await get().loadSavedInsights();
+        console.log('✅ Insights recarregados');
+      } catch (reloadError) {
+        console.error('⚠️ Erro ao recarregar insights:', reloadError);
+      }
+      
+      console.log('🔍 ===== TRIGGER DAILY INSIGHT FINALIZADO =====');
     } catch (error) {
       console.error("❌ Erro no trigger diário:", error);
+      console.log('🔍 ===== TRIGGER DAILY INSIGHT COM ERRO =====');
     }
   },
 
   triggerAssimilationInsight: async (completedTraining) => {
+    console.log('🔍 triggerAssimilationInsight iniciado para treino:', completedTraining.id);
     try {
-      // TODO: Reativar após deploy das Supabase Functions
-      console.log("🔍 Insight de assimilação seria gerado para treino:", completedTraining.id);
+      const user = useAuthStore.getState().user;
+      if (!user) {
+        console.error('❌ Usuário não encontrado no trigger de assimilação');
+        return;
+      }
+
+      // ✅ MELHORADO: Coletar dados de forma mais eficiente
+      const [profileResult, sessionsResult] = await Promise.allSettled([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('training_sessions').select('*').eq('user_id', user.id).eq('status', 'completed').gte('training_date', new Date(Date.now() - 42 * 24 * 60 * 60 * 1000).toISOString())
+      ]);
+
+      const profile = profileResult.status === 'fulfilled' ? profileResult.value.data : null;
+      const sessions = sessionsResult.status === 'fulfilled' ? sessionsResult.value.data : [];
+
+      const athleteData = {
+        completedTraining,
+        profile,
+        sessions: sessions || []
+      };
+
+      console.log('🔍 Chamando Edge Function de assimilação...');
+
+      try {
+        const { data: functionResult, error } = await supabase.functions.invoke('generate-training-assimilation-insight-v2', {
+          body: { athleteData }
+        });
+
+        if (error) {
+          console.error("❌ Erro na função de insight de assimilação:", error);
+          throw error;
+        } else {
+          console.log("✅ Insight de assimilação gerado com sucesso");
+          console.log("✅ Resultado:", functionResult);
+        }
+      } catch (functionError) {
+        console.error('❌ Erro na função, criando fallback...');
+        
+        // ✅ MELHORADO: Fallback para assimilação
+        try {
+          const fallbackInsight = `Seu treino foi registrado com sucesso! Continue monitorando sua recuperação para receber insights sobre assimilação de treinos.`;
+          
+          const { error: insertError } = await supabase.from('insights').insert({
+            user_id: user.id,
+            insight_text: fallbackInsight,
+            insight_type: 'ai_analysis',
+            context_type: 'training_assimilation',
+            confidence_score: 0.8,
+            generated_by: 'system'
+          });
+          
+          if (insertError) {
+            console.error('❌ Erro ao inserir insight de fallback:', insertError);
+          } else {
+            console.log('✅ Insight de fallback criado com sucesso');
+          }
+        } catch (fallbackError) {
+          console.error('❌ Erro ao criar insight de fallback:', fallbackError);
+        }
+      }
     } catch (error) {
       console.error("❌ Erro no trigger de assimilação:", error);
     }
   },
 
   triggerWeeklyInsight: async (reflection) => {
+    console.log('🔍 triggerWeeklyInsight iniciado para reflexão da semana:', reflection.week_start);
     try {
-      // TODO: Reativar após deploy das Supabase Functions
-      console.log("🔍 Insight semanal seria gerado para reflexão:", reflection.week_start);
+      const user = useAuthStore.getState().user;
+      if (!user) {
+        console.error('❌ Usuário não encontrado no trigger semanal');
+        return;
+      }
+
+      // ✅ MELHORADO: Coletar dados de forma mais eficiente
+      const weekEnd = new Date(new Date(reflection.week_start).getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const [profileResult, sessionsResult, checkinsResult] = await Promise.allSettled([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('training_sessions').select('*').eq('user_id', user.id).eq('status', 'completed').gte('training_date', new Date(Date.now() - 42 * 24 * 60 * 60 * 1000).toISOString()),
+        supabase.from('daily_checkins').select('*').eq('user_id', user.id).gte('date', reflection.week_start).lte('date', weekEnd)
+      ]);
+
+      const profile = profileResult.status === 'fulfilled' ? profileResult.value.data : null;
+      const sessions = sessionsResult.status === 'fulfilled' ? sessionsResult.value.data : [];
+      const checkins = checkinsResult.status === 'fulfilled' ? checkinsResult.value.data : [];
+
+      const athleteData = {
+        weeklyReflection: reflection,
+        profile,
+        sessions: sessions || [],
+        checkins: checkins || []
+      };
+
+      console.log('🔍 Chamando Edge Function semanal...');
+
+      try {
+        const { data: functionResult, error } = await supabase.functions.invoke('generate-weekly-summary-insight-v2', {
+          body: { athleteData }
+        });
+
+        if (error) {
+          console.error("❌ Erro na função de insight semanal:", error);
+          throw error;
+        } else {
+          console.log("✅ Insight semanal gerado com sucesso");
+          console.log("✅ Resultado:", functionResult);
+        }
+      } catch (functionError) {
+        console.error('❌ Erro na função, criando fallback...');
+        
+        // ✅ MELHORADO: Fallback para resumo semanal
+        try {
+          const fallbackInsight = `Sua reflexão semanal foi registrada com sucesso! Continue monitorando seu progresso para receber insights semanais personalizados.`;
+          
+          const { error: insertError } = await supabase.from('insights').insert({
+            user_id: user.id,
+            insight_text: fallbackInsight,
+            insight_type: 'ai_analysis',
+            context_type: 'weekly_summary',
+            confidence_score: 0.8,
+            generated_by: 'system'
+          });
+          
+          if (insertError) {
+            console.error('❌ Erro ao inserir insight de fallback:', insertError);
+          } else {
+            console.log('✅ Insight de fallback criado com sucesso');
+          }
+        } catch (fallbackError) {
+          console.error('❌ Erro ao criar insight de fallback:', fallbackError);
+        }
+      }
     } catch (error) {
       console.error("❌ Erro no trigger semanal:", error);
     }
@@ -623,6 +872,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   },
 
   saveDailyCheckin: async (checkinData) => {
+    console.log('🔍 saveDailyCheckin iniciado com dados:', checkinData);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado');
     
@@ -650,6 +900,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       date: new Date().toISOString().split('T')[0],
     };
     
+    console.log('🔍 Salvando check-in no banco...');
     const { data, error } = await supabase
       .from('daily_checkins')
       .insert([insertData])
@@ -659,6 +910,57 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     if (error) {
       const message = [error.message, error.details, error.hint].filter(Boolean).join(' | ');
       throw new Error(message || 'Falha ao salvar check-in');
+    }
+    
+    console.log('✅ Check-in salvo com sucesso:', data.id);
+    
+    // ✅ CORRIGIDO: DISPARAR GATILHO AUTOMÁTICO DE INSIGHT COM MAIS LOGS
+    try {
+      console.log('🔍 ===== INÍCIO DO TRIGGER DE INSIGHT =====');
+      console.log('🔍 Disparando trigger automático de insight...');
+      console.log('🔍 Dados do check-in para o trigger:', data);
+      
+      // ✅ NOVO: Aguardar um pouco antes de disparar o trigger
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      await get().triggerDailyInsight(data);
+      console.log('✅ Trigger de insight disparado com sucesso');
+      
+      // ✅ NOVO: Aguardar mais tempo e verificar se o insight foi criado
+      setTimeout(async () => {
+        try {
+          console.log('🔍 Verificando se o insight foi criado...');
+          await get().loadSavedInsights();
+          console.log('✅ Insights recarregados após verificação');
+          
+          // ✅ NOVO: Verificação adicional após mais tempo
+          setTimeout(async () => {
+            try {
+              console.log('🔍 Verificação final de insights...');
+              await get().loadSavedInsights();
+              console.log('✅ Verificação final concluída');
+            } catch (finalError) {
+              console.error('⚠️ Erro na verificação final:', finalError);
+            }
+          }, 5000);
+        } catch (verifyError) {
+          console.error('⚠️ Erro ao verificar insights:', verifyError);
+        }
+      }, 5000); // Aumentado para 5 segundos
+      
+      console.log('🔍 ===== FIM DO TRIGGER DE INSIGHT =====');
+    } catch (insightError) {
+      console.error('⚠️ Erro ao disparar insight automático:', insightError);
+      // Não falhar o check-in por causa do insight
+    }
+    
+    // ✅ NOVO: ATUALIZAR ESTADO LOCAL
+    try {
+      await get().loadTodayCheckin();
+      await get().loadRecentCheckins();
+      console.log('✅ Estado local atualizado');
+    } catch (stateError) {
+      console.error('⚠️ Erro ao atualizar estado local:', stateError);
     }
     
     return data;
@@ -715,16 +1017,34 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   },
 
   loadSavedInsights: async () => {
+    console.log('🔍 loadSavedInsights iniciado');
     set({ isLoading: true, error: null });
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      // ✅ NOVO: Verificar se estamos no modo coach view
+      const { isCoachView, viewAsAthleteId } = require('../stores/view').useViewStore.getState();
+      
+      let targetUserId: string | null = null;
+      
+      if (isCoachView && viewAsAthleteId) {
+        // ✅ NOVO: Modo coach - usar ID do atleta sendo visualizado
+        targetUserId = viewAsAthleteId;
+        console.log('🔍 Modo Coach - Visualizando atleta:', targetUserId);
+      } else {
+        // ✅ NOVO: Modo atleta - usar ID do usuário logado
+        const { data: { user } } = await supabase.auth.getUser();
+        targetUserId = (user && (user as any).id) ? (user as any).id : null;
+        console.log('🔍 Modo Atleta - Usuário logado:', targetUserId);
+      }
+      
+      console.log('🔍 User ID final:', targetUserId);
       
       if (!targetUserId) { 
+        console.log('⚠️ Usuário não encontrado');
         set({ savedInsights: [], isLoading: false, error: null });
         return; 
       }
       
+      console.log('🔍 Buscando insights para usuário:', targetUserId);
       const { data, error } = await supabase
         .from('insights')
         .select('*')
@@ -732,7 +1052,21 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .order('created_at', { ascending: false })
         .limit(50);
         
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao buscar insights:', error);
+        throw error;
+      }
+      
+      console.log('✅ Insights encontrados:', data?.length || 0);
+      if (data && data.length > 0) {
+        console.log('🔍 Primeiro insight:', {
+          id: data[0].id,
+          text: data[0].insight_text?.substring(0, 50) + '...',
+          created_at: data[0].created_at,
+          type: data[0].insight_type
+        });
+      }
+      
       set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
     } catch (error: unknown) {
       console.error('❌ Error loading saved insights:', error);

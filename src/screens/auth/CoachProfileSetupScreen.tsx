@@ -12,6 +12,7 @@ const coachProfileSchema = z.object({
   phone: z.string().optional(),
   bio: z.string().max(500, 'Bio deve ter no máximo 500 caracteres').optional(),
   experience_years: z.number().min(0, 'Anos de experiência deve ser um número positivo').optional(),
+  // ✅ REMOVIDO: cref - agora coletado no cadastro inicial
   specialties: z.array(z.string()).min(1, 'Selecione pelo menos uma especialidade'),
   certifications: z.array(z.string()).optional(),
 });
@@ -38,7 +39,6 @@ const SPECIALTIES_OPTIONS = [
 ];
 
 const CERTIFICATION_OPTIONS = [
-  'CREF (Conselho Regional de Educação Física)',
   'CBF (Confederação Brasileira de Futebol)',
   'CBAt (Confederação Brasileira de Atletismo)',
   'CBTri (Confederação Brasileira de Triatlo)',
@@ -67,6 +67,7 @@ export default function CoachProfileSetupScreen({ navigation }: CoachProfileSetu
       phone: '',
       bio: '',
       experience_years: undefined,
+      // ✅ REMOVIDO: cref - agora coletado no cadastro inicial
       specialties: [],
       certifications: [],
     },
@@ -207,6 +208,8 @@ export default function CoachProfileSetupScreen({ navigation }: CoachProfileSetu
               </>
             )}
           />
+
+          {/* ✅ REMOVIDO: Campo CREF - agora coletado no cadastro inicial */}
 
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Especialidades *

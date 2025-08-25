@@ -1,9 +1,10 @@
 // src/services/securityLogger.ts
 
 import { supabase } from './supabase';
+import { loginRateLimiter, signupRateLimiter, passwordResetRateLimiter } from './rateLimiter';
 
 export interface SecurityEvent {
-  type: 'login_attempt' | 'password_reset' | 'profile_update' | 'data_access' | 'suspicious_activity' | 'rate_limit_exceeded';
+  type: 'login_attempt' | 'password_reset' | 'profile_update' | 'data_access' | 'suspicious_activity' | 'rate_limit_exceeded' | 'account_creation' | 'session_expired' | 'logout' | 'email_verification';
   userId?: string;
   email?: string;
   ip?: string;
@@ -11,42 +12,99 @@ export interface SecurityEvent {
   success: boolean;
   details?: any;
   severity?: 'low' | 'medium' | 'high' | 'critical';
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+    country?: string;
+  };
+}
+
+export interface SecurityAlert {
+  id: string;
+  type: 'suspicious_login' | 'multiple_failures' | 'unusual_activity' | 'rate_limit' | 'data_breach';
+  title: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  timestamp: string;
+  resolved: boolean;
+  userId?: string;
+  email?: string;
 }
 
 /**
- * Log de eventos de segurança
+ * ✅ MELHORADO: Log de eventos de segurança com rate limiting
  */
 export const logSecurityEvent = async (event: SecurityEvent): Promise<void> => {
   try {
     // Determinar severidade baseada no tipo de evento
     const severity = event.severity || getDefaultSeverity(event.type);
     
-    await supabase.from('security_logs').insert([{
-      event_type: event.type,
-      user_id: event.userId,
-      email: event.email,
-      ip_address: event.ip,
-      user_agent: event.userAgent,
-      success: event.success,
-      details: event.details,
+    // ✅ NOVO: Verificar rate limiting para logs
+    const identifier = event.email || event.userId || 'anonymous';
+    const rateLimitResult = await loginRateLimiter.checkRateLimit(`log_${identifier}`);
+    
+    if (!rateLimitResult.allowed) {
+      console.warn('⚠️ Rate limit atingido para logs de segurança');
+      return;
+    }
+    
+    // ✅ MELHORADO: Adicionar informações de contexto
+    const enhancedEvent = {
+      ...event,
       severity,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      sessionId: generateSessionId(),
+      deviceInfo: await getDeviceInfo(),
+      networkInfo: await getNetworkInfo()
+    };
+    
+    await supabase.from('security_logs').insert([{
+      event_type: enhancedEvent.type,
+      user_id: enhancedEvent.userId,
+      email: enhancedEvent.email,
+      ip_address: enhancedEvent.ip,
+      user_agent: enhancedEvent.userAgent,
+      success: enhancedEvent.success,
+      details: enhancedEvent.details,
+      severity: enhancedEvent.severity,
+      timestamp: enhancedEvent.timestamp,
+      location_data: enhancedEvent.location,
+      session_id: enhancedEvent.sessionId,
+      device_info: enhancedEvent.deviceInfo,
+      network_info: enhancedEvent.networkInfo
     }]);
 
     // Log local para debug
     console.log(`🔒 Security Event: ${event.type} - ${event.success ? 'SUCCESS' : 'FAILED'} - Severity: ${severity}`);
     
-    // Alertar sobre eventos críticos
+    // ✅ NOVO: Alertar sobre eventos críticos
     if (severity === 'critical') {
       console.error(`🚨 CRITICAL SECURITY EVENT: ${event.type}`, event);
+      await createSecurityAlert(event);
     }
+    
+    // ✅ NOVO: Verificar atividades suspeitas
+    if (event.userId || event.email) {
+      const isSuspicious = await checkSuspiciousActivity(event.userId || '', event.type);
+      if (isSuspicious) {
+        await createSecurityAlert({
+          ...event,
+          type: 'suspicious_activity'
+        });
+      }
+    }
+    
+    // Registrar tentativa no rate limiter
+    await loginRateLimiter.recordAttempt(`log_${identifier}`, true);
+    
   } catch (error) {
     console.error('❌ Erro ao logar evento de segurança:', error);
   }
 };
 
 /**
- * Determinar severidade padrão baseada no tipo de evento
+ * ✅ MELHORADO: Determinar severidade padrão baseada no tipo de evento
  */
 const getDefaultSeverity = (eventType: SecurityEvent['type']): SecurityEvent['severity'] => {
   switch (eventType) {
@@ -62,18 +120,27 @@ const getDefaultSeverity = (eventType: SecurityEvent['type']): SecurityEvent['se
       return 'high';
     case 'rate_limit_exceeded':
       return 'critical';
+    case 'account_creation':
+      return 'medium';
+    case 'session_expired':
+      return 'low';
+    case 'logout':
+      return 'low';
+    case 'email_verification':
+      return 'medium';
     default:
       return 'medium';
   }
 };
 
 /**
- * Verificar se há atividades suspeitas
+ * ✅ MELHORADO: Verificar se há atividades suspeitas
  */
 export const checkSuspiciousActivity = async (userId: string, eventType: string): Promise<boolean> => {
   try {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
     // Verificar tentativas de login falhadas
     if (eventType === 'login_attempt') {
@@ -97,7 +164,7 @@ export const checkSuspiciousActivity = async (userId: string, eventType: string)
       }
     }
     
-    // Verificar múltiplas atualizações de perfil
+    // ✅ NOVO: Verificar múltiplas atualizações de perfil
     if (eventType === 'profile_update') {
       const { data: profileUpdates } = await supabase
         .from('security_logs')
@@ -111,10 +178,60 @@ export const checkSuspiciousActivity = async (userId: string, eventType: string)
           type: 'suspicious_activity',
           userId,
           success: false,
-          details: { reason: 'excessive_profile_updates', count: profileUpdates.length },
+          details: { reason: 'multiple_profile_updates', count: profileUpdates.length },
           severity: 'medium'
         });
         return true;
+      }
+    }
+    
+    // ✅ NOVO: Verificar múltiplos resets de senha
+    if (eventType === 'password_reset') {
+      const { data: passwordResets } = await supabase
+        .from('security_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('event_type', 'password_reset')
+        .gte('timestamp', oneDayAgo.toISOString());
+      
+      if (passwordResets && passwordResets.length >= 3) {
+        await logSecurityEvent({
+          type: 'suspicious_activity',
+          userId,
+          success: false,
+          details: { reason: 'multiple_password_resets', count: passwordResets.length },
+          severity: 'high'
+        });
+        return true;
+      }
+    }
+    
+    // ✅ NOVO: Verificar logins de locais diferentes
+    if (eventType === 'login_attempt') {
+      const { data: recentLogins } = await supabase
+        .from('security_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('event_type', 'login_attempt')
+        .eq('success', true)
+        .gte('timestamp', oneDayAgo.toISOString())
+        .order('timestamp', { ascending: false })
+        .limit(5);
+      
+      if (recentLogins && recentLogins.length > 1) {
+        const locations = recentLogins.map(login => login.location_data?.country).filter(Boolean);
+        const uniqueLocations = [...new Set(locations)];
+        
+        if (uniqueLocations.length > 2) {
+          await logSecurityEvent({
+            type: 'suspicious_activity',
+            userId,
+            success: false,
+            details: { reason: 'multiple_locations', locations: uniqueLocations },
+            severity: 'high'
+          });
+          return true;
+        }
       }
     }
     
@@ -126,149 +243,329 @@ export const checkSuspiciousActivity = async (userId: string, eventType: string)
 };
 
 /**
- * Rate limiting simples
+ * ✅ NOVO: Criar alerta de segurança
  */
-export const checkRateLimit = async (identifier: string, action: string, maxAttempts: number = 5, windowMinutes: number = 15): Promise<boolean> => {
+export const createSecurityAlert = async (event: SecurityEvent): Promise<void> => {
   try {
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000);
+    const alert: SecurityAlert = {
+      id: generateAlertId(),
+      type: getAlertType(event),
+      title: getAlertTitle(event),
+      message: getAlertMessage(event),
+      severity: event.severity || 'medium',
+      timestamp: new Date().toISOString(),
+      resolved: false,
+      userId: event.userId,
+      email: event.email
+    };
     
-    const { data: attempts } = await supabase
-      .from('security_logs')
-      .select('*')
-      .or(`email.eq.${identifier},user_id.eq.${identifier}`)
-      .eq('event_type', action)
-      .gte('timestamp', windowStart.toISOString());
+    await supabase.from('security_alerts').insert([alert]);
     
-    if (attempts && attempts.length >= maxAttempts) {
-      await logSecurityEvent({
-        type: 'rate_limit_exceeded',
-        email: identifier.includes('@') ? identifier : undefined,
-        userId: identifier.includes('@') ? undefined : identifier,
-        success: false,
-        details: { action, attempts: attempts.length, maxAttempts, windowMinutes },
-        severity: 'critical'
-      });
-      return false;
+    // ✅ NOVO: Notificar usuário se necessário
+    if (event.severity === 'high' || event.severity === 'critical') {
+      await notifyUserOfSecurityAlert(event.userId || '', alert);
     }
     
-    return true;
   } catch (error) {
-    console.error('❌ Erro ao verificar rate limit:', error);
-    return true; // Em caso de erro, permitir a ação
+    console.error('❌ Erro ao criar alerta de segurança:', error);
   }
 };
 
 /**
- * Log de tentativa de login
+ * ✅ NOVO: Funções auxiliares para alertas
+ */
+const getAlertType = (event: SecurityEvent): SecurityAlert['type'] => {
+  switch (event.type) {
+    case 'login_attempt':
+      return 'suspicious_login';
+    case 'rate_limit_exceeded':
+      return 'rate_limit';
+    case 'suspicious_activity':
+      return 'unusual_activity';
+    default:
+      return 'unusual_activity';
+  }
+};
+
+const getAlertTitle = (event: SecurityEvent): string => {
+  switch (event.type) {
+    case 'login_attempt':
+      return 'Tentativa de Login Suspeita';
+    case 'rate_limit_exceeded':
+      return 'Muitas Tentativas de Acesso';
+    case 'suspicious_activity':
+      return 'Atividade Suspeita Detectada';
+    default:
+      return 'Alerta de Segurança';
+  }
+};
+
+const getAlertMessage = (event: SecurityEvent): string => {
+  switch (event.type) {
+    case 'login_attempt':
+      return 'Detectamos uma tentativa de login suspeita na sua conta. Verifique se foi você.';
+    case 'rate_limit_exceeded':
+      return 'Muitas tentativas de acesso foram detectadas. Sua conta foi temporariamente protegida.';
+    case 'suspicious_activity':
+      return 'Atividade suspeita foi detectada na sua conta. Recomendamos verificar suas configurações de segurança.';
+    default:
+      return 'Uma atividade suspeita foi detectada na sua conta.';
+  }
+};
+
+/**
+ * ✅ NOVO: Notificar usuário sobre alerta de segurança
+ */
+const notifyUserOfSecurityAlert = async (userId: string, alert: SecurityAlert): Promise<void> => {
+  try {
+    // Aqui você pode implementar notificação push, email, etc.
+    console.log(`🔔 Notificando usuário ${userId} sobre alerta: ${alert.title}`);
+    
+    // Exemplo: Enviar notificação push
+    // await sendPushNotification(userId, alert.title, alert.message);
+    
+  } catch (error) {
+    console.error('❌ Erro ao notificar usuário:', error);
+  }
+};
+
+/**
+ * ✅ NOVO: Funções auxiliares
+ */
+const generateSessionId = (): string => {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+const generateAlertId = (): string => {
+  return `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+const getDeviceInfo = async (): Promise<any> => {
+  try {
+    // Em React Native, você pode usar expo-device
+    return {
+      platform: 'react-native',
+      version: '1.0.0',
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return { platform: 'unknown' };
+  }
+};
+
+const getNetworkInfo = async (): Promise<any> => {
+  try {
+    // Em React Native, você pode usar expo-network
+    return {
+      type: 'unknown',
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return { type: 'unknown' };
+  }
+};
+
+/**
+ * ✅ MELHORADO: Log de tentativa de login com rate limiting
  */
 export const logLoginAttempt = async (email: string, success: boolean, details?: any): Promise<void> => {
-  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown';
-  
-  await logSecurityEvent({
-    type: 'login_attempt',
-    email,
-    userAgent,
-    success,
-    details,
-    severity: success ? 'low' : 'medium'
-  });
-  
-  // Verificar rate limiting
-  if (!success) {
-    const isRateLimited = !(await checkRateLimit(email, 'login_attempt', 5, 15));
-    if (isRateLimited) {
-      throw new Error('Muitas tentativas de login. Tente novamente em 15 minutos.');
+  try {
+    // Verificar rate limiting
+    const rateLimitResult = await loginRateLimiter.checkRateLimit(email);
+    
+    if (!rateLimitResult.allowed) {
+      await logSecurityEvent({
+        type: 'rate_limit_exceeded',
+        email,
+        success: false,
+        details: { reason: 'login_rate_limit', blockedUntil: rateLimitResult.blockedUntil },
+        severity: 'critical'
+      });
+      return;
     }
+    
+    await logSecurityEvent({
+      type: 'login_attempt',
+      email,
+      success,
+      details,
+      severity: success ? 'low' : 'medium'
+    });
+    
+    // Registrar tentativa no rate limiter
+    await loginRateLimiter.recordAttempt(email, success);
+    
+  } catch (error) {
+    console.error('❌ Erro ao logar tentativa de login:', error);
   }
 };
 
 /**
- * Log de reset de senha
+ * ✅ MELHORADO: Log de reset de senha
  */
 export const logPasswordReset = async (email: string, success: boolean, details?: any): Promise<void> => {
-  await logSecurityEvent({
-    type: 'password_reset',
-    email,
-    success,
-    details,
-    severity: 'high'
-  });
-  
-  // Rate limiting para reset de senha
-  if (!(await checkRateLimit(email, 'password_reset', 3, 60))) {
-    throw new Error('Muitas tentativas de reset de senha. Tente novamente em 1 hora.');
+  try {
+    // Verificar rate limiting para reset de senha
+    const rateLimitResult = await passwordResetRateLimiter.checkRateLimit(email);
+    
+    if (!rateLimitResult.allowed) {
+      await logSecurityEvent({
+        type: 'rate_limit_exceeded',
+        email,
+        success: false,
+        details: { reason: 'password_reset_rate_limit', blockedUntil: rateLimitResult.blockedUntil },
+        severity: 'critical'
+      });
+      return;
+    }
+    
+    await logSecurityEvent({
+      type: 'password_reset',
+      email,
+      success,
+      details,
+      severity: 'high'
+    });
+    
+    // Registrar tentativa no rate limiter
+    await passwordResetRateLimiter.recordAttempt(email, success);
+    
+  } catch (error) {
+    console.error('❌ Erro ao logar reset de senha:', error);
   }
 };
 
 /**
- * Log de atualização de perfil
+ * ✅ MELHORADO: Log de atualização de perfil
  */
 export const logProfileUpdate = async (userId: string, success: boolean, details?: any): Promise<void> => {
-  await logSecurityEvent({
-    type: 'profile_update',
-    userId,
-    success,
-    details,
-    severity: 'low'
-  });
-  
-  // Verificar atividades suspeitas
-  if (success) {
-    const isSuspicious = await checkSuspiciousActivity(userId, 'profile_update');
-    if (isSuspicious) {
-      console.warn('⚠️ Atividade suspeita detectada no perfil do usuário:', userId);
-    }
+  try {
+    await logSecurityEvent({
+      type: 'profile_update',
+      userId,
+      success,
+      details,
+      severity: 'low'
+    });
+  } catch (error) {
+    console.error('❌ Erro ao logar atualização de perfil:', error);
   }
 };
 
 /**
- * Log de acesso a dados
+ * ✅ NOVO: Log de criação de conta
  */
-export const logDataAccess = async (userId: string, dataType: string, success: boolean, details?: any): Promise<void> => {
-  await logSecurityEvent({
-    type: 'data_access',
-    userId,
-    success,
-    details: { dataType, ...details },
-    severity: 'low'
-  });
+export const logAccountCreation = async (email: string, success: boolean, details?: any): Promise<void> => {
+  try {
+    // Verificar rate limiting para criação de conta
+    const rateLimitResult = await signupRateLimiter.checkRateLimit(email);
+    
+    if (!rateLimitResult.allowed) {
+      await logSecurityEvent({
+        type: 'rate_limit_exceeded',
+        email,
+        success: false,
+        details: { reason: 'signup_rate_limit', blockedUntil: rateLimitResult.blockedUntil },
+        severity: 'critical'
+      });
+      return;
+    }
+    
+    await logSecurityEvent({
+      type: 'account_creation',
+      email,
+      success,
+      details,
+      severity: 'medium'
+    });
+    
+    // Registrar tentativa no rate limiter
+    await signupRateLimiter.recordAttempt(email, success);
+    
+  } catch (error) {
+    console.error('❌ Erro ao logar criação de conta:', error);
+  }
 };
 
 /**
- * Obter estatísticas de segurança
+ * ✅ NOVO: Log de logout
  */
-export const getSecurityStats = async (userId?: string, days: number = 7): Promise<any> => {
+export const logLogout = async (userId: string, details?: any): Promise<void> => {
+  try {
+    await logSecurityEvent({
+      type: 'logout',
+      userId,
+      success: true,
+      details,
+      severity: 'low'
+    });
+  } catch (error) {
+    console.error('❌ Erro ao logar logout:', error);
+  }
+};
+
+/**
+ * ✅ NOVO: Log de verificação de email
+ */
+export const logEmailVerification = async (email: string, success: boolean, details?: any): Promise<void> => {
+  try {
+    await logSecurityEvent({
+      type: 'email_verification',
+      email,
+      success,
+      details,
+      severity: 'medium'
+    });
+  } catch (error) {
+    console.error('❌ Erro ao logar verificação de email:', error);
+  }
+};
+
+/**
+ * ✅ NOVO: Obter estatísticas de segurança
+ */
+export const getSecurityStats = async (userId: string, days: number = 30): Promise<{
+  totalEvents: number;
+  failedLogins: number;
+  suspiciousActivities: number;
+  alerts: number;
+  lastLogin?: string;
+}> => {
   try {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
     
-    let query = supabase
+    const { data: events } = await supabase
       .from('security_logs')
       .select('*')
+      .eq('user_id', userId)
       .gte('timestamp', startDate.toISOString());
     
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
+    const { data: alerts } = await supabase
+      .from('security_alerts')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('timestamp', startDate.toISOString());
     
-    const { data: logs } = await query;
+    const failedLogins = events?.filter(e => e.event_type === 'login_attempt' && !e.success).length || 0;
+    const suspiciousActivities = events?.filter(e => e.event_type === 'suspicious_activity').length || 0;
+    const lastLogin = events?.filter(e => e.event_type === 'login_attempt' && e.success)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]?.timestamp;
     
-    if (!logs) return {};
-    
-    const stats = {
-      totalEvents: logs.length,
-      failedLogins: logs.filter(log => log.event_type === 'login_attempt' && !log.success).length,
-      successfulLogins: logs.filter(log => log.event_type === 'login_attempt' && log.success).length,
-      passwordResets: logs.filter(log => log.event_type === 'password_reset').length,
-      suspiciousActivities: logs.filter(log => log.event_type === 'suspicious_activity').length,
-      criticalEvents: logs.filter(log => log.severity === 'critical').length,
-      highSeverityEvents: logs.filter(log => log.severity === 'high').length
+    return {
+      totalEvents: events?.length || 0,
+      failedLogins,
+      suspiciousActivities,
+      alerts: alerts?.length || 0,
+      lastLogin
     };
-    
-    return stats;
   } catch (error) {
     console.error('❌ Erro ao obter estatísticas de segurança:', error);
-    return {};
+    return {
+      totalEvents: 0,
+      failedLogins: 0,
+      suspiciousActivities: 0,
+      alerts: 0
+    };
   }
 };
