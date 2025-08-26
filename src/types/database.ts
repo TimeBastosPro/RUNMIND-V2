@@ -272,6 +272,11 @@ export interface Profile {
     goal?: string;
     created_at: string;
     updated_at: string;
+    user?: {
+      id: string;
+      email: string;
+      profiles: Profile[];
+    };
   }
 
   export interface Mesociclo {
@@ -289,6 +294,11 @@ export interface Profile {
     mesociclo_type?: string;  // ✅ NOVO: Tipo do mesociclo
     created_at: string;
     updated_at: string;
+    user?: {
+      id: string;
+      email: string;
+      profiles: Profile[];
+    };
   }
 
   export interface Microciclo {
@@ -306,6 +316,11 @@ export interface Profile {
     notes?: string;
     created_at: string;
     updated_at: string;
+    user?: {
+      id: string;
+      email: string;
+      profiles: Profile[];
+    };
   }
 
   export interface CycleTrainingSession {
@@ -371,5 +386,63 @@ export interface Profile {
     volume_level: 'baixo' | 'moderado' | 'alto' | 'muito_alto';
     focus?: string;
     notes?: string;
+  }
+
+  export interface Anamnesis {
+    id: string;
+    user_id: string;
+    date_of_birth?: string;
+    weight_kg?: number;
+    height_cm?: number;
+    blood_type?: string;
+    emergency_contact_name?: string;
+    emergency_contact_phone?: string;
+    medical_conditions?: string[];
+    medications?: string[];
+    allergies?: string[];
+    previous_injuries?: string[];
+    family_medical_history?: string;
+    smoking_status?: string;
+    alcohol_consumption?: string;
+    sleep_hours_per_night?: number;
+    stress_level?: number;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface TrainingPreferences {
+    id: string;
+    user_id: string;
+    training_days: string[];
+    preferred_training_period?: 'morning' | 'afternoon' | 'evening' | 'night';
+    terrain_preference?: 'road' | 'trail' | 'track' | 'treadmill' | 'mixed';
+    work_stress_level?: number;
+    sleep_consistency?: 'excellent' | 'good' | 'fair' | 'poor';
+    wakeup_feeling?: 'refreshed' | 'tired' | 'energetic' | 'groggy';
+    hydration_habit?: 'excellent' | 'good' | 'fair' | 'poor';
+    recovery_habit?: string;
+    stress_management?: string[];
+    preferred_workout_duration?: number;
+    preferred_workout_intensity?: 'low' | 'moderate' | 'high' | 'varied';
+    music_preference?: boolean;
+    group_training_preference?: boolean;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface ParqResponses {
+    id: string;
+    user_id: string;
+    question_1_heart_condition: boolean;
+    question_2_chest_pain: boolean;
+    question_3_dizziness: boolean;
+    question_4_bone_joint_problem: boolean;
+    question_5_blood_pressure: boolean;
+    question_6_physical_limitation: boolean;
+    question_7_doctor_recommendation: boolean;
+    additional_notes?: string;
+    is_safe_to_exercise: boolean;
+    created_at: string;
+    updated_at: string;
   }
   

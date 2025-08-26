@@ -22,6 +22,7 @@ interface CreateMesocicloModalProps {
   onSuccess: () => void;
   selectedMacrocicloId: string;
   mesocicloToEdit?: Mesociclo | null;
+  athleteId?: string; // ID do atleta quando criado por treinador
 }
 
 interface MesocicloRow {
@@ -35,25 +36,42 @@ interface MesocicloRow {
 }
 
 const MESOCICLO_TYPES = [
-  'Ordinário',
-  'Estabilizador', 
-  'Choque',
-  'Regenerativo',
-  'Pré-competitivo',
-  'Competitivo'
+  'base',              // Mapeia para 'Ordinário'
+  'desenvolvimento',    // Mapeia para 'Choque'
+  'estabilizador',      // Mapeia para 'Estabilizador'
+  'especifico',         // Novo tipo
+  'pre_competitivo',    // Mapeia para 'Pré-competitivo'
+  'polimento',          // Novo tipo
+  'competitivo',        // Mapeia para 'Competitivo'
+  'transicao',          // Novo tipo
+  'recuperativo'        // Mapeia para 'Regenerativo'
 ];
+
+// Mapeamento para exibição em português (nomenclatura correta da periodização)
+const MESOCICLO_TYPE_LABELS: Record<string, string> = {
+  'base': 'Base',
+  'desenvolvimento': 'Desenvolvimento',
+  'estabilizador': 'Estabilizador',
+  'especifico': 'Específico',
+  'pre_competitivo': 'Pré-competitivo',
+  'polimento': 'Polimento',
+  'competitivo': 'Competitivo',
+  'transicao': 'Transição',
+  'recuperativo': 'Recuperativo'
+};
 
 export default function CreateMesocicloModal({
   visible,
   onDismiss,
   onSuccess,
   selectedMacrocicloId,
-  mesocicloToEdit
+  mesocicloToEdit,
+  athleteId
 }: CreateMesocicloModalProps) {
   const { createMesociclo, updateMesociclo, deleteMesociclo, mesociclos, macrociclos } = useCyclesStore();
   const [loading, setLoading] = useState(false);
   const [mesocicloRows, setMesocicloRows] = useState<MesocicloRow[]>([]);
-  const [selectedType, setSelectedType] = useState('Ordinário');
+  const [selectedType, setSelectedType] = useState(MESOCICLO_TYPE_LABELS['base'] || 'Base');
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
 
   // Get existing mesociclos for this macrociclo
@@ -323,17 +341,29 @@ export default function CreateMesocicloModal({
         console.log('🔄 Testando com primeiro mesociclo válido:', firstValidRow);
         
         try {
+          // Converter o tipo para o formato do banco
+          const getTypeForDatabase = (displayType: string): string => {
+            // Se já é um tipo válido do banco, usar como está
+            if (MESOCICLO_TYPES.includes(displayType)) {
+              return displayType;
+            }
+            // Caso contrário, procurar pelo mapeamento reverso
+            const reverseMapping = Object.entries(MESOCICLO_TYPE_LABELS).find(([key, value]) => value === displayType);
+            return reverseMapping ? reverseMapping[0] : displayType;
+          };
+
           const mesocicloData: CreateMesocicloData = {
             macrociclo_id: selectedMacrocicloId,
             name: `Mesociclo ${firstValidRow.number}`,
             start_date: convertDateToISO(firstValidRow.startDate),
             end_date: convertDateToISO(firstValidRow.endDate),
-            focus: firstValidRow.type.trim(),
+            focus: firstValidRow.type.trim(), // Manter para compatibilidade
+            mesociclo_type: getTypeForDatabase(firstValidRow.type.trim()), // Novo campo
             intensity_level: 'moderada' as const,
             volume_level: 'moderado' as const
           };
           console.log('📝 Criando mesociclo de teste:', mesocicloData);
-          const result = await createMesociclo(mesocicloData);
+          const result = await createMesociclo(mesocicloData, athleteId);
           console.log('✅ Mesociclo de teste criado:', result);
           
           // Se o primeiro funcionou, salvar todos os outros
@@ -344,12 +374,13 @@ export default function CreateMesocicloModal({
               name: `Mesociclo ${row.number}`,
               start_date: convertDateToISO(row.startDate),
               end_date: convertDateToISO(row.endDate),
-              focus: row.type.trim(),
+              focus: row.type.trim(), // Manter para compatibilidade
+              mesociclo_type: getTypeForDatabase(row.type.trim()), // Novo campo
               intensity_level: 'moderada' as const,
               volume_level: 'moderado' as const
             };
             console.log(`📝 Criando mesociclo ${i + 1}/${validRows.length}:`, mesocicloData);
-            const result = await createMesociclo(mesocicloData);
+            const result = await createMesociclo(mesocicloData, athleteId);
             console.log(`✅ Mesociclo ${i + 1} criado:`, result);
           }
           
@@ -438,7 +469,7 @@ export default function CreateMesocicloModal({
                      key={type}
                      style={styles.dropdownOption}
                      onPress={() => {
-                       setSelectedType(type);
+                       setSelectedType(MESOCICLO_TYPE_LABELS[type] || type); // Use the label for display
                        // Atualizar o tipo apenas dos mesociclos selecionados e desmarcar os checkboxes
                        const updatedRows = mesocicloRows.map(row => ({
                          ...row,
@@ -449,7 +480,7 @@ export default function CreateMesocicloModal({
                        setShowTypeDropdown(false);
                      }}
                    >
-                     <Text style={styles.dropdownOptionText}>{type}</Text>
+                     <Text style={styles.dropdownOptionText}>{MESOCICLO_TYPE_LABELS[type] || type}</Text>
                    </TouchableOpacity>
                  ))}
                </View>
@@ -494,7 +525,7 @@ export default function CreateMesocicloModal({
               
               <View style={styles.typeCell}>
                 <Text style={[styles.cellText, !row.type && styles.dateText]}>
-                  {row.type || 'Selecionar'}
+                  {MESOCICLO_TYPE_LABELS[row.type] || row.type || 'Selecionar'}
                 </Text>
               </View>
               

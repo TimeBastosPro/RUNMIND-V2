@@ -103,6 +103,14 @@ export default function HomeScreen() {
   } = useCheckinStore();
   
   const { races, fetchRaces } = useAuthStore();
+  
+  // ✅ NOVO: Log detalhado do estado das provas
+  console.log('DEBUG - HomeScreen - Estado das provas:', {
+    races: races,
+    racesLength: races?.length || 0,
+    racesType: typeof races,
+    isArray: Array.isArray(races)
+  });
   const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -148,6 +156,7 @@ export default function HomeScreen() {
       })();
     } else {
       // Se é atleta, carregar suas próprias provas
+      console.log('DEBUG - HomeScreen - Carregando provas do atleta...');
       fetchRaces();
     }
     
@@ -214,6 +223,7 @@ export default function HomeScreen() {
       })();
     } else {
       // Se é atleta, carregar suas próprias provas
+      console.log('DEBUG - HomeScreen - Recarregando provas do atleta...');
       fetchRaces();
     }
     
@@ -264,6 +274,11 @@ export default function HomeScreen() {
 
   // Função utilitária para formatar altimetria com ganho e perda
   const formatElevation = (training: any) => {
+    // ✅ CORRIGIDO: Para treinos planejados, não exibir altimetria (dados de treino realizado)
+    if (training.status === 'planned') {
+      return null;
+    }
+    
     // Verificar campos de altimetria
     const gain = training.elevation_gain_meters || 0;
     const loss = training.elevation_loss_meters || 0;
@@ -283,16 +298,55 @@ export default function HomeScreen() {
   // Buscar treino para hoje e próxima prova
   const todayDateString = new Date().toISOString().split('T')[0];
   
-  // ✅ OTIMIZADO: Reduzir logs para melhorar performance
+  // ✅ DEBUG: Log detalhado dos treinos para identificar problema
+  console.log('DEBUG - HomeScreen - Treinos carregados:', {
+    totalSessions: trainingSessions?.length || 0,
+    todayDateString,
+    sessions: trainingSessions?.map(s => ({
+      id: s.id,
+      date: s.training_date,
+      status: s.status,
+      title: s.title,
+      distance: s.distance_km,
+      duration: s.duration_minutes
+    }))
+  });
   
   const todayTraining = trainingSessions?.find(session => 
     session.training_date === todayDateString
   );
   
   // Buscar o próximo treino planejado (hoje ou próximo dia)
-  const nextPlannedTraining = trainingSessions?.find(session => 
+  const plannedTrainings = trainingSessions?.filter(session => 
     session.status === 'planned' && session.training_date >= todayDateString
-  );
+  ) || [];
+  
+  // Ordenar por data para pegar o mais próximo
+  const sortedPlannedTrainings = plannedTrainings.sort((a, b) => {
+    const dateA = new Date(a.training_date);
+    const dateB = new Date(b.training_date);
+    return dateA.getTime() - dateB.getTime();
+  });
+  
+  const nextPlannedTraining = sortedPlannedTrainings[0];
+  
+  // ✅ DEBUG: Log do próximo treino planejado
+  console.log('DEBUG - HomeScreen - Próximo treino planejado:', {
+    nextPlannedTraining: nextPlannedTraining ? {
+      id: nextPlannedTraining.id,
+      date: nextPlannedTraining.training_date,
+      status: nextPlannedTraining.status,
+      title: nextPlannedTraining.title,
+      distance: nextPlannedTraining.distance_km,
+      duration: nextPlannedTraining.duration_minutes
+    } : null,
+    todayTraining: todayTraining ? {
+      id: todayTraining.id,
+      date: todayTraining.training_date,
+      status: todayTraining.status,
+      title: todayTraining.title
+    } : null
+  });
   
   // Lógica do próximo treino: se há treino planejado para hoje, mostra ele. Se não, mostra o próximo planejado
   const nextTraining = nextPlannedTraining;
@@ -320,10 +374,42 @@ export default function HomeScreen() {
 
   // ✅ OTIMIZADO: Buscar a próxima prova (a mais próxima)
   
-  const filteredRaces = races?.filter((race: any) => race.start_date >= todayDateString);
+  console.log('DEBUG - HomeScreen - races:', races);
+  console.log('DEBUG - HomeScreen - todayDateString:', todayDateString);
+  
+  // ✅ MELHORADO: Log detalhado do conteúdo das provas
+  if (races && races.length > 0) {
+    console.log('DEBUG - HomeScreen - Conteúdo das provas:', JSON.stringify(races, null, 2));
+  }
+  
+  const filteredRaces = races?.filter((race: any) => {
+    // ✅ MELHORADO: Verificação mais robusta
+    if (!race || !race.start_date) {
+      console.log('DEBUG - HomeScreen - Prova inválida:', race);
+      return false;
+    }
+    
+    console.log('DEBUG - HomeScreen - Comparando datas:', {
+      raceDate: race.start_date,
+      todayDate: todayDateString,
+      comparison: race.start_date >= todayDateString,
+      raceDateType: typeof race.start_date,
+      todayDateType: typeof todayDateString
+    });
+    return race.start_date >= todayDateString;
+  });
+  console.log('DEBUG - HomeScreen - filteredRaces:', filteredRaces);
   
   const nextRace = filteredRaces
     ?.sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
+  console.log('DEBUG - HomeScreen - nextRace:', nextRace);
+  console.log('DEBUG - HomeScreen - nextRace detalhado:', nextRace ? {
+    id: nextRace.id,
+    event_name: nextRace.event_name,
+    start_date: nextRace.start_date,
+    start_date_type: typeof nextRace.start_date,
+    start_date_parsed: new Date(nextRace.start_date)
+  } : 'null');
 
   // Calcular dias restantes para a próxima prova
   const daysUntilRace = nextRace ? 
@@ -425,7 +511,7 @@ export default function HomeScreen() {
         </Card>
       )}
 
-      {nextTraining && (
+      {nextTraining && nextTraining.status === 'planned' && (
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
@@ -436,6 +522,23 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.trainingInfo}>
+              {/* ✅ DEBUG: Log dos dados do treino sendo exibido */}
+              {(() => {
+                console.log('DEBUG - HomeScreen - Dados do treino sendo exibido:', {
+                  id: nextTraining.id,
+                  status: nextTraining.status,
+                  title: nextTraining.title,
+                  modalidade: nextTraining.modalidade,
+                  treino_tipo: nextTraining.treino_tipo,
+                  distance_km: nextTraining.distance_km,
+                  duration_minutes: nextTraining.duration_minutes,
+                  perceived_effort: nextTraining.perceived_effort,
+                  elevation_gain_meters: nextTraining.elevation_gain_meters,
+                  elevation_loss_meters: nextTraining.elevation_loss_meters
+                });
+                return null;
+              })()}
+              
               <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
               
               {nextTraining.treino_tipo && (
@@ -446,7 +549,7 @@ export default function HomeScreen() {
                 <Text style={styles.trainingDetails}>🏃 Terreno: {getTerrenoText(nextTraining.terreno)}</Text>
               )}
               
-              {nextTraining.distance_km && (
+              {nextTraining.distance_km && nextTraining.status === 'planned' && (
                 <Text style={styles.trainingDetails}>📏 Distância: {nextTraining.distance_km}km</Text>
               )}
               
@@ -459,7 +562,7 @@ export default function HomeScreen() {
                 return null;
               })()}
               
-              {nextTraining.duration_minutes && !nextTraining.duracao_horas && !nextTraining.duracao_minutos && (
+              {nextTraining.duration_minutes && !nextTraining.duracao_horas && !nextTraining.duracao_minutos && nextTraining.status === 'planned' && (
                 <Text style={styles.trainingDetails}>⏱️ Duração: {nextTraining.duration_minutes}min</Text>
               )}
               
@@ -586,7 +689,7 @@ export default function HomeScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Próxima Prova</Text>
+              <Text style={styles.cardTitle}>🏁 Próxima Prova</Text>
               <Chip icon="flag-checkered" mode="flat" style={styles.successChip}>
                 Confirmada
               </Chip>
@@ -595,25 +698,43 @@ export default function HomeScreen() {
             <View style={styles.trainingInfo}>
               <Text style={styles.trainingType}>{nextRace.event_name}</Text>
               
-              <Text style={styles.trainingDetails}>🏃 {nextRace.city}</Text>
-              <Text style={styles.trainingDetails}>📏 {nextRace.distance_km}km</Text>
-              <Text style={styles.trainingDetails}>⏰ Largada: {nextRace.start_time}</Text>
+              <View style={styles.raceDetailsContainer}>
+                <View style={styles.raceDetailRow}>
+                  <Text style={styles.raceDetailIcon}>🏃</Text>
+                  <Text style={styles.trainingDetails}>{nextRace.city}</Text>
+                </View>
+                <View style={styles.raceDetailRow}>
+                  <Text style={styles.raceDetailIcon}>📏</Text>
+                  <Text style={styles.trainingDetails}>{nextRace.distance_km}km</Text>
+                </View>
+                <View style={styles.raceDetailRow}>
+                  <Text style={styles.raceDetailIcon}>⏰</Text>
+                  <Text style={styles.trainingDetails}>Largada: {nextRace.start_time}</Text>
+                </View>
+              </View>
               
               <Text style={styles.trainingDate}>
                 📅 {format(new Date(nextRace.start_date + 'T00:00:00'), "dd 'de' MMMM", { locale: ptBR })}
               </Text>
               
               {daysUntilRace !== null && (
-                <Text style={[styles.trainingDetails, styles.countdownText]}>
-                  ⏳ {daysUntilRace === 0 ? 'Hoje!' : daysUntilRace === 1 ? 'Amanhã!' : `${daysUntilRace} dias restantes`}
-                </Text>
+                <View style={styles.countdownContainer}>
+                  <Text style={[styles.trainingDetails, styles.countdownText]}>
+                    ⏳ {daysUntilRace === 0 ? 'Hoje!' : daysUntilRace === 1 ? 'Amanhã!' : `${daysUntilRace} dias restantes`}
+                  </Text>
+                  {daysUntilRace <= 7 && (
+                    <Chip icon="alert" mode="flat" style={styles.urgentChip}>
+                      {daysUntilRace === 0 ? 'É hoje!' : daysUntilRace === 1 ? 'É amanhã!' : 'Próxima semana!'}
+                    </Chip>
+                  )}
+                </View>
               )}
             </View>
 
             <Button 
               mode="outlined" 
               style={styles.trainingButton}
-              onPress={() => navigation.navigate('SportsProfile' as never)}
+              onPress={() => navigation.navigate('Perfil Esportivo' as never)}
             >
               Ver Todas as Provas
             </Button>
@@ -623,7 +744,7 @@ export default function HomeScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Próximas Provas</Text>
+              <Text style={styles.cardTitle}>🏁 Próximas Provas</Text>
               <IconButton icon="flag-checkered" size={24} />
             </View>
             
@@ -635,7 +756,7 @@ export default function HomeScreen() {
             <Button 
               mode="contained" 
               style={styles.trainingButton}
-              onPress={() => navigation.navigate('SportsProfile' as never)}
+              onPress={() => navigation.navigate('Perfil Esportivo' as never)}
             >
               Cadastrar Primeira Prova
             </Button>
@@ -874,6 +995,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2196F3',
     fontSize: 16,
+  },
+  raceDetailsContainer: {
+    marginTop: 8,
+    paddingLeft: 10,
+  },
+  raceDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  raceDetailIcon: {
+    marginRight: 8,
+    fontSize: 18,
+  },
+  countdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  urgentChip: {
+    backgroundColor: '#FF9800',
+    marginLeft: 10,
   },
 
   bottomSpace: {

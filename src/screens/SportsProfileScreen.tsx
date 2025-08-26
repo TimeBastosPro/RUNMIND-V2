@@ -90,6 +90,7 @@ export default function SportsProfileScreen() {
     distance_km: ''
   });
   const [athleteName, setAthleteName] = useState<string | null>(athleteNameFromStore || null);
+  const [showAllRaces, setShowAllRaces] = useState(false);
 
   // Guard: treinador sem atleta selecionado
   if (isCoachView && !viewAsAthleteId) {
@@ -116,7 +117,7 @@ export default function SportsProfileScreen() {
           setProfileData({
             height_cm: p.height_cm?.toString() || '',
             weight_kg: p.weight_kg?.toString() || '',
-            date_of_birth: p.date_of_birth || '',
+            date_of_birth: formatDateForDisplay(p.date_of_birth), // Formata para exibição
             gender: p.gender || '',
             max_heart_rate: p.max_heart_rate?.toString() || '',
             resting_heart_rate: p.resting_heart_rate?.toString() || ''
@@ -153,7 +154,7 @@ export default function SportsProfileScreen() {
       setProfileData({
         height_cm: profile.height_cm?.toString() || '',
         weight_kg: profile.weight_kg?.toString() || '',
-        date_of_birth: profile.date_of_birth || '',
+        date_of_birth: formatDateForDisplay(profile.date_of_birth), // Formata para exibição
         gender: profile.gender || '',
         max_heart_rate: profile.max_heart_rate?.toString() || '',
         resting_heart_rate: profile.resting_heart_rate?.toString() || ''
@@ -333,19 +334,54 @@ export default function SportsProfileScreen() {
     console.log('DEBUG - profileData:', profileData);
     
     try {
-      // Converter formato de data de DD-MM-YYYY para YYYY-MM-DD
+      // Tratar a data de nascimento
       let formattedDateOfBirth = undefined;
-      if (profileData.date_of_birth) {
-        const dateParts = profileData.date_of_birth.split('-');
-        if (dateParts.length === 3) {
-          // Se está no formato DD-MM-YYYY, converter para YYYY-MM-DD
-          if (dateParts[0].length === 2 && dateParts[1].length === 2) {
-            formattedDateOfBirth = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-          } else {
-            // Se já está no formato YYYY-MM-DD, usar como está
-            formattedDateOfBirth = profileData.date_of_birth;
-          }
+      if (profileData.date_of_birth && profileData.date_of_birth.trim() !== '') {
+        console.log('DEBUG - Data de nascimento original:', profileData.date_of_birth);
+        
+        // Tentar diferentes formatos de data
+        const dateString = profileData.date_of_birth.trim();
+        
+        // Verificar se já está no formato YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+          formattedDateOfBirth = dateString;
+          console.log('DEBUG - Data já no formato YYYY-MM-DD:', formattedDateOfBirth);
         }
+        // Verificar se está no formato DD-MM-YYYY
+        else if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
+          const parts = dateString.split('-');
+          formattedDateOfBirth = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          console.log('DEBUG - Data convertida de DD-MM-YYYY para YYYY-MM-DD:', formattedDateOfBirth);
+        }
+        // Verificar se está no formato DD/MM/YYYY
+        else if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
+          const parts = dateString.split('/');
+          formattedDateOfBirth = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          console.log('DEBUG - Data convertida de DD/MM/YYYY para YYYY-MM-DD:', formattedDateOfBirth);
+        }
+        // Verificar se está no formato MM/DD/YYYY
+        else if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
+          const parts = dateString.split('/');
+          formattedDateOfBirth = `${parts[2]}-${parts[0]}-${parts[1]}`;
+          console.log('DEBUG - Data convertida de MM/DD/YYYY para YYYY-MM-DD:', formattedDateOfBirth);
+        }
+        else {
+          console.log('DEBUG - Formato de data não reconhecido:', dateString);
+          Alert.alert('Erro', 'Formato de data inválido. Use DD/MM/AAAA ou DD-MM-AAAA');
+          return;
+        }
+        
+        // Validar se a data é válida
+        const testDate = new Date(formattedDateOfBirth);
+        if (isNaN(testDate.getTime())) {
+          console.log('DEBUG - Data inválida após conversão:', formattedDateOfBirth);
+          Alert.alert('Erro', 'Data de nascimento inválida');
+          return;
+        }
+        
+        console.log('DEBUG - Data final formatada:', formattedDateOfBirth);
+      } else {
+        console.log('DEBUG - Data de nascimento vazia ou undefined');
       }
       
       const updates = {
@@ -405,46 +441,141 @@ export default function SportsProfileScreen() {
     });
   };
 
+  // Função para formatar data conforme o usuário digita
+  const formatDateInput = (text: string) => {
+    // Remover tudo que não é número
+    const numbers = text.replace(/\D/g, '');
+    
+    // Limitar a 8 dígitos (DDMMAAAA)
+    const limitedNumbers = numbers.slice(0, 8);
+    
+    // Formatar como DD/MM/AAAA
+    if (limitedNumbers.length <= 2) {
+      return limitedNumbers;
+    } else if (limitedNumbers.length <= 4) {
+      return `${limitedNumbers.slice(0, 2)}/${limitedNumbers.slice(2)}`;
+    } else {
+      return `${limitedNumbers.slice(0, 2)}/${limitedNumbers.slice(2, 4)}/${limitedNumbers.slice(4)}`;
+    }
+  };
+
+  // Função para formatar data do banco (YYYY-MM-DD) para exibição (DD/MM/AAAA)
+  const formatDateForDisplay = (dateString: string | null | undefined): string => {
+    if (!dateString) return '';
+    const parts = dateString.split('-'); // Espera YYYY-MM-DD
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // Converte para DD/MM/AAAA
+    }
+    return dateString; // Retorna como está se não for o formato esperado
+  };
+
   const handleSaveRace = async () => {
     if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
-      Alert.alert('Erro', 'Todos os campos são obrigatórios');
+      Alert.alert('Erro', 'Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
     setLoading(true);
     try {
+      // Converter data de DD/MM/AAAA para YYYY-MM-DD
+      const [day, month, year] = raceData.start_date.split('/');
+      const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      
+      // Validar formato da hora (HH:MM)
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timeRegex.test(raceData.start_time)) {
+        Alert.alert('Erro', 'Formato de hora inválido. Use HH:MM (ex: 08:00)');
+        return;
+      }
+
       const raceDataToSave = {
-        event_name: raceData.event_name,
-        city: raceData.city,
-        start_date: raceData.start_date,
+        event_name: raceData.event_name.trim(),
+        city: raceData.city.trim(),
+        start_date: formattedDate,
         start_time: raceData.start_time,
         distance_km: Number(raceData.distance_km)
       };
 
-      if (editingRace) {
-        await updateRace(editingRace.id, raceDataToSave);
-        Alert.alert('Sucesso', 'Prova atualizada com sucesso!');
+      console.log('DEBUG - handleSaveRace: Dados formatados para salvar:', raceDataToSave);
+      console.log('DEBUG - handleSaveRace: Editando prova?', !!editingRace);
+
+      console.log('DEBUG - handleSaveRace: isCoachView:', isCoachView);
+      console.log('DEBUG - handleSaveRace: viewAsAthleteId:', viewAsAthleteId);
+      
+      if (isCoachView && viewAsAthleteId) {
+        console.log('DEBUG - handleSaveRace: Salvando como treinador');
+        if (editingRace) {
+          console.log('DEBUG - handleSaveRace: Atualizando prova existente como treinador');
+          const { error } = await supabase
+            .from('races')
+            .update(raceDataToSave)
+            .eq('id', editingRace.id)
+            .eq('user_id', viewAsAthleteId);
+          
+          if (error) throw error;
+          Alert.alert('Sucesso', 'Prova atualizada com sucesso!');
+        } else {
+          console.log('DEBUG - handleSaveRace: Inserindo nova prova como treinador');
+          const { error } = await supabase
+            .from('races')
+            .insert({ ...raceDataToSave, user_id: viewAsAthleteId });
+          
+          if (error) throw error;
+          Alert.alert('Sucesso', 'Prova cadastrada com sucesso!');
+        }
+        console.log('DEBUG - handleSaveRace: Recarregando provas do atleta');
+        const { data: racesData } = await supabase
+          .from('races')
+          .select('*')
+          .eq('user_id', viewAsAthleteId)
+          .order('start_date', { ascending: true });
+        setCoachRaces(racesData || []);
       } else {
-        await saveRace(raceDataToSave);
-        Alert.alert('Sucesso', 'Prova cadastrada com sucesso!');
+        console.log('DEBUG - handleSaveRace: Salvando como atleta');
+        if (editingRace) {
+          console.log('DEBUG - handleSaveRace: Atualizando prova existente');
+          await updateRace(editingRace.id, raceDataToSave);
+          Alert.alert('Sucesso', 'Prova atualizada com sucesso!');
+        } else {
+          console.log('DEBUG - handleSaveRace: Salvando nova prova');
+          await saveRace(raceDataToSave);
+          Alert.alert('Sucesso', 'Prova cadastrada com sucesso!');
+        }
       }
 
+      console.log('DEBUG - handleSaveRace: Salvamento concluído com sucesso');
+      console.log('DEBUG - handleSaveRace: Fechando modal...');
       setRaceModalVisible(false);
+      console.log('DEBUG - handleSaveRace: Modal fechado');
+      console.log('DEBUG - handleSaveRace: Resetando formulário...');
       resetRaceForm();
+      console.log('DEBUG - handleSaveRace: Formulário resetado');
     } catch (error) {
-      console.error('Erro ao salvar prova:', error);
+      console.error('DEBUG - handleSaveRace: Erro ao salvar prova:', error);
+      console.error('DEBUG - handleSaveRace: Tipo do erro:', typeof error);
+      console.error('DEBUG - handleSaveRace: Stack trace:', error instanceof Error ? error.stack : 'N/A');
       Alert.alert('Erro', error instanceof Error ? error.message : 'Erro ao salvar prova');
     } finally {
+      console.log('DEBUG - handleSaveRace: Executando finally - setLoading(false)');
       setLoading(false);
+      console.log('DEBUG - handleSaveRace: Loading definido como false');
     }
   };
 
   const handleEditRace = (race: Race) => {
     setEditingRace(race);
+    
+    // Converter data de YYYY-MM-DD para DD/MM/AAAA para exibição
+    let formattedStartDate = race.start_date;
+    if (race.start_date.includes('-')) {
+      const [year, month, day] = race.start_date.split('-');
+      formattedStartDate = `${day}/${month}/${year}`;
+    }
+    
     setRaceData({
       event_name: race.event_name,
       city: race.city,
-      start_date: race.start_date,
+      start_date: formattedStartDate,
       start_time: race.start_time,
       distance_km: race.distance_km.toString()
     });
@@ -525,6 +656,11 @@ export default function SportsProfileScreen() {
     ? calculateKarvonenZones(profile.max_heart_rate, profile.resting_heart_rate)
     : [];
   const paceZones = vo2max ? calculatePaceZones(calculateThresholdPace(vo2max, (profile?.gender as 'male' | 'female') || 'male')) : [];
+  
+  // Debug: Log dos cálculos de ritmo
+  console.log('DEBUG - VO2max:', vo2max);
+  console.log('DEBUG - Threshold Pace:', vo2max ? calculateThresholdPace(vo2max, (profile?.gender as 'male' | 'female') || 'male') : 'N/A');
+  console.log('DEBUG - Pace Zones:', paceZones);
 
   // Combinar zonas de FC com zonas de ritmo
   const combinedZones = trainingZones.length > 0 
@@ -536,7 +672,7 @@ export default function SportsProfileScreen() {
         minHeartRate: zone.min,
         maxHeartRate: zone.max,
         description: zone.description,
-        pace: paceZones[index] ? `${formatPaceString(paceZones[index].min)} - ${formatPaceString(paceZones[index].max)}` : '--'
+        pace: paceZones[index] ? `${paceZones[index].min} - ${paceZones[index].max}` : '--'
       }))
     : paceZones.length > 0 
       ? paceZones.map((zone) => ({
@@ -547,12 +683,37 @@ export default function SportsProfileScreen() {
           minHeartRate: 0,
           maxHeartRate: 0,
           description: zone.description,
-          pace: `${formatPaceString(zone.min)} - ${formatPaceString(zone.max)}`
+          pace: `${zone.min} - ${zone.max}`
         }))
       : [];
+  
+  // Debug: Log das zonas combinadas
+  console.log('DEBUG - Training Zones:', trainingZones);
+  console.log('DEBUG - Combined Zones:', combinedZones);
 
   const testsList = isCoachView ? coachFitnessTests : fitnessTests;
   const racesList = isCoachView ? coachRaces : races;
+
+  // Calcular próxima prova
+  const today = new Date().toISOString().split('T')[0];
+  const nextRace = racesList
+    .filter(race => race.start_date >= today)
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
+
+  // Calcular dias restantes para a próxima prova
+  const daysUntilRace = nextRace ? 
+    Math.ceil((new Date(nextRace.start_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 
+    null;
+
+  // Provas futuras (excluindo a próxima)
+  const futureRaces = racesList
+    .filter(race => race.start_date >= today && race.id !== nextRace?.id)
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+
+  // Provas passadas
+  const pastRaces = racesList
+    .filter(race => race.start_date < today)
+    .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
   
   console.log('DEBUG - racesList:', racesList);
   console.log('DEBUG - races (store):', races);
@@ -597,8 +758,11 @@ export default function SportsProfileScreen() {
             <TextInput
               label="Data de Nascimento"
               value={profileData.date_of_birth}
-              onChangeText={(text) => setProfileData(prev => ({ ...prev, date_of_birth: text }))}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, date_of_birth: formatDateInput(text) }))}
+              placeholder="DD/MM/AAAA"
               style={styles.halfInput}
+              keyboardType="numeric"
+              maxLength={10}
             />
             <View style={styles.halfInput}>
               <Text style={styles.inputLabel}>Gênero</Text>
@@ -763,36 +927,140 @@ export default function SportsProfileScreen() {
           </Button>
           
           {racesList.length > 0 ? (
-            racesList.map((race) => (
-              <View key={race.id} style={styles.raceItem}>
-                <View style={styles.raceHeader}>
-                  <View style={styles.raceInfo}>
-                    <Text style={styles.raceTitle}>{race.event_name}</Text>
-                    <Text style={styles.raceDate}>
-                      {new Date(race.start_date).toLocaleDateString('pt-BR')} às {race.start_time}
-                    </Text>
-                  </View>
-                  <View style={styles.raceActions}>
-                    <IconButton
-                      icon="pencil"
-                      size={20}
-                      onPress={() => handleEditRace(race)}
-                      style={styles.actionButton}
-                      disabled={false}
-                    />
-                    <IconButton
-                      icon="delete"
-                      size={20}
-                      onPress={() => handleDeleteRace(race)}
-                      style={styles.actionButton}
-                      disabled={false}
-                    />
+            <View>
+              {/* Próxima Prova - Sempre visível */}
+              {nextRace && (
+                <View style={[styles.raceItem, styles.nextRaceItem]}>
+                  <View style={styles.raceHeader}>
+                    <View style={styles.raceInfo}>
+                      <View style={styles.nextRaceHeader}>
+                        <Text style={styles.nextRaceTitle}>🏁 Próxima Prova</Text>
+                        {daysUntilRace !== null && (
+                          <Chip 
+                            icon="calendar-clock" 
+                            mode="flat" 
+                            style={styles.countdownChip}
+                          >
+                            {daysUntilRace === 0 ? 'Hoje!' : daysUntilRace === 1 ? 'Amanhã!' : `${daysUntilRace} dias`}
+                          </Chip>
+                        )}
+                      </View>
+                      <Text style={styles.raceTitle}>{nextRace.event_name}</Text>
+                      <Text style={styles.raceDate}>
+                        {new Date(nextRace.start_date).toLocaleDateString('pt-BR')} às {nextRace.start_time}
+                      </Text>
+                      <Text style={styles.raceDetails}>🏃 {nextRace.city}</Text>
+                      <Text style={styles.raceDetails}>📏 {nextRace.distance_km}km</Text>
+                    </View>
+                    <View style={styles.raceActions}>
+                      <IconButton
+                        icon="pencil"
+                        size={20}
+                        onPress={() => handleEditRace(nextRace)}
+                        style={styles.actionButton}
+                        disabled={false}
+                      />
+                      <IconButton
+                        icon="delete"
+                        size={20}
+                        onPress={() => handleDeleteRace(nextRace)}
+                        style={styles.actionButton}
+                        disabled={false}
+                      />
+                    </View>
                   </View>
                 </View>
-                <Text style={styles.raceDetails}>🏃 {race.city}</Text>
-                <Text style={styles.raceDetails}>📏 {race.distance_km}km</Text>
-              </View>
-            ))
+              )}
+
+              {/* Outras Provas Futuras - Gaveta expansível */}
+              {futureRaces.length > 0 && (
+                <View style={styles.raceSection}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>📅 Outras Provas Futuras ({futureRaces.length})</Text>
+                    <IconButton
+                      icon={showAllRaces ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      onPress={() => setShowAllRaces(!showAllRaces)}
+                      style={styles.expandButton}
+                    />
+                  </View>
+                  
+                  {showAllRaces && (
+                    <View style={styles.expandedRaces}>
+                      {futureRaces.map((race) => (
+                        <View key={race.id} style={styles.raceItem}>
+                          <View style={styles.raceHeader}>
+                            <View style={styles.raceInfo}>
+                              <Text style={styles.raceTitle}>{race.event_name}</Text>
+                              <Text style={styles.raceDate}>
+                                {new Date(race.start_date).toLocaleDateString('pt-BR')} às {race.start_time}
+                              </Text>
+                              <Text style={styles.raceDetails}>🏃 {race.city}</Text>
+                              <Text style={styles.raceDetails}>📏 {race.distance_km}km</Text>
+                            </View>
+                            <View style={styles.raceActions}>
+                              <IconButton
+                                icon="pencil"
+                                size={20}
+                                onPress={() => handleEditRace(race)}
+                                style={styles.actionButton}
+                                disabled={false}
+                              />
+                              <IconButton
+                                icon="delete"
+                                size={20}
+                                onPress={() => handleDeleteRace(race)}
+                                style={styles.actionButton}
+                                disabled={false}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Provas Passadas - Sempre visíveis */}
+              {pastRaces.length > 0 && (
+                <View style={styles.raceSection}>
+                  <Text style={styles.sectionTitle}>📚 Histórico de Provas ({pastRaces.length})</Text>
+                  <View style={styles.pastRaces}>
+                    {pastRaces.map((race) => (
+                      <View key={race.id} style={[styles.raceItem, styles.pastRaceItem]}>
+                        <View style={styles.raceHeader}>
+                          <View style={styles.raceInfo}>
+                            <Text style={styles.raceTitle}>{race.event_name}</Text>
+                            <Text style={styles.raceDate}>
+                              {new Date(race.start_date).toLocaleDateString('pt-BR')} às {race.start_time}
+                            </Text>
+                            <Text style={styles.raceDetails}>🏃 {race.city}</Text>
+                            <Text style={styles.raceDetails}>📏 {race.distance_km}km</Text>
+                          </View>
+                          <View style={styles.raceActions}>
+                            <IconButton
+                              icon="pencil"
+                              size={20}
+                              onPress={() => handleEditRace(race)}
+                              style={styles.actionButton}
+                              disabled={false}
+                            />
+                            <IconButton
+                              icon="delete"
+                              size={20}
+                              onPress={() => handleDeleteRace(race)}
+                              style={styles.actionButton}
+                              disabled={false}
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
           ) : (
             <Text style={styles.noDataText}>
               Nenhuma prova cadastrada. Clique em "Cadastrar Nova Prova" para adicionar suas próximas competições.
@@ -931,11 +1199,26 @@ export default function SportsProfileScreen() {
            />
            
            <TextInput
-             label="Data da Largada (YYYY-MM-DD)"
+             label="Data da Largada (DD/MM/AAAA)"
              value={raceData.start_date}
-             onChangeText={(text) => setRaceData(prev => ({ ...prev, start_date: text }))}
-             placeholder="2024-12-25"
+             onChangeText={(text) => {
+               // Formatar automaticamente como DD/MM/AAAA
+               const numbers = text.replace(/\D/g, '');
+               const limitedNumbers = numbers.slice(0, 8);
+               let formatted = '';
+               if (limitedNumbers.length <= 2) {
+                 formatted = limitedNumbers;
+               } else if (limitedNumbers.length <= 4) {
+                 formatted = `${limitedNumbers.slice(0, 2)}/${limitedNumbers.slice(2)}`;
+               } else {
+                 formatted = `${limitedNumbers.slice(0, 2)}/${limitedNumbers.slice(2, 4)}/${limitedNumbers.slice(4)}`;
+               }
+               setRaceData(prev => ({ ...prev, start_date: formatted }));
+             }}
+             placeholder="15/11/2025"
              style={styles.input}
+             keyboardType="numeric"
+             maxLength={10}
            />
            
            <TextInput
@@ -967,62 +1250,7 @@ export default function SportsProfileScreen() {
              </Button>
              <Button 
                mode="contained" 
-               onPress={async () => {
-                 console.log('DEBUG - Botão Salvar clicado');
-                 console.log('DEBUG - raceData:', raceData);
-                 
-                 if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
-                   Alert.alert('Erro', 'Todos os campos são obrigatórios');
-                   return;
-                 }
-                 
-                 setLoading(true);
-                 try {
-                   const payload = {
-                     event_name: raceData.event_name,
-                     city: raceData.city,
-                     start_date: raceData.start_date,
-                     start_time: raceData.start_time,
-                     distance_km: Number(raceData.distance_km)
-                   };
-                   
-                   console.log('DEBUG - payload:', payload);
-                   console.log('DEBUG - isCoachView:', isCoachView);
-                   console.log('DEBUG - viewAsAthleteId:', viewAsAthleteId);
-                   
-                   if (isCoachView && viewAsAthleteId) {
-                     console.log('DEBUG - Salvando como treinador');
-                     if (editingRace) {
-                       console.log('DEBUG - Atualizando prova existente');
-                       await supabase.from('races').update(payload).eq('id', editingRace.id).eq('user_id', viewAsAthleteId);
-                     } else {
-                       console.log('DEBUG - Inserindo nova prova');
-                       await supabase.from('races').insert({ ...payload, user_id: viewAsAthleteId });
-                     }
-                     console.log('DEBUG - Recarregando provas do atleta');
-                     const { data: racesData } = await supabase.from('races').select('*').eq('user_id', viewAsAthleteId).order('start_date', { ascending: true });
-                     setCoachRaces(racesData || []);
-                                        } else {
-                       console.log('DEBUG - Salvando como atleta');
-                       if (editingRace) {
-                         await updateRace(editingRace.id, payload);
-                       } else {
-                         await saveRace(payload);
-                       }
-                       // Não precisa chamar fetchRaces pois saveRace já atualiza a lista
-                     }
-                   
-                   console.log('DEBUG - Salvamento bem-sucedido, fechando modal');
-                   setRaceModalVisible(false);
-                   resetRaceForm();
-                   Alert.alert('Sucesso', 'Prova salva com sucesso!');
-                 } catch (error) {
-                   console.error('DEBUG - Erro ao salvar prova:', error);
-                   Alert.alert('Erro', error instanceof Error ? error.message : 'Erro ao salvar prova');
-                 } finally {
-                   setLoading(false);
-                 }
-               }}
+               onPress={handleSaveRace}
                loading={loading}
                disabled={false}
                style={styles.modalButton}
@@ -1251,5 +1479,54 @@ const styles = StyleSheet.create({
   raceDetails: {
     marginTop: 4,
     color: '#2196F3',
+  },
+  nextRaceItem: {
+    backgroundColor: '#e0f2f7',
+    borderColor: '#2196F3',
+    borderWidth: 1,
+  },
+  nextRaceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  nextRaceTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginRight: 8,
+  },
+  countdownChip: {
+    backgroundColor: '#2196F3',
+    color: 'white',
+  },
+  raceSection: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  expandButton: {
+    marginLeft: 8,
+  },
+  expandedRaces: {
+    marginTop: 8,
+  },
+  pastRaces: {
+    marginTop: 8,
+  },
+  pastRaceItem: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    marginTop: 8,
   },
 }); 

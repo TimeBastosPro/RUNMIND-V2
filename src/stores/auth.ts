@@ -6,6 +6,7 @@ import { Profile, FitnessTest, Race } from '../types/database';
 import { validatePassword, validateEmail, validateFullName, sanitizeInput } from '../utils/validation';
 import { logLoginAttempt, logPasswordReset, logProfileUpdate, logAccountCreation, logLogout, logEmailVerification } from '../services/securityLogger';
 import { loginRateLimiter, signupRateLimiter } from '../services/rateLimiter';
+import { useViewStore } from './view';
 // Temporariamente desabilitado para resolver erro do React
 // import { 
 //   generateSignupConfirmation, 
@@ -40,7 +41,35 @@ interface AuthState {
     hydration: string;
     recoveryTechniques: string;
     stressManagement: string[];
-  }) => Promise<void>;
+  }) => Promise<any>;
+  submitAnamnesis: (anamnesisData: {
+    dateOfBirth?: string;
+    weightKg?: number;
+    heightCm?: number;
+    bloodType?: string;
+    emergencyContactName?: string;
+    emergencyContactPhone?: string;
+    medicalConditions?: string[];
+    medications?: string[];
+    allergies?: string[];
+    previousInjuries?: string[];
+    familyMedicalHistory?: string;
+    smokingStatus?: string;
+    alcoholConsumption?: string;
+    sleepHoursPerNight?: number;
+    stressLevel?: number;
+  }) => Promise<any>;
+  submitParq: (parqData: {
+    question1HeartCondition: boolean;
+    question2ChestPain: boolean;
+    question3Dizziness: boolean;
+    question4BoneJointProblem: boolean;
+    question5BloodPressure: boolean;
+    question6PhysicalLimitation: boolean;
+    question7DoctorRecommendation: boolean;
+    additionalNotes?: string;
+  }) => Promise<any>;
+  loadCompleteProfile: () => Promise<any>;
   fetchProfile: () => Promise<void>;
   fetchFitnessTests: () => Promise<void>;
   saveFitnessTest: (testData: Omit<FitnessTest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<FitnessTest>;
@@ -63,8 +92,8 @@ interface AuthState {
   validateSession: () => Promise<boolean>;
   // ✅ NOVO: Função para verificar sessão periodicamente
   startSessionValidation: () => () => void;
-  // ✅ NOVO: Função para validar usuário antes do login
-  validateUserBeforeLogin: (email: string) => Promise<any>;
+  // ✅ REMOVIDO: Função para validar usuário antes do login
+  // validateUserBeforeLogin: (email: string) => Promise<any>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -80,62 +109,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🔍 signIn iniciado para email:', email);
     set({ isLoading: true });
     try {
-      // ✅ MELHORADO: Validação de entrada
-      const emailValidation = validateEmail(email);
-      if (!emailValidation.isValid) {
-        throw new Error(emailValidation.errors[0]);
-      }
-      
+      // ✅ CORRIGIDO: Validação de entrada simplificada
       const sanitizedEmail = email.toLowerCase().trim();
       
-      // ✅ MELHORADO: Rate limiting para login
+      // ✅ CORRIGIDO: Rate limiting simplificado
       const rateLimitResult = await loginRateLimiter.checkRateLimit(sanitizedEmail);
       if (!rateLimitResult.allowed) {
         const remainingTime = Math.ceil((rateLimitResult.blockedUntil! - Date.now()) / (1000 * 60));
         throw new Error(`Muitas tentativas de login. Tente novamente em ${remainingTime} minutos.`);
       }
       
-      // ✅ MELHORADO: Log de tentativa de login
-      try {
-        await logLoginAttempt(sanitizedEmail, false, { stage: 'validation' });
-      } catch (logError) {
-        console.warn('⚠️ Erro ao logar tentativa de login:', logError);
-      }
-      
-      // ✅ NOVO: VALIDAÇÃO PRÉ-LOGIN - Verificar se o usuário existe ANTES de fazer login
-      console.log('🔍 VALIDAÇÃO PRÉ-LOGIN: Verificando usuário antes do login...');
-      try {
-        await get().validateUserBeforeLogin(sanitizedEmail);
-        console.log('✅ VALIDAÇÃO PRÉ-LOGIN: Usuário validado com sucesso');
-      } catch (preLoginError) {
-        console.error('❌ ERRO PRÉ-LOGIN:', preLoginError);
-        
-        // ✅ Log de erro de validação pré-login
-        try {
-          await logLoginAttempt(sanitizedEmail, false, { 
-            error: preLoginError instanceof Error ? preLoginError.message : String(preLoginError),
-            stage: 'pre_login_validation'
-          });
-          await loginRateLimiter.recordAttempt(sanitizedEmail, false);
-        } catch (logError) {
-          console.warn('⚠️ Erro ao logar falha pré-login:', logError);
-        }
-        
-        throw preLoginError;
-      }
-      
-      // ✅ MELHORADO: Limpeza AGESSIVA antes do login
-      console.log('🧹 Limpeza AGESSIVA antes do login...');
+      // ✅ CORRIGIDO: Limpeza mais eficiente
+      console.log('🧹 Limpeza antes do login...');
       await get().clearAllLocalData();
-      
-      // ✅ NOVO: Verificar se a limpeza foi efetiva
-      const remainingKeys = await AsyncStorage.getAllKeys();
-      console.log('🔍 Chaves restantes após limpeza:', remainingKeys);
-      
-      if (remainingKeys.some(key => key.includes('supabase') || key.includes('auth'))) {
-        console.warn('⚠️ Ainda há chaves do Supabase após limpeza - forçando limpeza completa');
-        await AsyncStorage.clear();
-      }
       
       console.log('🔍 Chamando supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -180,80 +166,88 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       
       if (data.user) {
-        // ✅ NOVO: VALIDAÇÃO CRÍTICA - Verificar se o usuário realmente existe no banco
+        // ✅ CORRIGIDO: VALIDAÇÃO CRÍTICA - Verificar primeiro se é treinador
         console.log('🔍 VALIDAÇÃO CRÍTICA: Verificando existência do usuário no banco...');
         
         try {
-          // 1. Verificar se existe na tabela profiles
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('id, email, full_name, user_type, onboarding_completed')
-            .eq('id', data.user.id)
+          // ✅ CORRIGIDO: 1. Verificar primeiro se existe na tabela coaches (treinadores)
+          const { data: coachData, error: coachError } = await supabase
+            .from('coaches')
+            .select('id, user_id, full_name, email, cref')
+            .eq('user_id', data.user.id)
             .single();
           
-          if (profileError) {
-            console.error('🔍 ERRO CRÍTICO: Usuário não encontrado em profiles:', profileError);
+          if (!coachError && coachData) {
+            console.log('✅ VALIDAÇÃO CRÍTICA: Treinador encontrado em coaches');
             
-            // ✅ NOVO: Log de tentativa de login com usuário inexistente
-            try {
-              await logLoginAttempt(sanitizedEmail, false, { 
-                error: 'User not found in profiles table',
-                userId: data.user.id,
-                stage: 'profile_validation'
+            // ✅ Verificar se o email corresponde
+            if (coachData.email !== sanitizedEmail) {
+              console.error('🔍 ERRO CRÍTICO: Email não corresponde para treinador:', {
+                coachEmail: coachData.email,
+                loginEmail: sanitizedEmail
               });
-            } catch (logError) {
-              console.warn('⚠️ Erro ao logar tentativa inválida:', logError);
-            }
-            
-            // ✅ NOVO: Fazer logout imediatamente
-            await supabase.auth.signOut({ scope: 'global' });
-            await get().clearAllLocalData();
-            
-            throw new Error('Usuário não encontrado no sistema. Entre em contato com o suporte.');
-          }
-          
-          // 2. Verificar se o email corresponde
-          if (profileData.email !== sanitizedEmail) {
-            console.error('🔍 ERRO CRÍTICO: Email não corresponde:', {
-              profileEmail: profileData.email,
-              loginEmail: sanitizedEmail
-            });
-            
-            await supabase.auth.signOut({ scope: 'global' });
-            await get().clearAllLocalData();
-            
-            throw new Error('Dados de usuário inconsistentes. Entre em contato com o suporte.');
-          }
-          
-          // 3. Verificar se user_type está definido
-          if (!profileData.user_type) {
-            console.error('🔍 ERRO CRÍTICO: user_type não definido para usuário:', data.user.id);
-            
-            await supabase.auth.signOut({ scope: 'global' });
-            await get().clearAllLocalData();
-            
-            throw new Error('Tipo de usuário não definido. Entre em contato com o suporte.');
-          }
-          
-          // 4. Se for coach, verificar se existe na tabela coaches
-          if (profileData.user_type === 'coach') {
-            const { data: coachData, error: coachError } = await supabase
-              .from('coaches')
-              .select('id, user_id, full_name, email, cref')
-              .eq('user_id', data.user.id)
-              .single();
-            
-            if (coachError) {
-              console.error('🔍 ERRO CRÍTICO: Coach não encontrado em coaches:', coachError);
               
               await supabase.auth.signOut({ scope: 'global' });
               await get().clearAllLocalData();
               
-              throw new Error('Dados de treinador não encontrados. Entre em contato com o suporte.');
+              throw new Error('Dados de treinador inconsistentes. Entre em contato com o suporte.');
             }
+            
+            console.log('✅ VALIDAÇÃO CRÍTICA: Treinador validado com sucesso');
+          } else {
+            // ✅ CORRIGIDO: 2. Se não for treinador, verificar na tabela profiles (atletas)
+            const { data: profileData, error: profileError } = await supabase
+              .from('profiles')
+              .select('id, email, full_name, user_type, onboarding_completed')
+              .eq('id', data.user.id)
+              .single();
+            
+            if (profileError) {
+              console.error('🔍 ERRO CRÍTICO: Usuário não encontrado em profiles nem coaches:', profileError);
+              
+              // ✅ NOVO: Log de tentativa de login com usuário inexistente
+              try {
+                await logLoginAttempt(sanitizedEmail, false, { 
+                  error: 'User not found in profiles or coaches table',
+                  userId: data.user.id,
+                  stage: 'profile_validation'
+                });
+              } catch (logError) {
+                console.warn('⚠️ Erro ao logar tentativa inválida:', logError);
+              }
+              
+              // ✅ NOVO: Fazer logout imediatamente
+              await supabase.auth.signOut({ scope: 'global' });
+              await get().clearAllLocalData();
+              
+              throw new Error('Usuário não encontrado no sistema. Entre em contato com o suporte.');
+            }
+            
+            // ✅ Verificar se o email corresponde
+            if (profileData.email !== sanitizedEmail) {
+              console.error('🔍 ERRO CRÍTICO: Email não corresponde:', {
+                profileEmail: profileData.email,
+                loginEmail: sanitizedEmail
+              });
+              
+              await supabase.auth.signOut({ scope: 'global' });
+              await get().clearAllLocalData();
+              
+              throw new Error('Dados de usuário inconsistentes. Entre em contato com o suporte.');
+            }
+            
+            // ✅ Verificar se user_type está definido
+            if (!profileData.user_type) {
+              console.error('🔍 ERRO CRÍTICO: user_type não definido para usuário:', data.user.id);
+              
+              await supabase.auth.signOut({ scope: 'global' });
+              await get().clearAllLocalData();
+              
+              throw new Error('Tipo de usuário não definido. Entre em contato com o suporte.');
+            }
+            
+            console.log('✅ VALIDAÇÃO CRÍTICA: Atleta validado com sucesso');
           }
-          
-          console.log('✅ VALIDAÇÃO CRÍTICA: Usuário validado com sucesso');
           
         } catch (validationError) {
           console.error('🔍 ERRO NA VALIDAÇÃO CRÍTICA:', validationError);
@@ -390,28 +384,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (options?.isCoach) {
           console.log('🔍 Cadastro como TREINADOR. Criando perfil de treinador...');
           
-          // ✅ CORRIGIDO: Para treinador, criar perfil básico em profiles E registro em coaches
+          // ✅ CORRIGIDO: Para treinador, criar APENAS registro em coaches (não em profiles)
           try {
-            // 1. Criar perfil básico em profiles (necessário para navegação)
-            const { error: profileError } = await supabase
-              .from('profiles')
-              .insert({
-                id: data.user.id,
-                email: sanitizedEmail,
-                full_name: sanitizedName,
-                experience_level: 'beginner',
-                main_goal: 'health',
-                context_type: 'solo',
-                onboarding_completed: false,
-                user_type: 'coach', // ✅ NOVO: Marcar como treinador
-              });
-            
-            if (profileError) {
-              console.error('🔍 Erro ao criar perfil de treinador:', profileError);
-              throw new Error('Erro ao criar perfil de treinador. Tente novamente.');
-            }
-            
-            // 2. Criar registro em coaches com CREF
+            // Criar registro em coaches com CREF
             const { error: coachInsertError } = await supabase
               .from('coaches')
               .insert([{ 
@@ -490,7 +465,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
       
-      // 1. Fazer logout do Supabase com timeout
+      // ✅ MELHORADO: 1. Fazer logout do Supabase com timeout mais curto
       console.log('🔍 Iniciando logout do Supabase...');
       const signOutWithTimeout = Promise.race([
         (async () => {
@@ -508,13 +483,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         new Promise<void>((resolve) => setTimeout(() => {
           console.log('⏰ Timeout do logout do Supabase');
           resolve();
-        }, 3000)),
+        }, 5000)), // ✅ REDUZIDO: Timeout de 3s para 5s
       ]);
 
       await signOutWithTimeout;
       
-      // 2. Limpar dados locais
+      // ✅ MELHORADO: 2. Limpar dados locais de forma mais robusta
       console.log('🔍 Limpando dados locais...');
+      
+      // Limpar sessão corrompida
       try { 
         await clearCorruptedSession(); 
         console.log('✅ Sessão corrompida limpa');
@@ -522,6 +499,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.log('⚠️ Erro ao limpar sessão corrompida:', e);
       }
       
+      // Limpar AsyncStorage
       try { 
         await AsyncStorage.clear(); 
         console.log('✅ AsyncStorage limpo');
@@ -529,13 +507,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.log('⚠️ Erro ao limpar AsyncStorage:', e);
       }
       
-      // 3. Resetar estado
+      // ✅ MELHORADO: 3. Resetar estado de forma mais completa
       console.log('🔍 Resetando estado da aplicação...');
       set({ 
         user: null, 
         profile: null, 
         isAuthenticated: false,
-        isLoading: false,
+        isLoading: false, // ✅ GARANTIDO: isLoading sempre resetado
         isInitializing: false,
         fitnessTests: [],
         races: [],
@@ -543,7 +521,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       console.log('✅ Logout finalizado com sucesso');
       
-      // 4. Redirecionar se estiver no web
+      // ✅ MELHORADO: 4. Redirecionar se estiver no web
       try { 
         if (typeof window !== 'undefined') {
           console.log('🔍 Redirecionando no web...');
@@ -556,26 +534,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('❌ Erro crítico no logout:', error);
       
-      // Mesmo com erro, limpar estado
+      // ✅ MELHORADO: Mesmo com erro, garantir limpeza completa
       try {
         await AsyncStorage.clear();
         set({ 
           user: null, 
           profile: null, 
           isAuthenticated: false,
-          isLoading: false,
+          isLoading: false, // ✅ GARANTIDO: isLoading sempre resetado mesmo com erro
           isInitializing: false,
           fitnessTests: [],
           races: [],
         });
-        console.log('✅ Estado limpo mesmo com erro');
+        
+        console.log('✅ Estado limpo mesmo com erro no logout');
       } catch (cleanupError) {
         console.error('❌ Erro na limpeza de emergência:', cleanupError);
+        // ✅ ÚLTIMO RECURSO: Forçar reset do isLoading
+        set({ isLoading: false });
       }
-      
-      throw error;
-    } finally {
-      set({ isLoading: false });
     }
   },
 
@@ -645,53 +622,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // ✅ NOVO: Função para validar usuário ANTES do login
-  validateUserBeforeLogin: async (email: string) => {
-    console.log('🔍 VALIDAÇÃO PRÉ-LOGIN: Verificando usuário antes do login...');
-    
-    const sanitizedEmail = email.trim().toLowerCase();
-    
-    try {
-      // 1. Verificar se existe na tabela profiles pelo email
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, user_type, onboarding_completed')
-        .eq('email', sanitizedEmail)
-        .single();
-      
-      if (profileError) {
-        console.error('🔍 ERRO PRÉ-LOGIN: Usuário não encontrado em profiles:', profileError);
-        throw new Error('Usuário não cadastrado no sistema. Crie uma conta primeiro.');
-      }
-      
-      // 2. Verificar se user_type está definido
-      if (!profileData.user_type) {
-        console.error('🔍 ERRO PRÉ-LOGIN: user_type não definido para usuário:', profileData.id);
-        throw new Error('Tipo de usuário não definido. Entre em contato com o suporte.');
-      }
-      
-      // 3. Se for coach, verificar se existe na tabela coaches
-      if (profileData.user_type === 'coach') {
-        const { data: coachData, error: coachError } = await supabase
-          .from('coaches')
-          .select('id, user_id, full_name, email, cref')
-          .eq('user_id', profileData.id)
-          .single();
-        
-        if (coachError) {
-          console.error('🔍 ERRO PRÉ-LOGIN: Coach não encontrado em coaches:', coachError);
-          throw new Error('Dados de treinador não encontrados. Entre em contato com o suporte.');
-        }
-      }
-      
-      console.log('✅ VALIDAÇÃO PRÉ-LOGIN: Usuário validado com sucesso');
-      return profileData;
-      
-    } catch (validationError) {
-      console.error('🔍 ERRO NA VALIDAÇÃO PRÉ-LOGIN:', validationError);
-      throw validationError;
-    }
-  },
+  // ✅ REMOVIDO: Função validateUserBeforeLogin que estava causando problemas
+  // A validação agora é feita após o login bem-sucedido
 
   // ✅ MELHORADO: Função para limpar todos os dados locais de forma mais agressiva
   clearAllLocalData: async () => {
@@ -995,12 +927,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user, profile } = get();
     console.log('DEBUG - user:', user?.id, 'profile:', profile?.id);
     
-    if (!user || !profile) {
-      console.log('DEBUG - Usuário ou perfil não encontrado');
+    if (!user) {
+      console.log('DEBUG - Usuário não encontrado');
       return;
     }
     
     try {
+      // ✅ CORRIGIDO: Verificar se o usuário é treinador, mas permitir atualização
+      const { data: coachData } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (coachData) {
+        console.log('🔍 Usuário é treinador, mas permitindo atualização do perfil');
+        // Não impedir a atualização, apenas logar
+      }
+      
+      if (!profile) {
+        console.log('DEBUG - Perfil não encontrado');
+        return;
+      }
+      
       console.log('DEBUG - Enviando update para Supabase...');
       const { data, error } = await supabase
         .from('profiles')
@@ -1035,17 +984,183 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get();
     if (!user) throw new Error('Usuário não autenticado');
     try {
-      const upsertData = {
+      // ✅ CORRIGIDO: Salvar preferências na tabela training_preferences
+      const preferenceData = {
         user_id: user.id,
-        ...prefs,
+        training_days: prefs.trainingDays,
+        preferred_training_period: prefs.trainingPeriod as 'morning' | 'afternoon' | 'evening' | 'night',
+        terrain_preference: prefs.terrainType as 'road' | 'trail' | 'track' | 'treadmill' | 'mixed',
+        work_stress_level: prefs.workIntensity,
+        sleep_consistency: prefs.sleepQuality as 'excellent' | 'good' | 'fair' | 'poor',
+        wakeup_feeling: prefs.wakeFeeling as 'refreshed' | 'tired' | 'energetic' | 'groggy',
+        hydration_habit: prefs.hydration as 'excellent' | 'good' | 'fair' | 'poor',
+        recovery_habit: prefs.recoveryTechniques,
+        stress_management: prefs.stressManagement,
       };
-      const { error } = await supabase
-        .from('profile_preferences')
-        .upsert(upsertData, { onConflict: 'user_id' });
+      
+      const { data, error } = await supabase
+        .from('training_preferences')
+        .upsert(preferenceData, { onConflict: 'user_id' })
+        .select()
+        .single();
+        
       if (error) throw error;
+      
+      console.log('✅ Preferências salvas com sucesso na tabela training_preferences');
+      return data;
     } catch (error) {
       console.error('Erro ao salvar preferências:', error);
       throw error;
+    }
+  },
+
+  // ✅ NOVO: Função para salvar anamnese
+  submitAnamnesis: async (anamnesisData: {
+    dateOfBirth?: string;
+    weightKg?: number;
+    heightCm?: number;
+    bloodType?: string;
+    emergencyContactName?: string;
+    emergencyContactPhone?: string;
+    medicalConditions?: string[];
+    medications?: string[];
+    allergies?: string[];
+    previousInjuries?: string[];
+    familyMedicalHistory?: string;
+    smokingStatus?: string;
+    alcoholConsumption?: string;
+    sleepHoursPerNight?: number;
+    stressLevel?: number;
+  }) => {
+    const { user } = get();
+    if (!user) throw new Error('Usuário não autenticado');
+    try {
+      const data = {
+        user_id: user.id,
+        date_of_birth: anamnesisData.dateOfBirth,
+        weight_kg: anamnesisData.weightKg,
+        height_cm: anamnesisData.heightCm,
+        blood_type: anamnesisData.bloodType,
+        emergency_contact_name: anamnesisData.emergencyContactName,
+        emergency_contact_phone: anamnesisData.emergencyContactPhone,
+        medical_conditions: anamnesisData.medicalConditions,
+        medications: anamnesisData.medications,
+        allergies: anamnesisData.allergies,
+        previous_injuries: anamnesisData.previousInjuries,
+        family_medical_history: anamnesisData.familyMedicalHistory,
+        smoking_status: anamnesisData.smokingStatus,
+        alcohol_consumption: anamnesisData.alcoholConsumption,
+        sleep_hours_per_night: anamnesisData.sleepHoursPerNight,
+        stress_level: anamnesisData.stressLevel,
+      };
+      
+      const { data: result, error } = await supabase
+        .from('anamnesis')
+        .upsert(data, { onConflict: 'user_id' })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      console.log('✅ Anamnese salva com sucesso');
+      return result;
+    } catch (error) {
+      console.error('Erro ao salvar anamnese:', error);
+      throw error;
+    }
+  },
+
+  // ✅ NOVO: Função para salvar PARQ
+  submitParq: async (parqData: {
+    question1HeartCondition: boolean;
+    question2ChestPain: boolean;
+    question3Dizziness: boolean;
+    question4BoneJointProblem: boolean;
+    question5BloodPressure: boolean;
+    question6PhysicalLimitation: boolean;
+    question7DoctorRecommendation: boolean;
+    additionalNotes?: string;
+  }) => {
+    const { user } = get();
+    if (!user) throw new Error('Usuário não autenticado');
+    try {
+      const data = {
+        user_id: user.id,
+        question_1_heart_condition: parqData.question1HeartCondition,
+        question_2_chest_pain: parqData.question2ChestPain,
+        question_3_dizziness: parqData.question3Dizziness,
+        question_4_bone_joint_problem: parqData.question4BoneJointProblem,
+        question_5_blood_pressure: parqData.question5BloodPressure,
+        question_6_physical_limitation: parqData.question6PhysicalLimitation,
+        question_7_doctor_recommendation: parqData.question7DoctorRecommendation,
+        additional_notes: parqData.additionalNotes,
+      };
+      
+      const { data: result, error } = await supabase
+        .from('parq_responses')
+        .upsert(data, { onConflict: 'user_id' })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      console.log('✅ PARQ salvo com sucesso');
+      return result;
+    } catch (error) {
+      console.error('Erro ao salvar PARQ:', error);
+      throw error;
+    }
+  },
+
+  // ✅ NOVO: Função para carregar dados completos do perfil
+  loadCompleteProfile: async () => {
+    const { user } = get();
+    if (!user) return;
+    
+    try {
+      // Carregar dados básicos do perfil
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      // Carregar anamnese
+      const { data: anamnesisData } = await supabase
+        .from('anamnesis')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      // Carregar preferências
+      const { data: preferencesData } = await supabase
+        .from('training_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      // Carregar PARQ
+      const { data: parqData } = await supabase
+        .from('parq_responses')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      console.log('✅ Dados completos do perfil carregados:', {
+        profile: profileData,
+        anamnesis: anamnesisData,
+        preferences: preferencesData,
+        parq: parqData
+      });
+      
+      return {
+        profile: profileData,
+        anamnesis: anamnesisData,
+        preferences: preferencesData,
+        parq: parqData
+      };
+    } catch (error) {
+      console.error('Erro ao carregar dados completos do perfil:', error);
     }
   },
 
@@ -1160,16 +1275,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   fetchRaces: async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      let targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      
+      // ✅ NOVO: Verificar se está no modo coach
+      const { isCoachView, viewAsAthleteId } = useViewStore.getState();
+      if (isCoachView && viewAsAthleteId) {
+        console.log('🔍 Modo Coach - Buscando provas do atleta:', viewAsAthleteId);
+        targetUserId = viewAsAthleteId;
+      } else {
+        console.log('🔍 Modo Atleta - Buscando próprias provas:', targetUserId);
+      }
+      
+      if (!targetUserId) {
+        console.log('DEBUG - fetchRaces: Usuário não autenticado');
+        return;
+      }
 
+      console.log('DEBUG - fetchRaces: Buscando provas para usuário:', targetUserId);
       const { data, error } = await supabase
         .from('races')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('start_date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('DEBUG - fetchRaces: Erro do Supabase:', error);
+        throw error;
+      }
+      
+      console.log('DEBUG - fetchRaces: Provas encontradas:', data);
+      console.log('DEBUG - fetchRaces: Número de provas:', data?.length || 0);
+      console.log('DEBUG - fetchRaces: Atualizando estado com:', data || []);
+      
       set({ races: data || [] });
+      
+      console.log('DEBUG - fetchRaces: Estado atualizado, verificando...');
+      setTimeout(() => {
+        const currentRaces = get().races;
+        console.log('DEBUG - fetchRaces: Estado após atualização:', currentRaces);
+        console.log('DEBUG - fetchRaces: Número de provas no estado:', currentRaces?.length || 0);
+      }, 100);
     } catch (error) {
       console.error('Erro ao buscar provas:', error);
     }
@@ -1180,20 +1325,59 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
+      console.log('DEBUG - saveRace: Salvando prova:', raceData);
+      console.log('DEBUG - saveRace: Para usuário:', user.id);
+
+      // Validar dados antes de salvar
+      if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
+        throw new Error('Todos os campos são obrigatórios');
+      }
+
+      // Validar formato da data (deve ser YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(raceData.start_date)) {
+        throw new Error('Formato de data inválido');
+      }
+
+      // Validar formato da hora (deve ser HH:MM)
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timeRegex.test(raceData.start_time)) {
+        throw new Error('Formato de hora inválido');
+      }
+
+      // Validar distância (deve ser um número positivo)
+      const distance = Number(raceData.distance_km);
+      if (isNaN(distance) || distance <= 0) {
+        throw new Error('Distância deve ser um número positivo');
+      }
+
+      console.log('DEBUG - saveRace: Dados validados, inserindo no Supabase...');
+      
       const { data, error } = await supabase
         .from('races')
         .insert([{
           ...raceData,
-          user_id: user.id
+          user_id: user.id,
+          distance_km: distance // Garantir que é um número
         }])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('DEBUG - saveRace: Erro do Supabase:', error);
+        throw error;
+      }
 
-      // Atualizar a lista de provas
+      console.log('DEBUG - saveRace: Prova salva com sucesso:', data);
+
+      // Atualizar a lista de provas no estado
       const currentRaces = get().races;
-      set({ races: [...currentRaces, data].sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()) });
+      const updatedRaces = [...currentRaces, data].sort((a, b) => 
+        new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+      );
+      
+      set({ races: updatedRaces });
+      console.log('DEBUG - saveRace: Estado atualizado com', updatedRaces.length, 'provas');
 
       return data;
     } catch (error) {
@@ -1218,7 +1402,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const updatedRaces = currentRaces.map(race =>
         race.id === raceId ? data : race
       );
-      set({ races: updatedRaces.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()) });
+      const sortedRaces = updatedRaces.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+      set({ races: sortedRaces });
+      console.log('DEBUG - updateRace: Estado após atualizar:', get().races);
 
       return data;
     } catch (error) {
@@ -1240,6 +1426,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const currentRaces = get().races;
       const updatedRaces = currentRaces.filter(race => race.id !== raceId);
       set({ races: updatedRaces });
+      console.log('DEBUG - deleteRace: Estado após deletar:', get().races);
     } catch (error) {
       console.error('Erro ao deletar prova:', error);
       throw error;
@@ -1288,67 +1475,77 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
       
-      // ✅ VALIDAÇÃO CRÍTICA: Verificar se o usuário ainda existe no banco
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, user_type, onboarding_completed')
-        .eq('id', session.user.id)
+      // ✅ CORRIGIDO: VALIDAÇÃO CRÍTICA - Verificar primeiro se é treinador
+      // 1. Verificar primeiro se existe na tabela coaches (treinadores)
+      const { data: coachData, error: coachError } = await supabase
+        .from('coaches')
+        .select('id, user_id, full_name, email, cref')
+        .eq('user_id', session.user.id)
         .single();
       
-      if (profileError) {
-        console.error('🔍 ERRO CRÍTICO: Usuário não encontrado em profiles durante validação:', profileError);
+      if (!coachError && coachData) {
+        console.log('✅ VALIDAÇÃO DE SESSÃO: Treinador encontrado em coaches');
         
-        // ✅ NOVO: Log de sessão inválida
-        try {
-          await logLoginAttempt(session.user.email || 'unknown', false, { 
-            error: 'User not found in profiles during session validation',
-            userId: session.user.id,
-            stage: 'session_validation'
+        // ✅ Verificar se o email ainda corresponde
+        if (coachData.email !== session.user.email) {
+          console.error('🔍 ERRO CRÍTICO: Email não corresponde para treinador durante validação:', {
+            coachEmail: coachData.email,
+            sessionEmail: session.user.email
           });
-        } catch (logError) {
-          console.warn('⚠️ Erro ao logar sessão inválida:', logError);
-        }
-        
-        // ✅ NOVO: Limpeza de emergência
-        await supabase.auth.signOut({ scope: 'global' });
-        await get().clearAllLocalData();
-        
-        return false;
-      }
-      
-      // ✅ Verificar se o email ainda corresponde
-      if (profileData.email !== session.user.email) {
-        console.error('🔍 ERRO CRÍTICO: Email não corresponde durante validação:', {
-          profileEmail: profileData.email,
-          sessionEmail: session.user.email
-        });
-        
-        await supabase.auth.signOut({ scope: 'global' });
-        await get().clearAllLocalData();
-        
-        return false;
-      }
-      
-      // ✅ Se for coach, verificar se ainda existe na tabela coaches
-      if (profileData.user_type === 'coach') {
-        const { data: coachData, error: coachError } = await supabase
-          .from('coaches')
-          .select('id, user_id, full_name, email, cref')
-          .eq('user_id', session.user.id)
-          .single();
-        
-        if (coachError) {
-          console.error('🔍 ERRO CRÍTICO: Coach não encontrado em coaches durante validação:', coachError);
           
           await supabase.auth.signOut({ scope: 'global' });
           await get().clearAllLocalData();
           
           return false;
         }
+        
+        console.log('✅ Sessão de treinador validada com sucesso');
+        return true;
+      } else {
+        // ✅ CORRIGIDO: 2. Se não for treinador, verificar na tabela profiles (atletas)
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, user_type, onboarding_completed')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profileError) {
+          console.error('🔍 ERRO CRÍTICO: Usuário não encontrado em profiles nem coaches durante validação:', profileError);
+          
+          // ✅ NOVO: Log de sessão inválida
+          try {
+            await logLoginAttempt(session.user.email || 'unknown', false, { 
+              error: 'User not found in profiles or coaches during session validation',
+              userId: session.user.id,
+              stage: 'session_validation'
+            });
+          } catch (logError) {
+            console.warn('⚠️ Erro ao logar sessão inválida:', logError);
+          }
+          
+          // ✅ NOVO: Limpeza de emergência
+          await supabase.auth.signOut({ scope: 'global' });
+          await get().clearAllLocalData();
+          
+          return false;
+        }
+        
+        // ✅ Verificar se o email ainda corresponde
+        if (profileData.email !== session.user.email) {
+          console.error('🔍 ERRO CRÍTICO: Email não corresponde durante validação:', {
+            profileEmail: profileData.email,
+            sessionEmail: session.user.email
+          });
+          
+          await supabase.auth.signOut({ scope: 'global' });
+          await get().clearAllLocalData();
+          
+          return false;
+        }
+        
+        console.log('✅ Sessão de atleta validada com sucesso');
+        return true;
       }
-      
-      console.log('✅ Sessão validada com sucesso');
-      return true;
       
     } catch (error) {
       console.error('🔍 Erro na validação de sessão:', error);

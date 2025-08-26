@@ -65,6 +65,15 @@ export default function WellbeingChartsTab() {
   const defaultEndDate = new Date(currentWeekStart);
   defaultEndDate.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
   
+  // ✅ DEBUG: Log das datas calculadas
+  console.log('DEBUG - WellbeingChartsTab - Datas calculadas:', {
+    today: today.toISOString().split('T')[0],
+    todayDay: today.getDay(), // 0 = domingo, 1 = segunda, etc.
+    currentWeekStart: currentWeekStart.toISOString().split('T')[0],
+    defaultStartDate: defaultStartDate.toISOString().split('T')[0],
+    defaultEndDate: defaultEndDate.toISOString().split('T')[0]
+  });
+  
   const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
   const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
   const { recentCheckins, loadRecentCheckins } = useCheckinStore();
@@ -84,49 +93,91 @@ export default function WellbeingChartsTab() {
   // Efeito para ajustar automaticamente o período quando os dados são carregados
   useEffect(() => {
     if (recentCheckins.length > 0) {
-      // Encontrar o período com mais dados nos últimos 30 dias
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // ✅ DEBUG: Log do início do ajuste automático
+      console.log('DEBUG - WellbeingChartsTab - Ajuste automático iniciado');
       
-      const checkinsInLast30Days = recentCheckins.filter(checkin => {
+      // ✅ CORRIGIDO: Priorizar a semana atual se há check-ins recentes
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      
+      // Verificar se há check-ins de hoje ou dos últimos 7 dias
+      const recentCheckinsFiltered = recentCheckins.filter((checkin: any) => {
         const checkinDate = new Date(checkin.date);
-        return checkinDate >= thirtyDaysAgo;
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        return checkinDate >= sevenDaysAgo;
       });
       
-      if (checkinsInLast30Days.length > 0) {
-        // Encontrar a semana com mais check-ins
-        const weekMap = new Map();
+      // ✅ DEBUG: Log dos check-ins recentes
+      console.log('DEBUG - WellbeingChartsTab - Check-ins recentes:', {
+        total: recentCheckinsFiltered.length,
+        dates: recentCheckinsFiltered.map((c: any) => c.date),
+        today: todayString
+      });
+      
+      if (recentCheckinsFiltered.length > 0) {
+        // ✅ CORRIGIDO: Se há check-ins recentes, usar a semana atual
+        const currentWeekStart = new Date(today);
+        currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
         
-        checkinsInLast30Days.forEach(checkin => {
+        const newStartDate = new Date(currentWeekStart);
+        const newEndDate = new Date(currentWeekStart);
+        newEndDate.setDate(currentWeekStart.getDate() + 6);
+        
+        // ✅ DEBUG: Log das novas datas (semana atual)
+        console.log('DEBUG - WellbeingChartsTab - Usando semana atual:', {
+          newStartDate: newStartDate.toISOString().split('T')[0],
+          newEndDate: newEndDate.toISOString().split('T')[0],
+          today: todayString
+        });
+        
+        setCustomStartDate(newStartDate);
+        setCustomEndDate(newEndDate);
+      } else {
+        // Se não há check-ins recentes, usar a lógica anterior
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const checkinsInLast30Days = recentCheckins.filter((checkin: any) => {
           const checkinDate = new Date(checkin.date);
-          const weekStart = new Date(checkinDate);
-          weekStart.setDate(checkinDate.getDate() - checkinDate.getDay() + 1); // Segunda-feira
-          const weekKey = weekStart.toISOString().split('T')[0];
-          
-          if (!weekMap.has(weekKey)) {
-            weekMap.set(weekKey, []);
-          }
-          weekMap.get(weekKey).push(checkin);
+          return checkinDate >= thirtyDaysAgo;
         });
         
-        // Encontrar a semana com mais dados
-        let bestWeek = null;
-        let maxCheckins = 0;
-        
-        weekMap.forEach((checkins, weekKey) => {
-          if (checkins.length > maxCheckins) {
-            maxCheckins = checkins.length;
-            bestWeek = weekKey;
-          }
-        });
-        
-        if (bestWeek) {
-          const newStartDate = new Date(bestWeek);
-          const newEndDate = new Date(bestWeek);
-          newEndDate.setDate(newStartDate.getDate() + 6);
+        if (checkinsInLast30Days.length > 0) {
+          // Encontrar a semana com mais check-ins
+          const weekMap = new Map();
           
-          setCustomStartDate(newStartDate);
-          setCustomEndDate(newEndDate);
+          checkinsInLast30Days.forEach((checkin: any) => {
+            const checkinDate = new Date(checkin.date);
+            const weekStart = new Date(checkinDate);
+            weekStart.setDate(checkinDate.getDate() - checkinDate.getDay() + 1); // Segunda-feira
+            const weekKey = weekStart.toISOString().split('T')[0];
+            
+            if (!weekMap.has(weekKey)) {
+              weekMap.set(weekKey, []);
+            }
+            weekMap.get(weekKey).push(checkin);
+          });
+          
+          // Encontrar a semana com mais dados
+          let bestWeek = null;
+          let maxCheckins = 0;
+          
+          weekMap.forEach((checkins, weekKey) => {
+            if (checkins.length > maxCheckins) {
+              maxCheckins = checkins.length;
+              bestWeek = weekKey;
+            }
+          });
+          
+          if (bestWeek) {
+            const newStartDate = new Date(bestWeek);
+            const newEndDate = new Date(bestWeek);
+            newEndDate.setDate(newStartDate.getDate() + 6);
+            
+            setCustomStartDate(newStartDate);
+            setCustomEndDate(newEndDate);
+          }
         }
       }
     }
@@ -152,18 +203,52 @@ export default function WellbeingChartsTab() {
 
   // Processar dados reais dos checkins
   const getMetricData = () => {
+    // ✅ DEBUG: Log dos dados recebidos
+    console.log('DEBUG - WellbeingChartsTab - Dados recebidos:', {
+      totalCheckins: recentCheckins.length,
+      checkins: recentCheckins.map(c => ({
+        date: c.date,
+        sleep_quality: c.sleep_quality,
+        soreness: c.soreness,
+        motivation: c.motivation,
+        confidence: c.confidence,
+        focus: c.focus,
+        emocional: c.emocional
+      })),
+      selectedMetric: selectedMetric,
+      selectedField: selectedMetricInfo?.field,
+      customStartDate: customStartDate.toISOString().split('T')[0],
+      customEndDate: customEndDate.toISOString().split('T')[0]
+    });
+
     // Filtrar check-ins por período selecionado
     const filteredCheckins = recentCheckins.filter(checkin => {
       const checkinDate = checkin.date;
       const startDate = customStartDate.toISOString().split('T')[0];
       const endDate = customEndDate.toISOString().split('T')[0];
       
-      return checkinDate >= startDate && checkinDate <= endDate;
+      const isInRange = checkinDate >= startDate && checkinDate <= endDate;
+      
+      // ✅ DEBUG: Log do filtro
+      console.log('DEBUG - WellbeingChartsTab - Filtro:', {
+        checkinDate,
+        startDate,
+        endDate,
+        isInRange
+      });
+      
+      return isInRange;
     });
+
+    // ✅ DEBUG: Log dos check-ins filtrados
+    console.log('DEBUG - WellbeingChartsTab - Check-ins filtrados:', filteredCheckins);
 
     // Sempre retornar 7 dias (segunda a domingo) para consistência visual
     const weekStart = new Date(customStartDate);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Segunda-feira
+    
+    // ✅ DEBUG: Log do início da semana
+    console.log('DEBUG - WellbeingChartsTab - Início da semana:', weekStart.toISOString().split('T')[0]);
     
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
@@ -177,6 +262,14 @@ export default function WellbeingChartsTab() {
       if (checkinForDay && selectedMetricInfo?.field) {
         const fieldValue = checkinForDay[selectedMetricInfo.field as keyof typeof checkinForDay];
         value = typeof fieldValue === 'number' ? fieldValue : 0;
+        
+        // ✅ DEBUG: Log do valor encontrado
+        console.log('DEBUG - WellbeingChartsTab - Valor encontrado:', {
+          date: dateStr,
+          field: selectedMetricInfo.field,
+          fieldValue,
+          finalValue: value
+        });
       }
       
       weekDays.push({
@@ -184,6 +277,9 @@ export default function WellbeingChartsTab() {
         value: value,
       });
     }
+    
+    // ✅ DEBUG: Log do resultado final
+    console.log('DEBUG - WellbeingChartsTab - Resultado final:', weekDays);
     
     return weekDays;
   };

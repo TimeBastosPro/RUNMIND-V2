@@ -58,6 +58,17 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
   }, [plannedData]);
 
   const handleSave = () => {
+    console.log('🔍 MarkTrainingDoneModal - handleSave iniciado');
+    console.log('🔍 Dados do formulário:', {
+      distanceKm,
+      durationM,
+      effort,
+      satisfaction,
+      sensacoes,
+      clima,
+      notes
+    });
+    
     const dataToSave: Partial<TrainingSession> = {
       status: 'completed',
       distance_km: distanceKm ? Number(distanceKm) : undefined,
@@ -70,7 +81,16 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
       session_satisfaction: satisfaction ? Number(satisfaction) : undefined,
       observacoes: notes,
     };
-    onSave(dataToSave);
+    
+    console.log('🔍 Dados para salvar:', dataToSave);
+    console.log('🔍 Chamando onSave...');
+    
+    try {
+      onSave(dataToSave);
+      console.log('✅ onSave chamado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao chamar onSave:', error);
+    }
   };
 
   const handleDelete = async () => {

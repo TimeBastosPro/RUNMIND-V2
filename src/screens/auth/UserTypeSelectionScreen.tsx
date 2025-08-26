@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Card, Button, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Logo } from '../../components/ui/Logo';
 
 interface UserTypeSelectionScreenProps {
   navigation: any;
@@ -15,9 +16,7 @@ export default function UserTypeSelectionScreen({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>
-          🏃‍♂️ RunMind
-        </Text>
+        <Logo size="large" showText={false} style={styles.logo} />
         <Text variant="bodyLarge" style={styles.subtitle}>
           Escolha seu tipo de conta
         </Text>
@@ -115,9 +114,8 @@ const styles = StyleSheet.create({
     marginTop: 40,
     marginBottom: 30,
   },
-  title: {
-    fontWeight: 'bold',
-    marginBottom: 8,
+  logo: {
+    marginBottom: 16,
   },
   subtitle: {
     textAlign: 'center',

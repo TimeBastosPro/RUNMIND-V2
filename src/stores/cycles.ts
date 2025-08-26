@@ -19,20 +19,20 @@ interface CyclesState {
   isLoading: boolean;
   
   // Macrociclos
-  fetchMacrociclos: () => Promise<void>;
-  createMacrociclo: (data: CreateMacrocicloData) => Promise<Macrociclo>;
+  fetchMacrociclos: (athleteId?: string) => Promise<void>;
+  createMacrociclo: (data: CreateMacrocicloData, athleteId?: string) => Promise<Macrociclo>;
   updateMacrociclo: (id: string, data: Partial<CreateMacrocicloData>) => Promise<Macrociclo>;
   deleteMacrociclo: (id: string) => Promise<void>;
   
   // Mesociclos
-  fetchMesociclos: (macrocicloId?: string) => Promise<void>;
-  createMesociclo: (data: CreateMesocicloData) => Promise<Mesociclo>;
+  fetchMesociclos: (macrocicloId?: string, athleteId?: string) => Promise<void>;
+  createMesociclo: (data: CreateMesocicloData, athleteId?: string) => Promise<Mesociclo>;
   updateMesociclo: (id: string, data: Partial<CreateMesocicloData>) => Promise<Mesociclo>;
   deleteMesociclo: (id: string) => Promise<void>;
   
   // Microciclos
-  fetchMicrociclos: (mesocicloId?: string) => Promise<void>;
-  createMicrociclo: (data: CreateMicrocicloData) => Promise<Microciclo>;
+  fetchMicrociclos: (mesocicloId?: string, athleteId?: string) => Promise<void>;
+  createMicrociclo: (data: CreateMicrocicloData, athleteId?: string) => Promise<Microciclo>;
   updateMicrociclo: (id: string, data: Partial<CreateMicrocicloData>) => Promise<Microciclo>;
   deleteMicrociclo: (id: string) => Promise<void>;
   generateMicrociclos: (mesocicloId: string) => Promise<void>;
@@ -56,37 +56,66 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
   isLoading: false,
 
   // === MACROCICLOS ===
-  fetchMacrociclos: async () => {
+  fetchMacrociclos: async (athleteId?: string) => {
     set({ isLoading: true });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
+      // Determinar o user_id correto para buscar
+      let targetUserId = user.id;
+      
+      if (athleteId) {
+        // Se athleteId foi fornecido, buscar os ciclos do atleta
+        console.log('🔄 Store: Treinador buscando macrociclos do atleta:', athleteId);
+        targetUserId = athleteId;
+      } else {
+        console.log('🔄 Store: Atleta buscando próprios macrociclos:', user.id);
+      }
+
+      console.log('🔄 Store: Buscando macrociclos para usuário:', targetUserId);
+
+      const { data: macrociclos, error } = await supabase
         .from('macrociclos')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('start_date', { ascending: true });
 
-      if (error) throw error;
-      set({ macrociclos: data || [] });
+      if (error) {
+        console.error('❌ Store: Erro ao buscar macrociclos:', error);
+        throw error;
+      }
+
+      console.log('✅ Store: Macrociclos carregados:', macrociclos?.length || 0, 'registros');
+      set({ macrociclos: macrociclos || [] });
     } catch (error) {
-      console.error('Erro ao buscar macrociclos:', error);
+      console.error('❌ Store: Erro ao buscar macrociclos:', error);
     } finally {
       set({ isLoading: false });
     }
   },
 
-  createMacrociclo: async (data: CreateMacrocicloData) => {
+  createMacrociclo: async (data: CreateMacrocicloData, athleteId?: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
+      // Determinar o user_id correto
+      let targetUserId = user.id;
+      
+      if (athleteId) {
+        // Se athleteId foi fornecido, usar o ID do atleta
+        console.log('🔄 Store: Treinador criando macrociclo para atleta:', athleteId);
+        targetUserId = athleteId;
+      } else {
+        console.log('🔄 Store: Atleta criando macrociclo próprio:', user.id);
+      }
+
       const { data: newMacrociclo, error } = await supabase
         .from('macrociclos')
-        .insert([{ ...data, user_id: user.id }])
+        .insert([{ ...data, user_id: targetUserId }])
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -108,7 +137,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .update(data)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -175,7 +204,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
   },
 
   // === MESOCICLOS ===
-  fetchMesociclos: async (macrocicloId?: string) => {
+  fetchMesociclos: async (macrocicloId?: string, athleteId?: string) => {
     set({ isLoading: true });
     try {
       console.log('🔍 DEBUG - Store: Buscando mesociclos, macrocicloId:', macrocicloId);
@@ -186,36 +215,37 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         return;
       }
 
+      // Determinar o user_id correto para buscar
+      let targetUserId = user.id;
+      
+      if (athleteId) {
+        // Se athleteId foi fornecido, buscar os mesociclos do atleta
+        console.log('🔄 Store: Treinador buscando mesociclos do atleta:', athleteId);
+        targetUserId = athleteId;
+      } else {
+        console.log('🔄 Store: Atleta buscando próprios mesociclos:', user.id);
+      }
+
+      console.log('🔄 Store: Buscando mesociclos para usuário:', targetUserId);
+
       let query = supabase
         .from('mesociclos')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', targetUserId);
 
       if (macrocicloId) {
         query = query.eq('macrociclo_id', macrocicloId);
       }
 
-      const { data, error } = await query.order('start_date', { ascending: true });
+      const { data: mesociclos, error } = await query.order('start_date', { ascending: true });
 
       if (error) {
-        console.error('❌ Erro Supabase ao buscar mesociclos:', error);
+        console.error('❌ Store: Erro ao buscar mesociclos:', error);
         throw error;
       }
 
-      console.log('✅ DEBUG - Store: Mesociclos carregados:', data?.length || 0, 'registros');
-      if (data && data.length > 0) {
-        console.log('🔍 DEBUG - Store: TODOS os mesociclos carregados:', data.map((m, index) => ({
-          index: index + 1,
-          id: m.id,
-          name: m.name,
-          type: m.mesociclo_type,
-          start: m.start_date,
-          end: m.end_date,
-          macrociclo_id: m.macrociclo_id
-        })));
-      }
-
-      set({ mesociclos: data || [] });
+      console.log('✅ Store: Mesociclos carregados:', mesociclos?.length || 0, 'registros');
+      set({ mesociclos: mesociclos || [] });
     } catch (error) {
       console.error('❌ Erro ao buscar mesociclos:', error);
     } finally {
@@ -223,24 +253,65 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
     }
   },
 
-  createMesociclo: async (data: CreateMesocicloData) => {
+  createMesociclo: async (data: CreateMesocicloData, athleteId?: string) => {
     try {
       console.log('🔄 Store: Iniciando criação do mesociclo:', data);
+      console.log('🔄 Store: Dados recebidos:', JSON.stringify(data, null, 2));
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      console.log('🔄 Store: Verificando autenticação...');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error('❌ Store: Erro de autenticação:', authError);
+        throw new Error(`Erro de autenticação: ${authError.message}`);
+      }
+      
+      if (!user) {
+        console.error('❌ Store: Usuário não autenticado');
+        throw new Error('Usuário não autenticado');
+      }
+      
+      console.log('✅ Store: Usuário autenticado:', user.id);
+
+      // Determinar o user_id correto
+      let targetUserId = user.id;
+      
+      if (athleteId) {
+        // Se athleteId foi fornecido, usar o ID do atleta
+        console.log('🔄 Store: Treinador criando mesociclo para atleta:', athleteId);
+        targetUserId = athleteId;
+      } else {
+        console.log('🔄 Store: Atleta criando mesociclo próprio:', user.id);
+      }
 
       console.log('🔄 Store: Usuário autenticado:', user.id);
-      console.log('🔄 Store: Dados para inserção:', { ...data, user_id: user.id });
+      console.log('🔄 Store: Dados para inserção:', { ...data, user_id: targetUserId });
+
+      // Verificar se todos os campos obrigatórios estão presentes
+      const requiredFields = ['macrociclo_id', 'name', 'start_date', 'end_date'];
+      for (const field of requiredFields) {
+        if (!data[field as keyof CreateMesocicloData]) {
+          console.error(`❌ Store: Campo obrigatório ausente: ${field}`);
+          throw new Error(`Campo obrigatório ausente: ${field}`);
+        }
+      }
+
+      console.log('🔄 Store: Todos os campos obrigatórios presentes, fazendo inserção...');
 
       const { data: newMesociclo, error } = await supabase
         .from('mesociclos')
-        .insert([{ ...data, user_id: user.id }])
+        .insert([{ ...data, user_id: targetUserId }])
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('❌ Store: Erro do Supabase:', error);
+        console.error('❌ Store: Detalhes do erro:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
         throw error;
       }
 
@@ -255,6 +326,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
       return newMesociclo;
     } catch (error) {
       console.error('❌ Store: Erro ao criar mesociclo:', error);
+      console.error('❌ Store: Stack trace:', error instanceof Error ? error.stack : 'N/A');
       throw error;
     }
   },
@@ -266,7 +338,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .update(data)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -331,52 +403,124 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
   },
 
   // === MICROCICLOS ===
-  fetchMicrociclos: async (mesocicloId?: string) => {
+  fetchMicrociclos: async (mesocicloId?: string, athleteId?: string) => {
     set({ isLoading: true });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Determinar o user_id correto para buscar
+      let targetUserId = user.id;
+      
+      if (athleteId) {
+        // Se athleteId foi fornecido, buscar os microciclos do atleta
+        console.log('🔄 Store: Treinador buscando microciclos do atleta:', athleteId);
+        targetUserId = athleteId;
+      } else {
+        console.log('🔄 Store: Atleta buscando próprios microciclos:', user.id);
+      }
+
+      console.log('🔄 Store: Buscando microciclos para usuário:', targetUserId);
+
       let query = supabase
         .from('microciclos')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', targetUserId);
 
       if (mesocicloId) {
         query = query.eq('mesociclo_id', mesocicloId);
       }
 
-      const { data, error } = await query.order('start_date', { ascending: true });
+      const { data: microciclos, error } = await query.order('start_date', { ascending: true });
 
-      if (error) throw error;
-      set({ microciclos: data || [] });
+      if (error) {
+        console.error('❌ Store: Erro ao buscar microciclos:', error);
+        throw error;
+      }
+
+      console.log('✅ Store: Microciclos carregados:', microciclos?.length || 0, 'registros');
+      set({ microciclos: microciclos || [] });
     } catch (error) {
-      console.error('Erro ao buscar microciclos:', error);
+      console.error('❌ Store: Erro ao buscar microciclos:', error);
     } finally {
       set({ isLoading: false });
     }
   },
 
-  createMicrociclo: async (data: CreateMicrocicloData) => {
+  createMicrociclo: async (data: CreateMicrocicloData, athleteId?: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      console.log('🔄 Store: Iniciando criação do microciclo:', data);
+      console.log('🔄 Store: Dados recebidos:', JSON.stringify(data, null, 2));
+      
+      console.log('🔄 Store: Verificando autenticação...');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error('❌ Store: Erro de autenticação:', authError);
+        throw new Error(`Erro de autenticação: ${authError.message}`);
+      }
+      
+      if (!user) {
+        console.error('❌ Store: Usuário não autenticado');
+        throw new Error('Usuário não autenticado');
+      }
+      
+      console.log('✅ Store: Usuário autenticado:', user.id);
 
+      // Determinar o user_id correto
+      let targetUserId = user.id;
+      
+      if (athleteId) {
+        // Se athleteId foi fornecido, usar o ID do atleta
+        console.log('🔄 Store: Treinador criando microciclo para atleta:', athleteId);
+        targetUserId = athleteId;
+      } else {
+        console.log('🔄 Store: Atleta criando microciclo próprio:', user.id);
+      }
+
+      console.log('🔄 Store: Usuário autenticado:', user.id);
+      console.log('🔄 Store: Dados para inserção:', { ...data, user_id: targetUserId });
+
+      // Verificar se todos os campos obrigatórios estão presentes
+      const requiredFields = ['mesociclo_id', 'name', 'start_date', 'end_date'];
+      for (const field of requiredFields) {
+        if (!data[field as keyof CreateMicrocicloData]) {
+          console.error(`❌ Store: Campo obrigatório ausente: ${field}`);
+          throw new Error(`Campo obrigatório ausente: ${field}`);
+        }
+      }
+
+      console.log('🔄 Store: Todos os campos obrigatórios presentes, fazendo inserção...');
+      console.log('🔄 Store: Dados para inserção:', JSON.stringify({ ...data, user_id: targetUserId }, null, 2));
+
+      console.log('🔄 Store: Chamando Supabase...');
       const { data: newMicrociclo, error } = await supabase
         .from('microciclos')
-        .insert([{ ...data, user_id: user.id }])
+        .insert([{ ...data, user_id: targetUserId }])
         .select()
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Store: Erro do Supabase:', error);
+        console.error('❌ Store: Código do erro:', error.code);
+        console.error('❌ Store: Mensagem do erro:', error.message);
+        console.error('❌ Store: Detalhes do erro:', error.details);
+        console.error('❌ Store: Hint do erro:', error.hint);
+        console.error('❌ Store: Stack trace:', error.stack);
+        throw error;
+      }
+
+      console.log('✅ Store: Microciclo criado no banco:', newMicrociclo);
 
       // Atualizar lista
       const currentMicrociclos = get().microciclos;
       set({ microciclos: [...currentMicrociclos, newMicrociclo] });
 
+      console.log('✅ Store: Estado atualizado, total de microciclos:', get().microciclos.length);
       return newMicrociclo;
     } catch (error) {
-      console.error('Erro ao criar microciclo:', error);
+      console.error('❌ Store: Erro ao criar microciclo:', error);
+      console.error('❌ Store: Stack trace:', error instanceof Error ? error.stack : 'N/A');
       throw error;
     }
   },
@@ -388,7 +532,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .update(data)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -467,7 +611,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .from('cycle_training_sessions')
         .insert([{ ...data, user_id: user.id }])
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -489,7 +633,7 @@ export const useCyclesStore = create<CyclesState>((set, get) => ({
         .update(data)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 

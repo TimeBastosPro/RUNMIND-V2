@@ -7,6 +7,7 @@ import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Text, Card, TextInput, Button, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PasswordStrengthIndicator } from '../components/ui/PasswordStrengthIndicator';
+import { Logo } from '../components/ui/Logo';
 // Temporariamente desabilitado para resolver erro do React
 // import { NotificationToast } from '../components/NotificationToast';
 // import { useNotificationsStore } from '../stores/notifications';
@@ -393,9 +394,7 @@ function AuthScreen({ onCoachSelected }: { onCoachSelected?: () => void }) {
     <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
       <Card>
         <Card.Content>
-          <Text variant="headlineMedium" style={{ textAlign: 'center', marginBottom: 24 }}>
-            🏃‍♂️ RunMind
-          </Text>
+          <Logo size="large" showText={false} style={{ marginBottom: 24 }} />
           <Text variant="bodyLarge" style={{ textAlign: 'center', marginBottom: 24 }}>
             {isLogin ? 'Entre na sua conta' : (isCoachSignUp ? 'Crie sua conta de Treinador' : 'Crie sua conta de Atleta')}
           </Text>
@@ -937,12 +936,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen 
               name="Auth" 
-              component={(props: any) => (
-                <AuthScreen 
-                  {...props} 
-                  onCoachSelected={() => setShowCoachProfileSetup(true)} 
-                />
-              )} 
+              component={AuthScreen}
             />
             <Stack.Screen 
               name="UserNotRegistered" 

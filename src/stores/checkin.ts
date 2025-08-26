@@ -5,6 +5,7 @@ import { supabase } from '../services/supabase';
 import type { DailyCheckin, TrainingSession, Insight } from '../types/database';
 import { useAuthStore } from './auth';
 import { calculateWorkloadMetrics } from '../utils/sportsCalculations'; // IMPORTANTE
+import { useViewStore } from './view';
 
 // Compat: propriedades que podem existir em esquemas diferentes
 type ExtTrainingSession = TrainingSession & {
@@ -93,7 +94,7 @@ interface CheckinState {
   deleteTrainingSession: (sessionId: number | string) => Promise<boolean>;
   markTrainingAsCompleted: (id: number, completedData: {
     perceived_effort?: number;
-    satisfaction?: number;
+    session_satisfaction?: number;
     notes?: string;
     avg_heart_rate?: number;
     elevation_gain_meters?: number;
@@ -144,7 +145,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const safeUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      let safeUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      
+      // ✅ NOVO: Verificar se está no modo coach
+      const { isCoachView, viewAsAthleteId } = useViewStore.getState();
+      if (isCoachView && viewAsAthleteId) {
+        console.log('🔍 Modo Coach - Buscando check-in do atleta:', viewAsAthleteId);
+        safeUserId = viewAsAthleteId;
+      } else {
+        console.log('🔍 Modo Atleta - Buscando próprio check-in:', safeUserId);
+      }
+      
       if (!safeUserId) { set({ isLoading: false }); return; }
 
       const today = new Date().toISOString().split('T')[0];
@@ -185,7 +196,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      let targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      
+      // ✅ NOVO: Verificar se está no modo coach
+      const { isCoachView, viewAsAthleteId } = useViewStore.getState();
+      if (isCoachView && viewAsAthleteId) {
+        console.log('🔍 Modo Coach - Buscando check-ins do atleta:', viewAsAthleteId);
+        targetUserId = viewAsAthleteId;
+      } else {
+        console.log('🔍 Modo Atleta - Buscando próprios check-ins:', targetUserId);
+      }
+      
       if (!targetUserId) { return; }
       
       const startDate = new Date();
@@ -637,6 +658,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         
       if (error) throw error;
       
+      // ✅ NOVO: Se o treino foi salvo como 'completed', disparar insight
+      if (data.status === 'completed') {
+        console.log('🔍 Treino salvo como completed, disparando insight de assimilação...');
+        try {
+          await get().triggerAssimilationInsight(data);
+          console.log('✅ Insight de assimilação disparado com sucesso');
+        } catch (insightError) {
+          console.error('❌ Erro ao disparar insight de assimilação:', insightError);
+        }
+      }
+      
       set(state => {
         const exists = state.trainingSessions.some(t => t.id === data.id);
         const trainingSessions = exists
@@ -688,7 +720,17 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      let targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
+      
+      // ✅ NOVO: Verificar se está no modo coach
+      const { isCoachView, viewAsAthleteId } = useViewStore.getState();
+      if (isCoachView && viewAsAthleteId) {
+        console.log('🔍 Modo Coach - Buscando treinos do atleta:', viewAsAthleteId);
+        targetUserId = viewAsAthleteId;
+      } else {
+        console.log('🔍 Modo Atleta - Buscando próprios treinos:', targetUserId);
+      }
+      
       if (!targetUserId) { throw new Error('Usuário não autenticado'); }
       
       let _startDate = startDate;
@@ -703,6 +745,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         _endDate = end.toISOString().split('T')[0];
       }
       
+      console.log('🔍 Buscando treinos para usuário:', targetUserId, 'período:', _startDate, 'a', _endDate);
+      
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
@@ -712,6 +756,8 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         .order('training_date', { ascending: true });
         
       if (error) throw error;
+      
+      console.log('✅ Treinos encontrados:', data?.length || 0);
       
       const processedData = (data || []).map(session => ({
         ...session,
@@ -873,97 +919,82 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
   saveDailyCheckin: async (checkinData) => {
     console.log('🔍 saveDailyCheckin iniciado com dados:', checkinData);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Usuário não autenticado');
     
-    const safeSleep = Number(checkinData.sleep_quality ?? 4) || 4;
-    const safeSoreness = Number(checkinData.soreness ?? 4) || 4;
-    const safeMotivation = Number(checkinData.motivation ?? 3) || 3;
-    const safeConfidence = Number(checkinData.confidence ?? 3) || 3;
-    const safeFocus = Number(checkinData.focus ?? 3) || 3;
-    
-    const insertData = {
-      user_id: user.id,
-      sleep_quality: safeSleep,
-      sleep_quality_score: safeSleep,
-      soreness: safeSoreness,
-      motivation: safeMotivation,
-      emocional: safeMotivation,
-      confidence: safeConfidence,
-      focus: safeFocus,
-      mood_score: Math.min(10, Math.max(1, safeMotivation * 2)),
-      energy_score: Math.min(10, Math.max(1, safeMotivation * 2)),
-      confidence_score: Math.min(10, Math.max(1, safeConfidence * 2)),
-      focus_score: Math.min(10, Math.max(1, safeFocus * 2)),
-      soreness_score: safeSoreness,
-      notes: '',
-      date: new Date().toISOString().split('T')[0],
-    };
-    
-    console.log('🔍 Salvando check-in no banco...');
-    const { data, error } = await supabase
-      .from('daily_checkins')
-      .insert([insertData])
-      .select()
-      .single();
-      
-    if (error) {
-      const message = [error.message, error.details, error.hint].filter(Boolean).join(' | ');
-      throw new Error(message || 'Falha ao salvar check-in');
-    }
-    
-    console.log('✅ Check-in salvo com sucesso:', data.id);
-    
-    // ✅ CORRIGIDO: DISPARAR GATILHO AUTOMÁTICO DE INSIGHT COM MAIS LOGS
     try {
-      console.log('🔍 ===== INÍCIO DO TRIGGER DE INSIGHT =====');
-      console.log('🔍 Disparando trigger automático de insight...');
-      console.log('🔍 Dados do check-in para o trigger:', data);
+      console.log('🔍 Obtendo usuário autenticado...');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      console.log('✅ Usuário autenticado:', user.id);
       
-      // ✅ NOVO: Aguardar um pouco antes de disparar o trigger
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const safeSleep = Number(checkinData.sleep_quality ?? 4) || 4;
+      const safeSoreness = Number(checkinData.soreness ?? 4) || 4;
+      const safeMotivation = Number(checkinData.motivation ?? 3) || 3;
+      const safeConfidence = Number(checkinData.confidence ?? 3) || 3;
+      const safeFocus = Number(checkinData.focus ?? 3) || 3;
       
-      await get().triggerDailyInsight(data);
-      console.log('✅ Trigger de insight disparado com sucesso');
+      const insertData = {
+        user_id: user.id,
+        sleep_quality: safeSleep,
+        sleep_quality_score: safeSleep,
+        soreness: safeSoreness,
+        motivation: safeMotivation,
+        emocional: safeMotivation,
+        confidence: safeConfidence,
+        focus: safeFocus,
+        mood_score: Math.min(10, Math.max(1, safeMotivation * 2)),
+        energy_score: Math.min(10, Math.max(1, safeMotivation * 2)),
+        confidence_score: Math.min(10, Math.max(1, safeConfidence * 2)),
+        focus_score: Math.min(10, Math.max(1, safeFocus * 2)),
+        soreness_score: safeSoreness,
+        notes: '',
+        date: new Date().toISOString().split('T')[0],
+      };
       
-      // ✅ NOVO: Aguardar mais tempo e verificar se o insight foi criado
-      setTimeout(async () => {
-        try {
-          console.log('🔍 Verificando se o insight foi criado...');
-          await get().loadSavedInsights();
-          console.log('✅ Insights recarregados após verificação');
-          
-          // ✅ NOVO: Verificação adicional após mais tempo
-          setTimeout(async () => {
-            try {
-              console.log('🔍 Verificação final de insights...');
-              await get().loadSavedInsights();
-              console.log('✅ Verificação final concluída');
-            } catch (finalError) {
-              console.error('⚠️ Erro na verificação final:', finalError);
-            }
-          }, 5000);
-        } catch (verifyError) {
-          console.error('⚠️ Erro ao verificar insights:', verifyError);
-        }
-      }, 5000); // Aumentado para 5 segundos
+      console.log('🔍 Dados formatados para inserção:', insertData);
+      console.log('🔍 Salvando check-in no banco...');
       
-      console.log('🔍 ===== FIM DO TRIGGER DE INSIGHT =====');
-    } catch (insightError) {
-      console.error('⚠️ Erro ao disparar insight automático:', insightError);
-      // Não falhar o check-in por causa do insight
+      const { data, error } = await supabase
+        .from('daily_checkins')
+        .insert([insertData])
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('❌ Erro do Supabase ao salvar check-in:', error);
+        console.error('❌ Código do erro:', error.code);
+        console.error('❌ Mensagem do erro:', error.message);
+        console.error('❌ Detalhes do erro:', error.details);
+        console.error('❌ Hint do erro:', error.hint);
+        const message = [error.message, error.details, error.hint].filter(Boolean).join(' | ');
+        throw new Error(message || 'Falha ao salvar check-in');
+      }
+      
+      console.log('✅ Check-in salvo com sucesso:', data.id);
+      console.log('✅ Dados salvos:', data);
+      
+      // ✅ NOVO: Tentar gerar insight automaticamente
+      console.log('🔍 Tentando gerar insight automaticamente...');
+      try {
+        await get().triggerDailyInsight(data);
+        console.log('✅ Insight gerado automaticamente');
+      } catch (insightError) {
+        console.warn('⚠️ Erro ao gerar insight:', insightError);
+      }
+      
+      // ✅ NOVO: ATUALIZAR ESTADO LOCAL
+      try {
+        await get().loadTodayCheckin();
+        await get().loadRecentCheckins();
+        console.log('✅ Estado local atualizado');
+      } catch (stateError) {
+        console.error('⚠️ Erro ao atualizar estado local:', stateError);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('❌ Erro geral em saveDailyCheckin:', error);
+      throw error;
     }
-    
-    // ✅ NOVO: ATUALIZAR ESTADO LOCAL
-    try {
-      await get().loadTodayCheckin();
-      await get().loadRecentCheckins();
-      console.log('✅ Estado local atualizado');
-    } catch (stateError) {
-      console.error('⚠️ Erro ao atualizar estado local:', stateError);
-    }
-    
-    return data;
   },
 
   updateCheckinWithInsight: async (checkinId: string, insightText: string) => {
@@ -1019,55 +1050,65 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   loadSavedInsights: async () => {
     console.log('🔍 loadSavedInsights iniciado');
     set({ isLoading: true, error: null });
+    
     try {
-      // ✅ NOVO: Verificar se estamos no modo coach view
-      const { isCoachView, viewAsAthleteId } = require('../stores/view').useViewStore.getState();
+      // ✅ NOVO: Timeout de segurança para evitar travamento
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout: loadSavedInsights demorou mais de 10 segundos')), 10000)
+      );
       
-      let targetUserId: string | null = null;
-      
-      if (isCoachView && viewAsAthleteId) {
-        // ✅ NOVO: Modo coach - usar ID do atleta sendo visualizado
-        targetUserId = viewAsAthleteId;
-        console.log('🔍 Modo Coach - Visualizando atleta:', targetUserId);
-      } else {
-        // ✅ NOVO: Modo atleta - usar ID do usuário logado
-        const { data: { user } } = await supabase.auth.getUser();
-        targetUserId = (user && (user as any).id) ? (user as any).id : null;
-        console.log('🔍 Modo Atleta - Usuário logado:', targetUserId);
-      }
-      
-      console.log('🔍 User ID final:', targetUserId);
-      
-      if (!targetUserId) { 
-        console.log('⚠️ Usuário não encontrado');
-        set({ savedInsights: [], isLoading: false, error: null });
-        return; 
-      }
-      
-      console.log('🔍 Buscando insights para usuário:', targetUserId);
-      const { data, error } = await supabase
-        .from('insights')
-        .select('*')
-        .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const loadPromise = (async () => {
+        // ✅ NOVO: Verificar se estamos no modo coach view
+        const { isCoachView, viewAsAthleteId } = require('../stores/view').useViewStore.getState();
         
-      if (error) {
-        console.error('❌ Erro ao buscar insights:', error);
-        throw error;
-      }
+        let targetUserId: string | null = null;
+        
+        if (isCoachView && viewAsAthleteId) {
+          // ✅ NOVO: Modo coach - usar ID do atleta sendo visualizado
+          targetUserId = viewAsAthleteId;
+          console.log('🔍 Modo Coach - Visualizando atleta:', targetUserId);
+        } else {
+          // ✅ NOVO: Modo atleta - usar ID do usuário logado
+          const { data: { user } } = await supabase.auth.getUser();
+          targetUserId = (user && (user as any).id) ? (user as any).id : null;
+          console.log('🔍 Modo Atleta - Usuário logado:', targetUserId);
+        }
+        
+        console.log('🔍 User ID final:', targetUserId);
+        
+        if (!targetUserId) { 
+          console.log('⚠️ Usuário não encontrado');
+          set({ savedInsights: [], isLoading: false, error: null });
+          return; 
+        }
+        
+        console.log('🔍 Buscando insights para usuário:', targetUserId);
+        const { data, error } = await supabase
+          .from('insights')
+          .select('*')
+          .eq('user_id', targetUserId)
+          .order('created_at', { ascending: false })
+          .limit(50);
+          
+        if (error) {
+          console.error('❌ Erro ao buscar insights:', error);
+          throw error;
+        }
+        
+        console.log('✅ Insights encontrados:', data?.length || 0);
+        if (data && data.length > 0) {
+          console.log('🔍 Primeiro insight:', {
+            id: data[0].id,
+            text: data[0].insight_text?.substring(0, 50) + '...',
+            created_at: data[0].created_at,
+            type: data[0].insight_type
+          });
+        }
+        
+        set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
+      })();
       
-      console.log('✅ Insights encontrados:', data?.length || 0);
-      if (data && data.length > 0) {
-        console.log('🔍 Primeiro insight:', {
-          id: data[0].id,
-          text: data[0].insight_text?.substring(0, 50) + '...',
-          created_at: data[0].created_at,
-          type: data[0].insight_type
-        });
-      }
-      
-      set({ savedInsights: (data as Insight[]) || [], isLoading: false, error: null });
+      await Promise.race([loadPromise, timeoutPromise]);
     } catch (error: unknown) {
       console.error('❌ Error loading saved insights:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar insights salvos.';

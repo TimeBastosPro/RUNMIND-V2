@@ -1,0 +1,28 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="60" cy="60" r="55" fill="#2196F3" opacity="0.1"/>
+  
+  <!-- Runner silhouette -->
+  <path d="M40 80 L45 70 L50 75 L55 65 L60 70 L65 60 L70 65 L75 55 L80 60 L85 50 L90 55" 
+        stroke="#2196F3" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Head -->
+  <circle cx="40" cy="80" r="8" fill="#2196F3"/>
+  
+  <!-- Body -->
+  <path d="M40 88 L50 95 L60 90 L70 95 L80 90" 
+        stroke="#2196F3" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Arms -->
+  <path d="M45 85 L50 80 L55 85" stroke="#2196F3" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M65 85 L70 80 L75 85" stroke="#2196F3" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Legs -->
+  <path d="M50 95 L45 105" stroke="#2196F3" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M70 95 L75 105" stroke="#2196F3" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Speed lines -->
+  <path d="M85 55 L95 50" stroke="#2196F3" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <path d="M85 60 L95 55" stroke="#2196F3" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <path d="M85 65 L95 60" stroke="#2196F3" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+</svg>

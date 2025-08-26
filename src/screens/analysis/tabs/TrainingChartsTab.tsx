@@ -45,9 +45,17 @@ export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
   
-  // Datas fixas para teste - semana 28/07 a 03/08
-  const [customStartDate, setCustomStartDate] = useState<Date>(new Date('2025-07-28'));
-  const [customEndDate, setCustomEndDate] = useState<Date>(new Date('2025-08-03'));
+  // ✅ CORRIGIDO: Usar semana atual em vez de datas fixas
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira da semana atual
+  
+  const defaultStartDate = new Date(currentWeekStart);
+  const defaultEndDate = new Date(currentWeekStart);
+  defaultEndDate.setDate(currentWeekStart.getDate() + 6); // Domingo da semana atual
+  
+  const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
+  const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
   
   const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
 
@@ -179,9 +187,30 @@ export default function TrainingChartsTab() {
   const getSummary = () => {
     const filteredSessions = getFilteredSessions();
     
+    // ✅ CORRIGIDO: Separar corretamente treinos realizados e planejados
     const completedSessions = filteredSessions.filter(s => s.status === 'completed');
     const plannedSessions = filteredSessions.filter(s => s.status === 'planned');
     
+    // ✅ DEBUG: Log dos dados para verificação
+    console.log('DEBUG - TrainingChartsTab - Resumo:', {
+      totalFiltered: filteredSessions.length,
+      completed: completedSessions.length,
+      planned: plannedSessions.length,
+      completedSessions: completedSessions.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance: s.distance_km
+      })),
+      plannedSessions: plannedSessions.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance: s.distance_km
+      }))
+    });
+    
+    // ✅ CORRIGIDO: Calcular apenas com treinos realizados
     const totalDistance = completedSessions.reduce((sum, session) => sum + (session.distance_km || 0), 0);
     const totalDuration = completedSessions.reduce((sum, session) => {
       const hours = parseInt(session.duracao_horas || '0') || 0;
@@ -192,12 +221,13 @@ export default function TrainingChartsTab() {
     const avgIntensity = completedSessions.length > 0 ? 
       completedSessions.reduce((sum, s) => sum + (s.perceived_effort || 0), 0) / completedSessions.length : 0;
     
+    // ✅ CORRIGIDO: Taxa de conclusão baseada apenas em treinos planejados vs realizados
     const completionRate = plannedSessions.length > 0 ? 
       (completedSessions.length / plannedSessions.length) * 100 : 0;
     
     return {
-      totalSessions: completedSessions.length,
-      totalPlanned: plannedSessions.length,
+      totalSessions: completedSessions.length, // ✅ CORRIGIDO: Apenas treinos realizados
+      totalPlanned: plannedSessions.length,   // ✅ CORRIGIDO: Apenas treinos planejados
       totalDistance: totalDistance.toFixed(1),
       totalDuration: totalDuration.toFixed(1),
       avgIntensity: avgIntensity.toFixed(1),

@@ -332,7 +332,13 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error('Selecione uma modalidade para solicitar vínculo');
       }
 
-      // ✅ MELHORADO: Verificar relacionamentos existentes de forma mais robusta
+      console.log('🔍 Iniciando solicitação de vínculo:', { 
+        athleteId: user.id, 
+        coachId, 
+        modality: normalizedModality 
+      });
+
+      // ✅ CORRIGIDO: Verificação mais robusta para prevenir duplicatas
       
       // 1. Verificar se já possui um relacionamento ATIVO na mesma modalidade (qualquer treinador)
       const { data: activeRel, error: activeErr } = await supabase
@@ -347,7 +353,30 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         throw new Error(`Você já possui um treinador ativo para ${normalizedModality}. Desvincule antes de solicitar outro.`);
       }
 
-      // 2. Verificar se existe um relacionamento INATIVO com este treinador na mesma modalidade
+      // 2. ✅ NOVO: Verificar se já existe um relacionamento PENDENTE com QUALQUER treinador na mesma modalidade
+      const { data: anyPendingRel, error: anyPendingErr } = await supabase
+        .from('athlete_coach_relationships')
+        .select('id, coach_id, status, modality, created_at')
+        .eq('athlete_id', user.id)
+        .eq('status', 'pending')
+        .eq('modality', normalizedModality)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (anyPendingErr) throw anyPendingErr;
+      
+      if (anyPendingRel && anyPendingRel.length > 0) {
+        const existingPending = anyPendingRel[0];
+        console.log('⚠️ Já existe solicitação pendente para esta modalidade:', existingPending);
+        
+        // Se a solicitação pendente é com o mesmo treinador, não criar duplicata
+        if (existingPending.coach_id === coachId) {
+          throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com este treinador`);
+        } else {
+          throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com outro treinador. Aguarde a resposta ou cancele a solicitação anterior.`);
+        }
+      }
+
+      // 3. Verificar se existe um relacionamento INATIVO com este treinador na mesma modalidade
       const { data: inactiveRel, error: inactiveErr } = await supabase
         .from('athlete_coach_relationships')
         .select('id, coach_id, status, modality')
@@ -379,7 +408,7 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         return reactivated[0];
       }
 
-      // 3. Verificar se existe um relacionamento INATIVO com este treinador em QUALQUER modalidade
+      // 4. Verificar se existe um relacionamento INATIVO com este treinador em QUALQUER modalidade
       // Se existir, excluí-lo para evitar conflitos de constraint
       const { data: anyInactiveRel, error: anyInactiveErr } = await supabase
         .from('athlete_coach_relationships')
@@ -404,46 +433,35 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         console.log('🔍 Relacionamentos inativos excluídos:', inactiveIds);
       }
 
-      // 4. Verificar se já existe um relacionamento PENDENTE com este treinador na mesma modalidade
-      const { data: existingPendingRelationship, error: checkError } = await supabase
+      // 5. ✅ MELHORADO: Verificação final para garantir que não há duplicatas
+      const { data: finalCheck, error: finalCheckError } = await supabase
         .from('athlete_coach_relationships')
-        .select('*')
+        .select('id, status')
         .eq('athlete_id', user.id)
         .eq('coach_id', coachId)
         .eq('modality', normalizedModality)
-        .eq('status', 'pending')
-        .maybeSingle();
+        .in('status', ['pending', 'active'])
+        .limit(1);
 
-      if (checkError) {
-        console.error('❌ Erro ao verificar relacionamento existente:', checkError);
-        throw checkError;
+      if (finalCheckError) {
+        console.error('❌ Erro na verificação final:', finalCheckError);
+        throw finalCheckError;
       }
 
-      if (existingPendingRelationship) {
-        console.log('⚠️ Relacionamento pendente já existe:', existingPendingRelationship);
-        throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com este treinador`);
+      if (finalCheck && finalCheck.length > 0) {
+        const existing = finalCheck[0];
+        console.log('⚠️ Relacionamento já existe:', existing);
+        
+        if (existing.status === 'pending') {
+          throw new Error(`Você já possui uma solicitação pendente para ${normalizedModality} com este treinador`);
+        } else if (existing.status === 'active') {
+          throw new Error(`Você já possui um vínculo ativo para ${normalizedModality} com este treinador`);
+        }
       }
 
-      // 5. Verificar se já existe um relacionamento ATIVO com este treinador na mesma modalidade
-      const { data: existingActiveRelationship, error: activeCheckError } = await supabase
-        .from('athlete_coach_relationships')
-        .select('*')
-        .eq('athlete_id', user.id)
-        .eq('coach_id', coachId)
-        .eq('modality', normalizedModality)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (activeCheckError) {
-        console.error('❌ Erro ao verificar relacionamento ativo existente:', activeCheckError);
-        throw activeCheckError;
-      }
-
-      if (existingActiveRelationship) {
-        console.log('⚠️ Relacionamento ativo já existe:', existingActiveRelationship);
-        throw new Error(`Você já possui um vínculo ativo para ${normalizedModality} com este treinador`);
-      }
-
+      // 6. ✅ NOVO: Verificação de concorrência antes da inserção
+      console.log('🔍 Criando nova solicitação de vínculo...');
+      
       const { data, error } = await supabase
         .from('athlete_coach_relationships')
         .insert([{
@@ -456,12 +474,24 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         }])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao criar solicitação:', error);
+        
+        // ✅ NOVO: Verificar se o erro é de duplicata
+        if (error.code === '23505' || error.message.includes('duplicate')) {
+          throw new Error(`Solicitação duplicada detectada. Aguarde um momento e tente novamente.`);
+        }
+        
+        throw error;
+      }
+
+      console.log('✅ Solicitação de vínculo criada com sucesso:', data?.[0]?.id);
 
       await get().loadAthleteRelationships();
       set({ isLoading: false });
       return (data as any)?.[0] as any;
     } catch (error: any) {
+      console.error('❌ Erro na solicitação de vínculo:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }

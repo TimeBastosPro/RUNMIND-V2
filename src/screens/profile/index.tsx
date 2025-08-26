@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, ScrollView, Alert, Platform } from 'react-native';
 import { Card, Text, Button, SegmentedButtons, TextInput, RadioButton, Checkbox, List } from 'react-native-paper';
 import Slider from '@react-native-community/slider';
 import { useAuthStore } from '../../stores/auth';
 import { useNavigation } from '@react-navigation/native';
+
+const DAYS_OF_WEEK = [
+  'Segunda-feira',
+  'Terça-feira', 
+  'Quarta-feira',
+  'Quinta-feira',
+  'Sexta-feira',
+  'Sábado',
+  'Domingo'
+];
 
 function SliderUniversal(props: any) {
   if (Platform.OS === 'web') {
@@ -53,6 +63,19 @@ export default function ProfileScreen() {
   const [contextType, setContextType] = useState<'solo' | 'coached' | 'hybrid'>(profile?.context_type || 'solo');
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // ✅ CORREÇÃO: Função para converter boolean para string
+  const convertBooleanToString = (value: boolean | undefined | null): string | null => {
+    if (value === true) return 'sim';
+    if (value === false) return 'nao';
+    return null;
+  };
+  
+  // ✅ CORREÇÃO: Função para converter string para boolean (para validação)
+  const convertStringToBoolean = (value: string | null): boolean => {
+    return value === 'sim';
+  };
+  
   const [parqAnswers, setParqAnswers] = useState<{
     q1: string | null;
     q2: string | null;
@@ -62,14 +85,15 @@ export default function ProfileScreen() {
     q6: string | null;
     q7: string | null;
   }>({
-    q1: typeof profile?.parq_answers?.q1 === 'boolean' ? (profile.parq_answers.q1 ? 'sim' : 'nao') : null,
-    q2: typeof profile?.parq_answers?.q2 === 'boolean' ? (profile.parq_answers.q2 ? 'sim' : 'nao') : null,
-    q3: typeof profile?.parq_answers?.q3 === 'boolean' ? (profile.parq_answers.q3 ? 'sim' : 'nao') : null,
-    q4: typeof profile?.parq_answers?.q4 === 'boolean' ? (profile.parq_answers.q4 ? 'sim' : 'nao') : null,
-    q5: typeof profile?.parq_answers?.q5 === 'boolean' ? (profile.parq_answers.q5 ? 'sim' : 'nao') : null,
-    q6: typeof profile?.parq_answers?.q6 === 'boolean' ? (profile.parq_answers.q6 ? 'sim' : 'nao') : null,
-    q7: typeof profile?.parq_answers?.q7 === 'boolean' ? (profile.parq_answers.q7 ? 'sim' : 'nao') : null,
+    q1: convertBooleanToString(profile?.parq_answers?.q1),
+    q2: convertBooleanToString(profile?.parq_answers?.q2),
+    q3: convertBooleanToString(profile?.parq_answers?.q3),
+    q4: convertBooleanToString(profile?.parq_answers?.q4),
+    q5: convertBooleanToString(profile?.parq_answers?.q5),
+    q6: convertBooleanToString(profile?.parq_answers?.q6),
+    q7: convertBooleanToString(profile?.parq_answers?.q7),
   });
+  
   const [preferences, setPreferences] = useState({
     trainingDays: profile?.training_days || [],
     trainingPeriod: profile?.preferred_training_period || '',
@@ -83,9 +107,59 @@ export default function ProfileScreen() {
   });
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 
+  // ✅ CORREÇÃO: Atualizar dados quando o perfil mudar
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name || '');
+      setDateOfBirth(profile.date_of_birth || '');
+      setWeightKg(profile.weight_kg ? String(profile.weight_kg) : '');
+      setHeightCm(profile.height_cm ? String(profile.height_cm) : '');
+      setExperienceLevel(profile.experience_level || 'beginner');
+      setMainGoal(profile.main_goal || 'health');
+      setContextType(profile.context_type || 'solo');
+      
+      // ✅ CORREÇÃO: Atualizar respostas PAR-Q
+      const newParqAnswers = {
+        q1: convertBooleanToString(profile.parq_answers?.q1),
+        q2: convertBooleanToString(profile.parq_answers?.q2),
+        q3: convertBooleanToString(profile.parq_answers?.q3),
+        q4: convertBooleanToString(profile.parq_answers?.q4),
+        q5: convertBooleanToString(profile.parq_answers?.q5),
+        q6: convertBooleanToString(profile.parq_answers?.q6),
+        q7: convertBooleanToString(profile.parq_answers?.q7),
+      };
+      
+      setParqAnswers(newParqAnswers);
+      
+      setPreferences({
+        trainingDays: profile.training_days || [],
+        trainingPeriod: profile.preferred_training_period || '',
+        terrainType: profile.terrain_preference || '',
+        workIntensity: profile.work_stress_level || 3,
+        sleepQuality: profile.sleep_consistency || '',
+        wakeFeeling: profile.wakeup_feeling || '',
+        hydration: profile.hydration_habit || '',
+        recoveryTechniques: profile.recovery_habit || '',
+        stressManagement: profile.stress_management || [],
+      });
+    }
+  }, [profile]);
+
   // 5. Função de salvar (unificada)
   const handleUpdateProfile = async () => {
     setIsSaving(true);
+    
+    // ✅ CORREÇÃO: Converter respostas PAR-Q de string para boolean
+    const parqAnswersBoolean = {
+      q1: parqAnswers.q1 === 'sim',
+      q2: parqAnswers.q2 === 'sim',
+      q3: parqAnswers.q3 === 'sim',
+      q4: parqAnswers.q4 === 'sim',
+      q5: parqAnswers.q5 === 'sim',
+      q6: parqAnswers.q6 === 'sim',
+      q7: parqAnswers.q7 === 'sim',
+    };
+    
     const updates: any = {
       full_name: fullName,
       date_of_birth: dateOfBirth,
@@ -104,14 +178,19 @@ export default function ProfileScreen() {
       hydration_habit: preferences.hydration,
       recovery_habit: preferences.recoveryTechniques,
       stress_management: preferences.stressManagement,
-      // Anamnese (PAR-Q+)
-      parq_answers: parqAnswers,
+      // ✅ CORREÇÃO: Anamnese (PAR-Q+) com valores booleanos
+      parq_answers: parqAnswersBoolean,
     };
+    
+    console.log('🔍 Salvando perfil com dados:', updates);
+    console.log('🔍 Respostas PAR-Q convertidas:', parqAnswersBoolean);
+    
     try {
       await updateProfile(updates);
       Alert.alert('Perfil atualizado com sucesso!');
       setIsEditing(false);
     } catch (error: any) {
+      console.error('❌ Erro ao atualizar perfil:', error);
       Alert.alert('Erro ao atualizar perfil', error.message || String(error));
     } finally {
       setIsSaving(false);
@@ -224,6 +303,28 @@ export default function ProfileScreen() {
           </Card>
         );
       case 'anamnese':
+        // ✅ CORREÇÃO: Mostrar questionário apenas para atletas
+        if (profile?.user_type === 'coach') {
+          return (
+            <ScrollView style={{ flex: 1 }}>
+              <Card style={{ marginBottom: 24 }}>
+                <Card.Title title="Anamnese - Treinador" />
+                <Card.Content>
+                  <Text style={{ marginBottom: 16, textAlign: 'center', fontStyle: 'italic' }}>
+                    👨‍💼 Como treinador, você não precisa preencher o questionário de prontidão para atividade física (PAR-Q+).
+                  </Text>
+                  <Text style={{ marginBottom: 16, textAlign: 'center' }}>
+                    Esta seção é destinada aos atletas para avaliação de segurança antes de iniciar atividades físicas.
+                  </Text>
+                  <Text style={{ textAlign: 'center', color: '#666' }}>
+                    Em uma versão futura, poderemos adicionar questionários específicos para treinadores.
+                  </Text>
+                </Card.Content>
+              </Card>
+            </ScrollView>
+          );
+        }
+        
         return (
           <ScrollView style={{ flex: 1 }}>
             <Card style={{ marginBottom: 24 }}>
@@ -232,6 +333,7 @@ export default function ProfileScreen() {
                 <Text style={{ marginBottom: 16 }}>
                   Para sua segurança, por favor, responda 'Sim' ou 'Não' às seguintes perguntas.
                 </Text>
+                
                 {/* Pergunta 1 */}
                 <Text style={{ marginBottom: 4 }}>
                   1. Algum médico já disse que você possui um problema de coração e que só deveria realizar atividade física sob supervisão médica?
@@ -245,6 +347,7 @@ export default function ProfileScreen() {
                     <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
+                
                 {/* Pergunta 2 */}
                 <Text style={{ marginBottom: 4 }}>
                   2. Você sente dor no peito ao realizar atividade física?
@@ -258,6 +361,7 @@ export default function ProfileScreen() {
                     <RadioButton.Item label="Não" value="nao" />
                   </View>
                 </RadioButton.Group>
+                
                 {/* Pergunta 3 */}
                 <Text style={{ marginBottom: 4 }}>
                   3. No último mês, você sentiu dor no peito ao realizar atividade física?
@@ -328,6 +432,28 @@ export default function ProfileScreen() {
           </ScrollView>
         );
       case 'preferencias':
+        // ✅ CORREÇÃO: Mostrar preferências apenas para atletas
+        if (profile?.user_type === 'coach') {
+          return (
+            <ScrollView style={{ flex: 1 }}>
+              <Card style={{ marginBottom: 24 }}>
+                <Card.Title title="Preferências - Treinador" />
+                <Card.Content>
+                  <Text style={{ marginBottom: 16, textAlign: 'center', fontStyle: 'italic' }}>
+                    👨‍💼 Como treinador, as preferências de treino são configuradas de forma diferente.
+                  </Text>
+                  <Text style={{ marginBottom: 16, textAlign: 'center' }}>
+                    Esta seção é destinada aos atletas para personalizar suas preferências de treinamento.
+                  </Text>
+                  <Text style={{ textAlign: 'center', color: '#666' }}>
+                    As configurações de treinador são gerenciadas em uma seção específica do sistema.
+                  </Text>
+                </Card.Content>
+              </Card>
+            </ScrollView>
+          );
+        }
+        
         return (
           <ScrollView style={{ flex: 1 }}>
             {/* Card 1: Sua Corrida */}
@@ -335,7 +461,7 @@ export default function ProfileScreen() {
               <Card.Title title="Sua Corrida" />
               <Card.Content>
                 <Text style={{ marginBottom: 8 }}>Quais dias da semana você costuma treinar?</Text>
-                {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(day => (
+                {DAYS_OF_WEEK.map(day => (
                   <Checkbox.Item
                     key={day}
                     label={day}
@@ -515,38 +641,82 @@ export default function ProfileScreen() {
         mode="outlined" 
         onPress={async () => {
           console.log('🔍 Botão "Sair da conta" clicado');
+          
+          // ✅ CORRIGIDO: Verificar se já está fazendo logout
+          const { isLoading } = useAuthStore.getState();
+          if (isLoading) {
+            console.log('⚠️ Já está fazendo logout, ignorando clique');
+            return;
+          }
+          
           try {
-            // Limpar view de coach se necessário
+            console.log('🔍 Iniciando processo de logout...');
+            
+            // ✅ CORRIGIDO: Limpar view de coach de forma síncrona
             try {
               const { useViewStore } = require('../../stores/view');
               useViewStore.getState().exitCoachView();
-              console.log('✅ View de coach limpa');
             } catch (e) {
               console.log('⚠️ Erro ao limpar view de coach:', e);
             }
             
-            // Fazer logout
-            console.log('🔍 Iniciando processo de logout...');
+            // ✅ CORRIGIDO: Fazer logout de forma mais eficiente
             await signOut();
             console.log('✅ Logout realizado com sucesso');
             
-            // Navegar para tela de autenticação
-            console.log('🔍 Navegando para tela de autenticação...');
-            (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
-            console.log('✅ Navegação concluída');
+            // ✅ CORRIGIDO: Navegar imediatamente sem delay
+            try {
+              (navigation as any).reset({ 
+                index: 0, 
+                routes: [{ name: 'Auth' }] 
+              });
+            } catch (navError) {
+              console.error('❌ Erro na navegação:', navError);
+              // Fallback simples
+              try {
+                (navigation as any).navigate('Auth');
+              } catch (fallbackError) {
+                console.error('❌ Erro no fallback de navegação:', fallbackError);
+              }
+            }
             
           } catch (error) {
             console.error('❌ Erro no processo de logout:', error);
-            // Mesmo com erro, tentar navegar para auth
+            
+            // ✅ CORRIGIDO: Limpeza de emergência mais eficiente
             try {
-              (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (navError) {
-              console.error('❌ Erro na navegação:', navError);
+              useAuthStore.setState({
+                user: null,
+                profile: null,
+                isAuthenticated: false,
+                isLoading: false,
+                isInitializing: false,
+                fitnessTests: [],
+                races: [],
+              });
+              
+              // Navegar imediatamente
+              try {
+                (navigation as any).reset({ 
+                  index: 0, 
+                  routes: [{ name: 'Auth' }] 
+                });
+              } catch (navError) {
+                try {
+                  (navigation as any).navigate('Auth');
+                } catch (finalError) {
+                  console.error('❌ Erro final na navegação:', finalError);
+                }
+              }
+              
+            } catch (cleanupError) {
+              console.error('❌ Erro na limpeza de emergência:', cleanupError);
             }
           }
         }} 
         style={{ marginTop: 16 }}
         disabled={false}
+        loading={false}
       >
         Sair da conta
       </Button>

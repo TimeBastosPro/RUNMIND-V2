@@ -215,7 +215,8 @@ export default function TrainingScreen() {
       saveTrainingSession,
       markTrainingAsCompleted,
       deleteTrainingSession,
-      submitWeeklyReflection
+      submitWeeklyReflection,
+      triggerAssimilationInsight
     } = useCheckinStore(s => s);
     const navigation = useNavigation();
     const { isCoachView, exitCoachView, viewAsAthleteId } = useViewStore();
@@ -296,10 +297,10 @@ export default function TrainingScreen() {
     // Carregar ciclos de treinamento
     useEffect(() => {
         if (userId) {
-            fetchMacrociclos();
-            fetchMicrociclos();
+            fetchMacrociclos(isCoachView && viewAsAthleteId ? viewAsAthleteId : undefined);
+            fetchMicrociclos(undefined, isCoachView && viewAsAthleteId ? viewAsAthleteId : undefined);
         }
-    }, [userId, fetchMacrociclos, fetchMicrociclos]);
+    }, [userId, fetchMacrociclos, fetchMicrociclos, isCoachView, viewAsAthleteId]);
 
     // Carregar nome do atleta para cabeçalho no modo treinador
     useEffect(() => {
@@ -466,6 +467,7 @@ export default function TrainingScreen() {
     const [isSavingPlan, setIsSavingPlan] = useState(false);
 
     const handleSavePlan = async () => {
+        console.log('🔍 handleSavePlan iniciado');
         if (!selectedDay) {
             Alert.alert("Erro", "Selecione um dia para planejar o treino.");
             return;
@@ -511,41 +513,80 @@ export default function TrainingScreen() {
                     'planningState.duracao_minutos type': typeof planningState.duracao_minutos
                 }
             });
+            console.log('🔍 Chamando saveTrainingSession...');
             await saveTrainingSession(trainingData);
             console.log('✅ Treino planejado salvo com sucesso no banco');
+            console.log('🔍 Fechando modal...');
             // Fecha o modal imediatamente para feedback visual
             setModalPlanVisible(false);
+            console.log('✅ Modal fechado');
             // Recarrega em background para atualizar cards
-            fetchTrainingSessions();
+            console.log('🔍 Recarregando dados...');
+            await fetchTrainingSessions();
+            console.log('✅ Dados recarregados');
             Alert.alert("✅ Sucesso", "Treino planejado salvo com sucesso!");
         } catch (err) {
-            console.error('Erro ao salvar treino:', err);
+            console.error('❌ Erro ao salvar treino:', err);
             Alert.alert("❌ Erro", "Não foi possível salvar o treino. Tente novamente.");
         } finally {
+            console.log('🔍 Finalizando handleSavePlan...');
             setIsSavingPlan(false);
+            console.log('✅ handleSavePlan finalizado');
         }
     };
 
     const handleSaveDone = async (completedData: Partial<TrainingSession>) => {
         if (!editingSession) return;
         try {
-            const treinoParaSalvar: Partial<TrainingSession> = {
-                ...completedData,
-                training_date: editingSession.training_date,
-                status: 'completed',
-                title: completedData.title || 'Treino Realizado',
-                training_type: completedData.training_type || 'manual',
-            };
+            // ✅ CORRIGIDO: Se o treino já existe (tem ID), usar markTrainingAsCompleted
+            if (editingSession.id) {
+                console.log('🔍 Treino existente encontrado, marcando como realizado:', editingSession.id);
+                // ✅ CORRIGIDO: Converter tipos para compatibilidade
+                const markData = {
+                    perceived_effort: completedData.perceived_effort || undefined,
+                    session_satisfaction: completedData.session_satisfaction || undefined,
+                    notes: completedData.observacoes || undefined,
+                    avg_heart_rate: completedData.avg_heart_rate || undefined,
+                    elevation_gain_meters: completedData.elevation_gain_meters || undefined,
+                    distance_km: completedData.distance_km || undefined,
+                    duration_minutes: completedData.duration_minutes || undefined,
+                };
+                await markTrainingAsCompleted(editingSession.id, markData);
+                console.log('✅ Treino marcado como realizado com sucesso');
+                
+                // ✅ NOVO: Disparar insight após marcar como realizado
+                console.log('🔍 Disparando insight de assimilação...');
+                try {
+                    // Buscar o treino atualizado para passar para o insight
+                    const updatedSession = { ...editingSession, ...markData, status: 'completed' as const };
+                    await triggerAssimilationInsight(updatedSession);
+                    console.log('✅ Insight de assimilação disparado com sucesso');
+                } catch (insightError) {
+                    console.error('❌ Erro ao disparar insight de assimilação:', insightError);
+                }
+            } else {
+                // ✅ NOVO: Se é um novo treino, usar saveTrainingSession
+                const treinoParaSalvar: Partial<TrainingSession> = {
+                    ...completedData,
+                    training_date: editingSession.training_date,
+                    status: 'completed',
+                    title: completedData.title || 'Treino Realizado',
+                    training_type: completedData.training_type || 'manual',
+                };
+                
+                console.log('🔍 Novo treino, salvando:', treinoParaSalvar);
+                await saveTrainingSession(treinoParaSalvar);
+                console.log('✅ Novo treino salvo com sucesso');
+            }
             
-            console.log('Salvando treino realizado:', treinoParaSalvar);
-            await saveTrainingSession(treinoParaSalvar);
-            fetchTrainingSessions();
+            await fetchTrainingSessions();
+            setModalDoneVisible(false); // ✅ CORRIGIDO: Fechar modal após sucesso
             Alert.alert('✅ Sucesso', 'Treino realizado salvo com sucesso!');
         } catch (err: any) {
-            Alert.alert('❌ Erro', 'Erro ao salvar treino: ' + (err.message || String(err)));
             console.error('Erro ao salvar treino realizado:', err);
+            Alert.alert('❌ Erro', 'Erro ao salvar treino: ' + (err.message || String(err)));
+            // ✅ CORRIGIDO: Não fechar modal em caso de erro
         }
-        setModalDoneVisible(false);
     };
 
     const monthLabel = `${MONTHS_PT[displayDate.getMonth()]} / ${displayDate.getFullYear()}`;
@@ -599,7 +640,7 @@ export default function TrainingScreen() {
         try {
             console.log('🔄 DEBUG - TrainingScreen: Recarregando ciclos após criação...');
             // Recarregar ciclos após criação
-            await fetchMacrociclos();
+            await fetchMacrociclos(isCoachView && viewAsAthleteId ? viewAsAthleteId : undefined);
             console.log('✅ DEBUG - TrainingScreen: Ciclos recarregados com sucesso');
         } catch (error) {
             console.error('❌ DEBUG - TrainingScreen: Erro ao recarregar ciclos:', error);
@@ -867,6 +908,7 @@ export default function TrainingScreen() {
                 <CyclesOverview
                     onOpenMacrocicloModal={handleOpenMacrocicloModal}
                     onOpenMesocicloModal={handleOpenMesocicloModal}
+                    athleteId={isCoachView && viewAsAthleteId ? viewAsAthleteId : undefined}
                 />
             )}
 
@@ -875,6 +917,7 @@ export default function TrainingScreen() {
                 visible={macrocicloModalVisible}
                 onDismiss={() => setMacrocicloModalVisible(false)}
                 onSuccess={handleCycleSuccess}
+                athleteId={isCoachView && viewAsAthleteId ? viewAsAthleteId : undefined}
             />
             <CreateMesocicloModal
                 visible={mesocicloModalVisible}
@@ -882,6 +925,7 @@ export default function TrainingScreen() {
                 onSuccess={handleCycleSuccess}
                 selectedMacrocicloId={selectedMacrocicloId}
                 mesocicloToEdit={mesocicloToEdit}
+                athleteId={isCoachView && viewAsAthleteId ? viewAsAthleteId : undefined}
             />
         </ScrollView>
     );

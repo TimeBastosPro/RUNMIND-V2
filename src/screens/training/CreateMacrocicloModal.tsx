@@ -10,9 +10,10 @@ interface CreateMacrocicloModalProps {
   onDismiss: () => void;
   onSuccess?: () => void;
   macrocicloToEdit?: Macrociclo | null;
+  athleteId?: string; // ID do atleta quando criado por treinador
 }
 
-export default function CreateMacrocicloModal({ visible, onDismiss, onSuccess, macrocicloToEdit }: CreateMacrocicloModalProps) {
+export default function CreateMacrocicloModal({ visible, onDismiss, onSuccess, macrocicloToEdit, athleteId }: CreateMacrocicloModalProps) {
   const theme = useTheme();
   const { createMacrociclo, updateMacrociclo, fetchMacrociclos, macrociclos } = useCyclesStore();
   
@@ -364,7 +365,7 @@ export default function CreateMacrocicloModal({ visible, onDismiss, onSuccess, m
           ...formData,
           start_date: startDateISO,
           end_date: endDateISO
-        });
+        }, athleteId); // Passar athleteId se fornecido
       }
       
       setFormData({

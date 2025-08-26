@@ -1,28 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Card, Button, Chip, IconButton, useTheme, Portal } from 'react-native-paper';
+import { Text, Card, Button, Chip, IconButton, useTheme, Portal, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCyclesStore } from '../../stores/cycles';
 import type { Macrociclo, Mesociclo, Microciclo } from '../../types/database';
 
-// Tipos de microciclo disponíveis
+// Tipos de microciclo disponíveis (nomenclatura correta da periodização)
 const MICROCICLO_TYPES = [
-  'Ordinário',
-  'Estabilizador', 
-  'Choque',
-  'Regenerativo',
-  'Pré-competitivo',
-  'Competitivo'
+  'competitivo',
+  'polimento',
+  'regenerativo',
+  'estabilizacao',
+  'choque',
+  'ordinario',
+  'incorporacao'
 ];
+
+// Mapeamento para exibição em português (nomenclatura correta da periodização)
+const MICROCICLO_TYPE_LABELS: Record<string, string> = {
+  'competitivo': 'Microciclo Competitivo',
+  'polimento': 'Microciclo Polimento',
+  'regenerativo': 'Microciclo Regenerativo',
+  'estabilizacao': 'Microciclo de Estabilização',
+  'choque': 'Microciclo de Choque',
+  'ordinario': 'Microciclo Ordinário',
+  'incorporacao': 'Microciclo Incorporação'
+};
+
+// Mapeamento para mesociclos (nomenclatura correta da periodização)
+const MESOCICLO_TYPE_LABELS: Record<string, string> = {
+  'base': 'Base',
+  'estabilizador': 'Estabilizador',
+  'desenvolvimento': 'Desenvolvimento',
+  'recuperativo': 'Recuperativo',
+  'pre_competitivo': 'Pré-competitivo',
+  'competitivo': 'Competitivo'
+};
 
 interface CyclesOverviewProps {
   onOpenMacrocicloModal: () => void;
   onOpenMesocicloModal: (macrocicloId: string) => void;
+  athleteId?: string; // ID do atleta quando criado por treinador
 }
 
 export default function CyclesOverview({ 
   onOpenMacrocicloModal, 
-  onOpenMesocicloModal
+  onOpenMesocicloModal,
+  athleteId
 }: CyclesOverviewProps) {
   const theme = useTheme();
   const { 
@@ -48,6 +72,10 @@ export default function CyclesOverview({
   // Estados para edição
   const [macrocicloToEdit, setMacrocicloToEdit] = useState<Macrociclo | null>(null);
   const [mesocicloToEdit, setMesocicloToEdit] = useState<Mesociclo | null>(null);
+  
+  // Estados para edição de foco do microciclo
+  const [editingMicrocicloFocus, setEditingMicrocicloFocus] = useState<string | null>(null);
+  const [editingFocusValue, setEditingFocusValue] = useState<string>('');
 
   // Função para alternar o dropdown de tipo de microciclo
   const toggleMicrocicloTypeDropdown = (mesocicloId: string) => {
@@ -88,7 +116,7 @@ export default function CyclesOverview({
       };
 
       console.log('🔄 Criando microciclo:', microcicloData);
-      await createMicrociclo(microcicloData);
+      await createMicrociclo(microcicloData, athleteId);
       setShowMicrocicloTypeDropdown(null);
       console.log('✅ Microciclo criado com sucesso');
       Alert.alert('Sucesso', 'Microciclo criado com sucesso!');
@@ -106,6 +134,8 @@ export default function CyclesOverview({
   useEffect(() => {
     console.log('🔄 Estado do dropdown mudou:', showMicrocicloTypeDropdown);
   }, [showMicrocicloTypeDropdown]);
+
+
 
   // Formatar data para exibição
   const formatDate = (dateString: string): string => {
@@ -246,6 +276,42 @@ export default function CyclesOverview({
     );
   };
 
+  // Função para iniciar edição do foco do microciclo
+  const handleEditMicrocicloFocus = (microcicloId: string, currentFocus: string) => {
+    setEditingMicrocicloFocus(microcicloId);
+    setEditingFocusValue(currentFocus);
+  };
+
+  // Função para salvar o foco editado do microciclo
+  const handleSaveMicrocicloFocus = async (microcicloId: string) => {
+    try {
+      const microciclo = microciclos.find(m => m.id === microcicloId);
+      if (!microciclo) {
+        Alert.alert('Erro', 'Microciclo não encontrado');
+        return;
+      }
+
+      const updatedData = {
+        ...microciclo,
+        focus: editingFocusValue.trim()
+      };
+
+      await updateMicrociclo(microcicloId, updatedData);
+      setEditingMicrocicloFocus(null);
+      setEditingFocusValue('');
+      Alert.alert('Sucesso', 'Foco do microciclo atualizado com sucesso!');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar foco do microciclo:', error);
+      Alert.alert('Erro', 'Erro ao atualizar foco do microciclo. Tente novamente.');
+    }
+  };
+
+  // Função para cancelar edição do foco
+  const handleCancelEditFocus = () => {
+    setEditingMicrocicloFocus(null);
+    setEditingFocusValue('');
+  };
+
   const toggleMesocicloExpansion = (mesocicloId: string) => {
     setExpandedMesociclos(prev => 
       prev.includes(mesocicloId) 
@@ -268,14 +334,15 @@ export default function CyclesOverview({
   const getMesociclosGroupedByType = (macrocicloId: string) => {
     const mesociclosDoMacrociclo = getMesociclosForMacrociclo(macrocicloId);
     
-    const grouped = mesociclosDoMacrociclo.reduce((acc, mesociclo) => {
-      const type = mesociclo.focus || 'Ordinário';
-      if (!acc[type]) {
-        acc[type] = [];
-      }
-      acc[type].push(mesociclo);
-      return acc;
-    }, {} as Record<string, Mesociclo[]>);
+         const grouped = mesociclosDoMacrociclo.reduce((acc, mesociclo) => {
+       const type = mesociclo.mesociclo_type || mesociclo.focus || 'base';
+       const displayType = MESOCICLO_TYPE_LABELS[type] || type;
+       if (!acc[displayType]) {
+         acc[displayType] = [];
+       }
+       acc[displayType].push(mesociclo);
+       return acc;
+     }, {} as Record<string, Mesociclo[]>);
 
     return grouped;
   };
@@ -337,9 +404,21 @@ export default function CyclesOverview({
                 <Card.Content>
                   <View style={styles.macrocicloHeader}>
                     <View style={styles.macrocicloInfo}>
-                      <Text variant="titleMedium" style={styles.macrocicloName}>
-                        {macrociclo.name}
-                      </Text>
+                      <View style={styles.macrocicloTitleRow}>
+                        <Text variant="titleMedium" style={styles.macrocicloName}>
+                          {macrociclo.name}
+                        </Text>
+                        {/* Mostrar proprietário se for diferente do usuário atual */}
+                        {macrociclo.user && (
+                          <Chip 
+                            icon="account" 
+                            style={styles.ownerChip}
+                            textStyle={styles.ownerChipText}
+                          >
+                            {macrociclo.user.profiles?.[0]?.full_name || 'Atleta'}
+                          </Chip>
+                        )}
+                      </View>
                       {macrociclo.goal && (
                         <Text variant="bodySmall" style={styles.macrocicloGoal}>
                           {macrociclo.goal}
@@ -438,8 +517,9 @@ export default function CyclesOverview({
                                             <Card.Content>
                                               <View style={styles.mesocicloHeader}>
                                                 <View style={styles.mesocicloInfo}>
+                                                  {/* ✅ CORRIGIDO: Título do mesociclo com primeira letra maiúscula */}
                                                   <Text variant="bodyMedium" style={styles.mesocicloName}>
-                                                    {mesociclo.name}
+                                                    {(mesociclo.mesociclo_type || mesociclo.focus || 'Base').charAt(0).toUpperCase() + (mesociclo.mesociclo_type || mesociclo.focus || 'Base').slice(1)}
                                                   </Text>
                                                   <View style={styles.mesocicloEssentialInfo}>
                                                     <Text variant="bodySmall" style={styles.mesocicloWeeks}>
@@ -450,58 +530,85 @@ export default function CyclesOverview({
                                                     </Text>
                                                   </View>
                                                   
-                                                  {/* Seção de Microciclos */}
-                                                  <View style={styles.microciclosSection}>
-                                                    <View style={styles.microciclosHeader}>
-                                                      <View style={styles.microciclosHeaderActions}>
-                                                        {microciclosDoMesociclo.length === 0 && (
-                                                          <View style={styles.microcicloTypeDropdownContainer}>
-                                                            <Button
-                                                              mode="outlined"
-                                                              onPress={() => toggleMicrocicloTypeDropdown(mesociclo.id)}
-                                                              icon="plus"
-                                                              style={styles.createMicrocicloButton}
-                                                              compact
-                                                            >
-                                                              Escolher Tipo
-                                                            </Button>
-                                                          </View>
-                                                        )}
-                                                        
-                                                        {microciclosDoMesociclo.length > 0 && (
-                                                          <View style={styles.microcicloActions}>
-                                                            <IconButton
-                                                              icon="pencil"
-                                                              size={16}
-                                                              onPress={() => {
-                                                                Alert.alert('Editar', 'Funcionalidade de edição será implementada');
-                                                              }}
-                                                              style={styles.actionButton}
-                                                            />
-                                                            <IconButton
-                                                              icon="delete"
-                                                              size={16}
-                                                              onPress={() => {
-                                                                Alert.alert(
-                                                                  'Confirmar exclusão',
-                                                                  'Deseja realmente excluir este microciclo?',
-                                                                  [
-                                                                    { text: 'Cancelar', style: 'cancel' },
-                                                                    {
-                                                                      text: 'Excluir',
-                                                                      style: 'destructive',
-                                                                      onPress: () => deleteMicrociclo(microciclosDoMesociclo[0].id)
-                                                                    }
-                                                                  ]
-                                                                );
-                                                              }}
-                                                              style={styles.actionButton}
-                                                            />
-                                                          </View>
-                                                        )}
-                                                      </View>
+                                                  {/* ✅ CORRIGIDO: Seção de Microciclos simplificada */}
+                                                  {microciclosDoMesociclo.length === 0 ? (
+                                                    <View style={styles.microciclosSection}>
+                                                      <Button
+                                                        mode="outlined"
+                                                        onPress={() => toggleMicrocicloTypeDropdown(mesociclo.id)}
+                                                        icon="plus"
+                                                        style={styles.createMicrocicloButton}
+                                                        compact
+                                                      >
+                                                        Escolher Tipo
+                                                      </Button>
                                                     </View>
-                                                  </View>
+                                                  ) : (
+                                                    <View style={styles.microciclosSection}>
+                                                      {/* ✅ CORRIGIDO: Card do Microciclo sem duplicação */}
+                                                      <Card style={styles.microcicloCard}>
+                                                        <Card.Content>
+                                                          <View style={styles.microcicloHeader}>
+                                                            <View style={styles.microcicloInfo}>
+                                                              <Text variant="bodyMedium" style={styles.microcicloName}>
+                                                                Microciclo {microciclosDoMesociclo[0].name}
+                                                              </Text>
+                                                              {editingMicrocicloFocus === microciclosDoMesociclo[0].id ? (
+                                                                <View style={styles.focusEditContainer}>
+                                                                  <TextInput
+                                                                    value={editingFocusValue}
+                                                                    onChangeText={setEditingFocusValue}
+                                                                    placeholder="Digite o foco"
+                                                                    dense
+                                                                    style={styles.focusInput}
+                                                                  />
+                                                                  <View style={styles.focusEditActions}>
+                                                                    <IconButton
+                                                                      icon="check"
+                                                                      size={16}
+                                                                      onPress={() => handleSaveMicrocicloFocus(microciclosDoMesociclo[0].id)}
+                                                                      style={styles.saveFocusButton}
+                                                                    />
+                                                                    <IconButton
+                                                                      icon="close"
+                                                                      size={16}
+                                                                      onPress={handleCancelEditFocus}
+                                                                      style={styles.cancelFocusButton}
+                                                                    />
+                                                                  </View>
+                                                                </View>
+                                                              ) : (
+                                                                <View style={styles.focusDisplayContainer}>
+                                                                  <Text variant="bodySmall" style={styles.microcicloFocus}>
+                                                                    Foco: {microciclosDoMesociclo[0].focus}
+                                                                  </Text>
+                                                                                                                                     <IconButton
+                                                                     icon="pencil"
+                                                                     size={14}
+                                                                     onPress={() => handleEditMicrocicloFocus(microciclosDoMesociclo[0].id, microciclosDoMesociclo[0].focus || '')}
+                                                                     style={styles.editFocusButton}
+                                                                   />
+                                                                </View>
+                                                              )}
+                                                              <Text variant="bodySmall" style={styles.microcicloDates}>
+                                                                {formatDate(microciclosDoMesociclo[0].start_date)} - {formatDate(microciclosDoMesociclo[0].end_date)}
+                                                              </Text>
+                                                            </View>
+                                                                                                                         <View style={styles.microcicloActions}>
+                                                               <IconButton
+                                                                 icon="pencil"
+                                                                 size={16}
+                                                                 onPress={() => {
+                                                                   Alert.alert('Editar', 'Funcionalidade de edição será implementada');
+                                                                 }}
+                                                                 style={styles.actionButton}
+                                                               />
+                                                             </View>
+                                                          </View>
+                                                        </Card.Content>
+                                                      </Card>
+                                                    </View>
+                                                  )}
                                                 </View>
                                                 <View style={styles.mesocicloActions}>
                                                   <IconButton
@@ -547,16 +654,16 @@ export default function CyclesOverview({
                <Text variant="titleMedium" style={styles.dropdownTitle}>
                  Escolher Tipo de Microciclo
                </Text>
-               {MICROCICLO_TYPES.map(type => (
-                 <Button
-                   key={type}
-                   mode="text"
-                   onPress={() => handleCreateMicrociclo(showMicrocicloTypeDropdown, type)}
-                   style={styles.microcicloTypeOption}
-                 >
-                   {type}
-                 </Button>
-               ))}
+                               {MICROCICLO_TYPES.map(type => (
+                  <Button
+                    key={type}
+                    mode="text"
+                    onPress={() => handleCreateMicrociclo(showMicrocicloTypeDropdown, type)}
+                    style={styles.microcicloTypeOption}
+                  >
+                    {MICROCICLO_TYPE_LABELS[type] || type}
+                  </Button>
+                ))}
                <Button
                  mode="outlined"
                  onPress={() => setShowMicrocicloTypeDropdown(null)}
@@ -598,80 +705,72 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
   },
-  cycleGoal: {
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  cycleFocus: {
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  cycleMetrics: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  metricChip: {
-    flex: 1,
-  },
-  summarySection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  summaryCards: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  summaryCard: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryNumber: {
-    fontWeight: 'bold',
-    color: '#2196F3',
-  },
-  summaryLabel: {
-    textAlign: 'center',
-  },
-  listSection: {
-    marginBottom: 24,
-  },
-  macrocicloCard: {
-    marginBottom: 16,
-    elevation: 2,
-  },
-  macrocicloHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  macrocicloInfo: {
-    flex: 1,
-  },
-  cycleName: {
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  cycleDescription: {
-    marginBottom: 8,
-    opacity: 0.7,
-  },
-  cycleDates: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  dateChip: {
-    backgroundColor: '#FFF3E0',
-    alignSelf: 'flex-start',
-  },
-  cycleGoal: {
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
+     cycleGoal: {
+     marginTop: 4,
+     fontStyle: 'italic',
+   },
+   cycleMetrics: {
+     flexDirection: 'row',
+     gap: 8,
+     marginTop: 8,
+   },
+   metricChip: {
+     flex: 1,
+   },
+   summarySection: {
+     marginBottom: 24,
+   },
+   sectionTitle: {
+     fontWeight: 'bold',
+     marginBottom: 16,
+   },
+   summaryCards: {
+     flexDirection: 'row',
+     gap: 12,
+   },
+   summaryCard: {
+     flex: 1,
+     alignItems: 'center',
+   },
+   summaryNumber: {
+     fontWeight: 'bold',
+     color: '#2196F3',
+   },
+   summaryLabel: {
+     textAlign: 'center',
+   },
+   listSection: {
+     marginBottom: 24,
+   },
+   macrocicloCard: {
+     marginBottom: 16,
+     elevation: 2,
+   },
+   macrocicloHeader: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'flex-start',
+   },
+   macrocicloInfo: {
+     flex: 1,
+   },
+   cycleName: {
+     fontWeight: 'bold',
+     marginBottom: 8,
+   },
+   cycleDescription: {
+     marginBottom: 8,
+     opacity: 0.7,
+   },
+   cycleDates: {
+     flexDirection: 'row',
+     gap: 8,
+     marginBottom: 8,
+   },
+   dateChip: {
+     backgroundColor: '#FFF3E0',
+     alignSelf: 'flex-start',
+   },
   expandButton: {
     margin: 0,
   },
@@ -693,6 +792,7 @@ const styles = StyleSheet.create({
   deleteButton: {
     flex: 1,
     borderColor: '#D32F2F',
+    zIndex: 1000,
   },
   expandedContent: {
     marginTop: 16,
@@ -783,23 +883,8 @@ const styles = StyleSheet.create({
   cardActions: {
     marginTop: 12,
   },
-  cardActionButton: {
-    marginTop: 8,
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
   primaryButton: {
     flex: 1,
-  },
-  editButton: {
-    flex: 1,
-  },
-  deleteButton: {
-    flex: 1,
-    zIndex: 1000,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1077,34 +1162,56 @@ const styles = StyleSheet.create({
    actionButton: {
      marginHorizontal: 2,
    },
-   createMicrocicloButton: {
-     marginRight: 8,
-   },
-   microciclosHeader: {
-     marginTop: 8,
-   },
-   microciclosHeaderActions: {
-     flexDirection: 'row',
-     justifyContent: 'space-between',
-     alignItems: 'center',
-   },
-   microciclosSection: {
-     marginTop: 8,
-   },
-   microciclosTitle: {
-     fontWeight: 'bold',
-     marginBottom: 4,
-   },
-   microciclosList: {
-     marginTop: 8,
-   },
-   microcicloType: {
-     fontStyle: 'italic',
-     color: '#666',
-   },
-   microcicloEssentialInfo: {
-     flexDirection: 'row',
-     gap: 8,
-     marginTop: 4,
-   },
-}); 
+       microcicloType: {
+      fontStyle: 'italic',
+      color: '#666',
+    },
+    // Estilos para edição de foco do microciclo
+    focusEditContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    focusInput: {
+      flex: 1,
+      backgroundColor: 'transparent',
+      marginRight: 8,
+    },
+    focusEditActions: {
+      flexDirection: 'row',
+      gap: 4,
+    },
+    saveFocusButton: {
+      margin: 0,
+      backgroundColor: '#4CAF50',
+    },
+    cancelFocusButton: {
+      margin: 0,
+      backgroundColor: '#F44336',
+    },
+    focusDisplayContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+         editFocusButton: {
+       margin: 0,
+       marginLeft: 8,
+       backgroundColor: '#2196F3',
+     },
+     // Estilos para mostrar proprietário do macrociclo
+     macrocicloTitleRow: {
+       flexDirection: 'row',
+       alignItems: 'center',
+       justifyContent: 'space-between',
+       marginBottom: 4,
+     },
+     ownerChip: {
+       backgroundColor: '#E3F2FD',
+       alignSelf: 'flex-start',
+     },
+     ownerChipText: {
+       fontSize: 12,
+       color: '#1976D2',
+     },
+   }); 

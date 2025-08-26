@@ -9,15 +9,30 @@ interface CreateMicrocicloModalProps {
   onDismiss: () => void;
   selectedMesocicloId: string;
   microcicloToEdit?: Microciclo | null;
+  athleteId?: string; // ID do atleta quando criado por treinador
 }
 
+// Tipos de microciclo disponíveis (nomenclatura correta da periodização)
 const MICROCICLO_TYPES = [
-  'Ordinário',
-  'Choque',
-  'Recuperação',
-  'Competição',
-  'Taper'
+  'competitivo',
+  'polimento',
+  'regenerativo',
+  'estabilizacao',
+  'choque',
+  'ordinario',
+  'incorporacao'
 ];
+
+// Mapeamento para exibição em português (nomenclatura correta da periodização)
+const MICROCICLO_TYPE_LABELS: Record<string, string> = {
+  'competitivo': 'Microciclo Competitivo',
+  'polimento': 'Microciclo Polimento',
+  'regenerativo': 'Microciclo Regenerativo',
+  'estabilizacao': 'Microciclo de Estabilização',
+  'choque': 'Microciclo de Choque',
+  'ordinario': 'Microciclo Ordinário',
+  'incorporacao': 'Microciclo Incorporação'
+};
 
 interface MicrocicloRow {
   id: string;
@@ -32,7 +47,8 @@ export default function CreateMicrocicloModal({
   visible,
   onDismiss,
   selectedMesocicloId,
-  microcicloToEdit
+  microcicloToEdit,
+  athleteId
 }: CreateMicrocicloModalProps) {
   const theme = useTheme();
   const { 
@@ -67,7 +83,7 @@ export default function CreateMicrocicloModal({
         setRows([{
           id: microcicloToEdit.id,
           name: microcicloToEdit.name,
-          focus: microcicloToEdit.focus || 'Ordinário',
+          focus: microcicloToEdit.focus || 'ordinario',
           startDate: microcicloToEdit.start_date,
           endDate: microcicloToEdit.end_date,
           isSelected: true
@@ -77,7 +93,7 @@ export default function CreateMicrocicloModal({
         setRows([{
           id: Date.now().toString(),
           name: '',
-          focus: 'Ordinário',
+          focus: 'ordinario',
           startDate: '',
           endDate: '',
           isSelected: true
@@ -121,7 +137,7 @@ export default function CreateMicrocicloModal({
       newRows.push({
         id: Date.now().toString() + week,
         name: `Semana ${week}`,
-        focus: 'Ordinário',
+        focus: 'ordinario',
         startDate: dates.start,
         endDate: dates.end,
         isSelected: true
@@ -135,7 +151,7 @@ export default function CreateMicrocicloModal({
     const newRow: MicrocicloRow = {
       id: Date.now().toString(),
       name: '',
-      focus: 'Ordinário',
+      focus: 'ordinario',
       startDate: '',
       endDate: '',
       isSelected: true
@@ -193,7 +209,7 @@ export default function CreateMicrocicloModal({
         if (microcicloToEdit && row.id === microcicloToEdit.id) {
           await updateMicrociclo(microcicloToEdit.id, microcicloData);
         } else {
-          await createMicrociclo(microcicloData);
+          await createMicrociclo(microcicloData, athleteId);
         }
       }
 
