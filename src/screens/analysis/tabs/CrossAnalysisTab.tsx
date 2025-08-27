@@ -89,15 +89,7 @@ const TRAINING_METRICS = [
 export default function CrossAnalysisTab() {
   const [selectedWellbeingMetric, setSelectedWellbeingMetric] = useState('sleep_quality');
   const [selectedTrainingMetric, setSelectedTrainingMetric] = useState('distance');
-  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'custom'>('week');
-  
-  // Calcular datas padrão: semana atual
-  const today = new Date();
-  const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() - today.getDay() + 1); // Segunda-feira
-  
-  const [customStartDate, setCustomStartDate] = useState<Date>(currentWeekStart);
-  const [customEndDate, setCustomEndDate] = useState<Date>(new Date(currentWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000));
+  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'custom'>('month');
   
   const { recentCheckins, trainingSessions, loadRecentCheckins } = useCheckinStore();
 
@@ -264,91 +256,108 @@ export default function CrossAnalysisTab() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Seletor de Período */}
-      <Card style={styles.periodCard}>
+      {/* Header */}
+      <Card style={styles.headerCard}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Período de Análise</Text>
-          <View style={styles.periodButtons}>
-            <Chip
-              selected={selectedPeriod === 'week'}
-              onPress={() => setSelectedPeriod('week')}
-              style={styles.periodChip}
-              textStyle={styles.periodChipText}
-            >
-              Última Semana
-            </Chip>
-            <Chip
-              selected={selectedPeriod === 'month'}
-              onPress={() => setSelectedPeriod('month')}
-              style={styles.periodChip}
-              textStyle={styles.periodChipText}
-            >
-              Último Mês
-            </Chip>
+          <View style={styles.headerContent}>
+            <MaterialCommunityIcons name="chart-scatter-plot" size={isMobile ? 24 : 28} color="#2196F3" />
+            <View style={styles.headerText}>
+              <Text style={styles.mainTitle}>Análise de Correlação</Text>
+              <Text style={styles.subtitle}>Compare dados de bem-estar com métricas de treino</Text>
+            </View>
           </View>
         </Card.Content>
       </Card>
 
-      {/* Seleção de Métricas */}
-      <Card style={styles.metricsCard}>
+      {/* Seleção Rápida de Métricas */}
+      <Card style={styles.quickSelectCard}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Selecione as Métricas</Text>
+          <Text style={styles.sectionTitle}>Comparar:</Text>
           
-          {/* Métrica de Bem-estar */}
-          <View style={styles.metricSection}>
-            <View style={styles.metricHeader}>
-              <MaterialCommunityIcons name="heart" size={isMobile ? 18 : 20} color="#4CAF50" />
-              <Text style={styles.metricLabel}>Bem-estar</Text>
-            </View>
-            <View style={styles.metricsGrid}>
-              {WELLBEING_METRICS.map((metric) => (
+          {/* Bem-estar */}
+          <View style={styles.quickMetricSection}>
+            <Text style={styles.quickLabel}>Bem-estar:</Text>
+            <View style={styles.quickGrid}>
+              {WELLBEING_METRICS.slice(0, 3).map((metric) => (
                 <Chip
                   key={metric.value}
                   selected={selectedWellbeingMetric === metric.value}
                   onPress={() => setSelectedWellbeingMetric(metric.value)}
                   style={[
-                    styles.metricChip,
+                    styles.quickChip,
                     selectedWellbeingMetric === metric.value && { backgroundColor: metric.color + '20' }
                   ]}
                   textStyle={[
-                    styles.metricChipText,
+                    styles.quickChipText,
                     selectedWellbeingMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
                   ]}
-                  icon={metric.icon}
                   compact={isMobile}
                 >
-                  {isMobile ? metric.label.split(' ')[0] : metric.label}
+                  {metric.label}
                 </Chip>
               ))}
             </View>
           </View>
 
-          {/* Métrica de Treino */}
-          <View style={styles.metricSection}>
-            <View style={styles.metricHeader}>
-              <MaterialCommunityIcons name="run" size={isMobile ? 18 : 20} color="#2196F3" />
-              <Text style={styles.metricLabel}>Treino</Text>
-            </View>
-            <View style={styles.metricsGrid}>
-              {TRAINING_METRICS.map((metric) => (
+          {/* Treino */}
+          <View style={styles.quickMetricSection}>
+            <Text style={styles.quickLabel}>Treino:</Text>
+            <View style={styles.quickGrid}>
+              {TRAINING_METRICS.slice(0, 3).map((metric) => (
                 <Chip
                   key={metric.value}
                   selected={selectedTrainingMetric === metric.value}
                   onPress={() => setSelectedTrainingMetric(metric.value)}
                   style={[
-                    styles.metricChip,
+                    styles.quickChip,
                     selectedTrainingMetric === metric.value && { backgroundColor: metric.color + '20' }
                   ]}
                   textStyle={[
-                    styles.metricChipText,
+                    styles.quickChipText,
                     selectedTrainingMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
                   ]}
-                  icon={metric.icon}
                   compact={isMobile}
                 >
-                  {isMobile ? metric.label.split(' ')[0] : metric.label}
+                  {metric.label}
                 </Chip>
               ))}
+            </View>
+          </View>
+
+          {/* Período */}
+          <View style={styles.quickMetricSection}>
+            <Text style={styles.quickLabel}>Período:</Text>
+            <View style={styles.quickGrid}>
+              <Chip
+                selected={selectedPeriod === 'week'}
+                onPress={() => setSelectedPeriod('week')}
+                style={[
+                  styles.quickChip,
+                  selectedPeriod === 'week' && { backgroundColor: '#FF9800' + '20' }
+                ]}
+                textStyle={[
+                  styles.quickChipText,
+                  selectedPeriod === 'week' && { color: '#FF9800', fontWeight: 'bold' }
+                ]}
+                compact={isMobile}
+              >
+                7 dias
+              </Chip>
+              <Chip
+                selected={selectedPeriod === 'month'}
+                onPress={() => setSelectedPeriod('month')}
+                style={[
+                  styles.quickChip,
+                  selectedPeriod === 'month' && { backgroundColor: '#FF9800' + '20' }
+                ]}
+                textStyle={[
+                  styles.quickChipText,
+                  selectedPeriod === 'month' && { color: '#FF9800', fontWeight: 'bold' }
+                ]}
+                compact={isMobile}
+              >
+                30 dias
+              </Chip>
             </View>
           </View>
         </Card.Content>
@@ -441,56 +450,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     padding: isMobile ? 12 : 16,
   },
-  periodCard: {
+  headerCard: {
     marginBottom: 16,
     borderRadius: 12,
+    elevation: 3,
+    backgroundColor: '#fff',
   },
-  sectionTitle: {
-    fontSize: isMobile ? 14 : 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
-  periodButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  periodChip: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  periodChipText: {
-    fontSize: isMobile ? 12 : 14,
-  },
-  metricsCard: {
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  metricSection: {
-    marginBottom: 20,
-  },
-  metricHeader: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  metricLabel: {
-    fontSize: isMobile ? 14 : 16,
+  headerText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  mainTitle: {
+    fontSize: isMobile ? 18 : 22,
     fontWeight: 'bold',
     color: '#333',
-    marginLeft: 8,
+    marginBottom: 4,
   },
-  metricsGrid: {
+  subtitle: {
+    fontSize: isMobile ? 12 : 14,
+    color: '#666',
+  },
+  quickSelectCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: isMobile ? 16 : 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  quickMetricSection: {
+    marginBottom: 16,
+  },
+  quickLabel: {
+    fontSize: isMobile ? 12 : 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: isMobile ? 6 : 8,
   },
-  metricChip: {
+  quickChip: {
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  metricChipText: {
+  quickChipText: {
     color: '#333',
     fontSize: isMobile ? 11 : 12,
   },

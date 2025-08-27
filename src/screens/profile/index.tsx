@@ -64,10 +64,10 @@ export default function ProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
-  // ✅ CORREÇÃO: Função para converter boolean para string
-  const convertBooleanToString = (value: boolean | undefined | null): string | null => {
-    if (value === true) return 'sim';
-    if (value === false) return 'nao';
+  // ✅ CORREÇÃO: Função para converter boolean/string para string (melhorada)
+  const convertBooleanToString = (value: boolean | string | undefined | null): string | null => {
+    if (value === true || value === 'sim') return 'sim';
+    if (value === false || value === 'nao') return 'nao';
     return null;
   };
   
@@ -151,13 +151,13 @@ export default function ProfileScreen() {
     
     // ✅ CORREÇÃO: Converter respostas PAR-Q de string para boolean
     const parqAnswersBoolean = {
-      q1: parqAnswers.q1 === 'sim',
-      q2: parqAnswers.q2 === 'sim',
-      q3: parqAnswers.q3 === 'sim',
-      q4: parqAnswers.q4 === 'sim',
-      q5: parqAnswers.q5 === 'sim',
-      q6: parqAnswers.q6 === 'sim',
-      q7: parqAnswers.q7 === 'sim',
+      q1: convertStringToBoolean(parqAnswers.q1),
+      q2: convertStringToBoolean(parqAnswers.q2),
+      q3: convertStringToBoolean(parqAnswers.q3),
+      q4: convertStringToBoolean(parqAnswers.q4),
+      q5: convertStringToBoolean(parqAnswers.q5),
+      q6: convertStringToBoolean(parqAnswers.q6),
+      q7: convertStringToBoolean(parqAnswers.q7),
     };
     
     const updates: any = {

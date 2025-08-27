@@ -923,12 +923,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateProfile: async (updates: Partial<Profile>) => {
-    console.log('DEBUG - updateProfile chamado com:', updates);
+    console.log('🔍 DEBUG - updateProfile chamado com:', updates);
+    console.log('🔍 DEBUG - PAR-Q+ enviado:', updates.parq_answers);
+    console.log('🔍 DEBUG - Preferências enviadas:', {
+      training_days: updates.training_days,
+      preferred_training_period: updates.preferred_training_period,
+      terrain_preference: updates.terrain_preference,
+      work_stress_level: updates.work_stress_level
+    });
+    
     const { user, profile } = get();
-    console.log('DEBUG - user:', user?.id, 'profile:', profile?.id);
+    console.log('🔍 DEBUG - user:', user?.id, 'profile:', profile?.id);
     
     if (!user) {
-      console.log('DEBUG - Usuário não encontrado');
+      console.log('❌ DEBUG - Usuário não encontrado');
       return;
     }
     
@@ -950,7 +958,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
       
-      console.log('DEBUG - Enviando update para Supabase...');
+      console.log('🔍 DEBUG - Enviando update para Supabase...');
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
@@ -958,12 +966,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select()
         .single();
         
-      console.log('DEBUG - Resposta do Supabase:', { data, error });
-        
-      if (error) throw error;
+      console.log('🔍 DEBUG - Resposta do Supabase:', { data, error });
+      
+      if (error) {
+        console.error('❌ DEBUG - Erro do Supabase:', error);
+        throw error;
+      }
+      
+      // Verificar se os dados foram realmente salvos
+      console.log('✅ DEBUG - Dados salvos no banco:');
+      console.log('✅ PAR-Q+ salvo:', data?.parq_answers);
+      console.log('✅ Preferências salvas:', {
+        training_days: data?.training_days,
+        preferred_training_period: data?.preferred_training_period,
+        terrain_preference: data?.terrain_preference,
+        work_stress_level: data?.work_stress_level
+      });
       
       set({ profile: data });
-      console.log('DEBUG - Perfil atualizado com sucesso:', data);
+      console.log('✅ DEBUG - Perfil atualizado com sucesso no estado');
     } catch (error) {
       console.error('DEBUG - Erro ao atualizar perfil:', error);
       throw error;

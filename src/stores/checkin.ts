@@ -367,12 +367,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
   triggerAssimilationInsight: async (completedTraining) => {
     console.log('🔍 triggerAssimilationInsight iniciado para treino:', completedTraining.id);
+    console.log('🔍 Dados do treino completado:', completedTraining);
     try {
       const user = useAuthStore.getState().user;
       if (!user) {
         console.error('❌ Usuário não encontrado no trigger de assimilação');
         return;
       }
+      console.log('✅ Usuário encontrado:', user.id);
 
       // ✅ MELHORADO: Coletar dados de forma mais eficiente
       const [profileResult, sessionsResult] = await Promise.allSettled([
@@ -390,11 +392,18 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       };
 
       console.log('🔍 Chamando Edge Function de assimilação...');
+      console.log('🔍 Dados enviados para Edge Function:', {
+        completedTraining: athleteData.completedTraining?.id,
+        profile: !!athleteData.profile,
+        sessionsCount: athleteData.sessions?.length
+      });
 
       try {
         const { data: functionResult, error } = await supabase.functions.invoke('generate-training-assimilation-insight-v2', {
           body: { athleteData }
         });
+
+        console.log('🔍 Resposta da Edge Function:', { functionResult, error });
 
         if (error) {
           console.error("❌ Erro na função de insight de assimilação:", error);

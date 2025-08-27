@@ -164,13 +164,14 @@ export default function SportsProfileScreen() {
 
   // Encontrar o melhor teste para usar como referência (maior VO2max)
   useEffect(() => {
-    if (fitnessTests.length > 0) {
-      const bestTest = fitnessTests.reduce((best, current) => 
+    const currentTests = isCoachView ? coachFitnessTests : fitnessTests;
+    if (currentTests.length > 0) {
+      const bestTest = currentTests.reduce((best, current) => 
         current.calculated_vo2max > best.calculated_vo2max ? current : best
       );
       setReferenceTest(bestTest);
     }
-  }, [fitnessTests]);
+  }, [fitnessTests, coachFitnessTests, isCoachView]);
 
   // Calcular FC Máxima automaticamente quando a data de nascimento for preenchida
   useEffect(() => {
@@ -649,13 +650,13 @@ export default function SportsProfileScreen() {
   const referenceVo2max = referenceTest?.calculated_vo2max || 0;
   const referenceVam = referenceTest?.calculated_vam || 0;
   
-  const imc = profile?.weight_kg && profile?.height_cm ? calculateIMC(profile.weight_kg, profile.height_cm) : 0;
+  const imc = profile?.weight_kg && profile?.height_cm ? calculateIMC(Number(profile.weight_kg), Number(profile.height_cm)) : 0;
   const vo2max: number = referenceVo2max;
   const vam: number = referenceVam;
   const trainingZones = profile?.max_heart_rate && profile?.resting_heart_rate 
-    ? calculateKarvonenZones(profile.max_heart_rate, profile.resting_heart_rate)
+    ? calculateKarvonenZones(Number(profile.max_heart_rate), Number(profile.resting_heart_rate))
     : [];
-  const paceZones = vo2max ? calculatePaceZones(calculateThresholdPace(vo2max, (profile?.gender as 'male' | 'female') || 'male')) : [];
+  const paceZones = vo2max ? calculatePaceZones(vo2max) : [];
   
   // Debug: Log dos cálculos de ritmo
   console.log('DEBUG - VO2max:', vo2max);
