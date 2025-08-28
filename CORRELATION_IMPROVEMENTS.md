@@ -55,7 +55,7 @@ const WELLBEING_METRICS = [
   { 
     label: 'Energia', 
     value: 'energy',
-    field: 'emocional', // Campo correto
+    field: 'energy_score', // Campo correto
   },
 ];
 ```

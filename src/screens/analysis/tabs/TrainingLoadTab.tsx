@@ -89,30 +89,30 @@ export default function TrainingLoadTab() {
     );
   }
 
-  // Dados para o gráfico de carga diária
+  // Dados para o gráfico de carga diária - mostrar todos os dados disponíveis
   const dailyChartData = {
-    labels: dailyWorkloads.slice(-7).map(item => {
+    labels: dailyWorkloads.map(item => {
       const date = new Date(item.date);
       return `${date.getDate()}/${date.getMonth() + 1}`;
     }),
     datasets: [
       {
-        data: dailyWorkloads.slice(-7).map(item => item.workload),
+        data: dailyWorkloads.map(item => item.workload),
         color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
         strokeWidth: 2,
       },
     ],
   };
 
-  // Dados para o gráfico semanal
+  // Dados para o gráfico semanal - mostrar todas as semanas disponíveis
   const weeklyChartData = {
-    labels: weeklyWorkloads.slice(-4).map(item => {
+    labels: weeklyWorkloads.map(item => {
       const date = new Date(item.weekStart);
       return `Sem ${date.getDate()}/${date.getMonth() + 1}`;
     }),
     datasets: [
       {
-        data: weeklyWorkloads.slice(-4).map(item => item.totalWorkload),
+        data: weeklyWorkloads.map(item => item.totalWorkload),
       },
     ],
   };

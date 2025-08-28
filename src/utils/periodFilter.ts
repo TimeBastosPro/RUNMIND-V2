@@ -1,5 +1,8 @@
 import { PeriodType } from '../components/ui/PeriodSelector';
 
+// Estender o tipo para incluir week e month
+export type ExtendedPeriodType = PeriodType | 'week' | 'month';
+
 export interface DateFilterable {
   date?: string;
   training_date?: string;
@@ -8,7 +11,7 @@ export interface DateFilterable {
 
 export function filterDataByPeriod<T extends DateFilterable>(
   data: T[],
-  period: PeriodType,
+  period: ExtendedPeriodType,
   customStartDate?: Date,
   customEndDate?: Date
 ): T[] {
@@ -61,7 +64,7 @@ export function filterDataByPeriod<T extends DateFilterable>(
   return filteredData;
 }
 
-export function getPeriodLabel(period: PeriodType, customStartDate?: Date, customEndDate?: Date): string {
+export function getPeriodLabel(period: ExtendedPeriodType, customStartDate?: Date, customEndDate?: Date): string {
   if (customStartDate && customEndDate) {
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -70,4 +73,23 @@ export function getPeriodLabel(period: PeriodType, customStartDate?: Date, custo
   }
   
   return 'Período personalizado';
+}
+
+/**
+ * Navega para o período anterior ou posterior
+ * @param currentDate Data atual do período
+ * @param periodType Tipo do período ('week' ou 'month')
+ * @param direction Direção da navegação ('prev' ou 'next')
+ * @returns Nova data após navegação
+ */
+export function navigatePeriod(currentDate: Date, periodType: 'week' | 'month', direction: 'prev' | 'next'): Date {
+  const newDate = new Date(currentDate);
+  
+  if (periodType === 'week') {
+    newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+  } else {
+    newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+  }
+  
+  return newDate;
 } 

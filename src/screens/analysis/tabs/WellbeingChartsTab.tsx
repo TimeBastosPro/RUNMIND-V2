@@ -3,7 +3,11 @@ import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Card, Text, Chip, Button, ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
-import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
+import { useAuthStore } from '../../../stores/auth';
+import { filterDataByPeriod, getPeriodLabel, navigatePeriod, ExtendedPeriodType } from '../../../utils/periodFilter';
+import EmptyState from '../../../components/ui/EmptyState';
+import LoadingState from '../../../components/ui/LoadingState';
+import { validateWellbeingMetric, logValidationErrors } from '../../../utils/dataValidation';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isMobile = screenWidth < 768;
@@ -60,187 +64,314 @@ const DAILY_METRICS = [
     value: 'energy',
     icon: 'heart',
     color: '#E91E63',
-    field: 'emocional',
+    field: 'energy_score',
     description: 'Nível de energia física e mental',
     scale: '1 (Sem energia) - 10 (Muita energia)'
   },
 ];
 
-// Períodos de análise
-const ANALYSIS_PERIODS = [
-  { label: 'Última Semana', value: 'week', days: 7 },
-  { label: 'Últimas 2 Semanas', value: 'two_weeks', days: 14 },
-  { label: 'Último Mês', value: 'month', days: 30 },
-  { label: 'Últimos 3 Meses', value: 'three_months', days: 90 },
+// Tipos de período para navegação
+const PERIOD_TYPES = [
+  { label: 'Semana', value: 'week' },
+  { label: 'Mês', value: 'month' },
 ];
 
-// Tipos de visualização
-const VIEW_TYPES = [
-  { label: 'Gráfico', value: 'chart', icon: 'chart-line' },
-  { label: 'Comparação', value: 'comparison', icon: 'compare' },
-  { label: 'Evolução', value: 'evolution', icon: 'trending-up' },
-];
+// Remover tipos de visualização - manter apenas um tipo simples
 
 export default function WellbeingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('sleep_quality');
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
-  const [selectedViewType, setSelectedViewType] = useState('chart');
+  const [periodType, setPeriodType] = useState<'week' | 'month'>('week');
+  const [currentDate, setCurrentDate] = useState(() => {
+    // Inicializar com a data atual para sincronizar com a aba de treinos
+    const today = new Date();
+    return today;
+  });
   
-  const { recentCheckins, loadRecentCheckins } = useCheckinStore();
+  const { recentCheckins, loadRecentCheckins, isLoading } = useCheckinStore();
+  const { user, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
-    loadRecentCheckins();
-  }, [loadRecentCheckins]);
+    // ✅ GARANTIR: Carregar apenas dados reais do usuário logado
+    if (isAuthenticated && user?.id) {
+      console.log('🔍 DEBUG - Carregando check-ins do usuário logado:', user.id);
+      loadRecentCheckins(365); // Carrega check-ins reais do usuário logado
+    }
+  }, [loadRecentCheckins, isAuthenticated, user?.id]);
 
   const selectedMetricInfo = DAILY_METRICS.find(m => m.value === selectedMetric);
-  const selectedPeriodInfo = ANALYSIS_PERIODS.find(p => p.value === selectedPeriod);
 
-  // Filtrar dados por período selecionado
-  const getFilteredCheckins = () => {
-    if (!recentCheckins || recentCheckins.length === 0) return [];
+  // Calcular período atual baseado na data e tipo selecionado
+  const getCurrentPeriod = () => {
+    // ✅ CORRIGIDO: Usar data local sem problemas de fuso horário
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const day = currentDate.getDate();
     
-    const today = new Date();
-    const startDate = new Date();
-    startDate.setDate(today.getDate() - (selectedPeriodInfo?.days || 7));
-    
-    return recentCheckins.filter(checkin => {
-      const checkinDate = new Date(checkin.date);
-      return checkinDate >= startDate && checkinDate <= today;
-    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    if (periodType === 'week') {
+      // Início da semana (segunda-feira)
+      const startOfWeek = new Date(year, month, day);
+      const dayOfWeek = startOfWeek.getDay(); // 0 = domingo, 1 = segunda, etc.
+      
+      // Calcular diferença para segunda-feira
+      let diff = 1 - dayOfWeek; // Para segunda-feira
+      if (dayOfWeek === 0) diff = -6; // Se for domingo, voltar 6 dias
+      
+      startOfWeek.setDate(startOfWeek.getDate() + diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      // Fim da semana (domingo) - calcular corretamente
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+      
+      console.log('🔍 DEBUG - Cálculo da Semana:', {
+        inputDate: currentDate.toISOString().split('T')[0],
+        dayOfWeek,
+        diff,
+        startOfWeek: startOfWeek.toISOString().split('T')[0],
+        endOfWeek: endOfWeek.toISOString().split('T')[0],
+        startWeekday: startOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' }),
+        endWeekday: endOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' })
+      });
+      
+      return { startDate: startOfWeek, endDate: endOfWeek };
+    } else {
+      // Início do mês
+      const startOfMonth = new Date(year, month, 1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      // Fim do mês
+      const endOfMonth = new Date(year, month + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
+      
+      return { startDate: startOfMonth, endDate: endOfMonth };
+    }
   };
 
-  // Processar dados da métrica selecionada
+  // Navegar para período anterior/posterior usando função centralizada
+  const handleNavigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = navigatePeriod(currentDate, periodType, direction);
+    setCurrentDate(newDate);
+  };
+
+  // Filtrar dados pelo período atual - APENAS DO USUÁRIO LOGADO
+  const getFilteredCheckins = () => {
+    // ✅ GARANTIR: Só processar se usuário está autenticado
+    if (!isAuthenticated || !user?.id || !recentCheckins || recentCheckins.length === 0) {
+      return [];
+    }
+    
+    const { startDate, endDate } = getCurrentPeriod();
+    
+    // ✅ NOTA: recentCheckins já vem filtrado pelo store para o usuário logado
+    // Usar periodFilter com datas customizadas para manter compatibilidade com navegação
+    return filterDataByPeriod(recentCheckins, 'custom', startDate, endDate);
+  };
+
+  // Processar dados da métrica selecionada - APENAS DADOS REAIS
   const getMetricAnalysis = () => {
+    // ✅ GARANTIR: Só processar se usuário está autenticado
+    if (!isAuthenticated || !user?.id) {
+      console.log('🚫 Usuário não autenticado - não exibindo dados');
+      return {
+        data: [],
+        average: null,
+        trend: null,
+        consistency: null,
+        checkinsCount: 0,
+        daysWithData: 0
+      };
+    }
+    
     const filteredCheckins = getFilteredCheckins();
+    const { startDate, endDate } = getCurrentPeriod();
     
-    if (filteredCheckins.length === 0) {
+    console.log('🔍 DEBUG - Análise Real (USUÁRIO LOGADO):', {
+      userId: user.id,
+      periodType,
+      currentDate: currentDate.toISOString().split('T')[0],
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+      startDateDay: startDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }),
+      endDateDay: endDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }),
+      totalCheckins: filteredCheckins.length,
+      selectedMetric,
+      selectedField: selectedMetricInfo?.field,
+      checkinsWithData: filteredCheckins.filter(c => {
+        const value = c[selectedMetricInfo?.field as keyof typeof c];
+        return typeof value === 'number' && value > 0;
+      }).length
+    });
+    
+    // Criar array completo de datas do período
+    const allDatesInPeriod = [];
+    const current = new Date(startDate);
+    
+    // Garantir que o loop pare no domingo correto (31/08, não 01/09)
+    const endDateNormalized = new Date(endDate);
+    endDateNormalized.setHours(0, 0, 0, 0);
+    
+    while (current <= endDateNormalized) {
+      allDatesInPeriod.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    console.log('🔍 DEBUG - Datas do Período:', {
+      totalDays: allDatesInPeriod.length,
+      firstDate: allDatesInPeriod[0],
+      lastDate: allDatesInPeriod[allDatesInPeriod.length - 1],
+      allDates: allDatesInPeriod.map(date => {
+        const d = new Date(date);
+        return `${date} (${d.toLocaleDateString('pt-BR', { weekday: 'short' })})`;
+      }),
+      filteredCheckins: filteredCheckins.map(c => ({
+        date: c.date,
+        weekday: new Date(c.date).toLocaleDateString('pt-BR', { weekday: 'short' })
+      }))
+    });
+    
+    // Mapear dados para cada dia do período
+    const metricData = allDatesInPeriod.map(dateStr => {
+      const checkinForDay = filteredCheckins.find(c => {
+        // Comparar datas normalizadas
+        const checkinDate = new Date(c.date).toISOString().split('T')[0];
+        return checkinDate === dateStr;
+      });
+      let value = 0;
+      
+      if (checkinForDay && selectedMetricInfo?.field) {
+        const fieldValue = checkinForDay[selectedMetricInfo.field as keyof typeof checkinForDay];
+        const validationResult = validateWellbeingMetric(fieldValue, selectedMetricInfo.field);
+        
+        if (validationResult.isValid) {
+          value = validationResult.value;
+        } else {
+          // Log do erro de validação
+          logValidationErrors([validationResult.error || 'Erro de validação']);
+          value = 0;
+        }
+      }
+      
+      // Debug para cada dia
+      if (checkinForDay) {
+        console.log(`🔍 DEBUG - Dia ${dateStr}:`, {
+          checkinDate: checkinForDay.date,
+          field: selectedMetricInfo?.field,
+          value: value,
+          weekday: new Date(dateStr).toLocaleDateString('pt-BR', { weekday: 'short' })
+        });
+      }
+      
       return {
-        data: [],
-        average: 0,
-        trend: 'stable',
-        consistency: 0,
-        bestDay: null,
-        worstDay: null,
-        weeklyAverages: []
+        date: dateStr,
+        value: value,
+        hasData: value > 0
+      };
+    });
+
+    // Calcular estatísticas REAIS
+    const valuesWithData = metricData.filter(d => d.hasData).map(d => d.value);
+    
+    // Se não há dados suficientes, retornar estrutura com "-"
+    if (valuesWithData.length === 0) {
+      return {
+        data: metricData,
+        average: null,
+        trend: null,
+        consistency: null,
+        checkinsCount: filteredCheckins.length,
+        daysWithData: 0
       };
     }
 
-    // Extrair valores da métrica
-    const metricData = filteredCheckins.map(checkin => {
-      const field = selectedMetricInfo?.field as keyof typeof checkin;
-      const value = checkin[field];
-      return {
-        date: checkin.date,
-        value: typeof value === 'number' ? value : 0,
-      };
-    }).filter(item => item.value > 0);
-
-    if (metricData.length === 0) {
-      return {
-        data: [],
-        average: 0,
-        trend: 'stable',
-        consistency: 0,
-        bestDay: null,
-        worstDay: null,
-        weeklyAverages: []
-      };
-    }
-
-    // Calcular estatísticas
-    const values = metricData.map(d => d.value);
-    const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+    // Calcular estatísticas com dados reais
+    const average = valuesWithData.reduce((sum, val) => sum + val, 0) / valuesWithData.length;
     
-    // Calcular tendência (primeira metade vs segunda metade)
-    const midPoint = Math.floor(values.length / 2);
-    const firstHalf = values.slice(0, midPoint);
-    const secondHalf = values.slice(midPoint);
-    
-    let trend = 'stable';
-    if (firstHalf.length > 0 && secondHalf.length > 0) {
+    // Calcular tendência (precisa de pelo menos 4 dados)
+    let trend = null;
+    if (valuesWithData.length >= 4) {
+      const midPoint = Math.floor(valuesWithData.length / 2);
+      const firstHalf = valuesWithData.slice(0, midPoint);
+      const secondHalf = valuesWithData.slice(midPoint);
+      
       const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length;
       const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length;
       
       if (secondAvg > firstAvg + 0.5) trend = 'improving';
       else if (secondAvg < firstAvg - 0.5) trend = 'declining';
+      else trend = 'stable';
     }
 
-    // Calcular consistência (inverso do desvio padrão normalizado)
-    const variance = values.reduce((sum, val) => sum + Math.pow(val - average, 2), 0) / values.length;
-    const stdDev = Math.sqrt(variance);
-    const consistency = Math.max(0, 100 - ((stdDev / average) * 100));
-
-    // Encontrar melhor e pior dia
-    const maxValue = Math.max(...values);
-    const minValue = Math.min(...values);
-    const bestDay = metricData.find(d => d.value === maxValue);
-    const worstDay = metricData.find(d => d.value === minValue);
-
-    // Calcular médias semanais
-    const weeklyMap = new Map();
-    metricData.forEach(item => {
-      const date = new Date(item.date);
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay() + 1); // Segunda-feira
-      const weekKey = weekStart.toISOString().split('T')[0];
-      
-      if (!weeklyMap.has(weekKey)) {
-        weeklyMap.set(weekKey, []);
-      }
-      weeklyMap.get(weekKey).push(item.value);
-    });
-
-    const weeklyAverages = Array.from(weeklyMap.entries()).map(([weekStart, values]) => ({
-      weekStart,
-      average: values.reduce((sum: number, val: number) => sum + val, 0) / values.length,
-      count: values.length
-    })).sort((a, b) => new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime());
+    // Calcular consistência (precisa de pelo menos 3 dados)
+    let consistency = null;
+    if (valuesWithData.length >= 3) {
+      const variance = valuesWithData.reduce((sum, val) => sum + Math.pow(val - average, 2), 0) / valuesWithData.length;
+      const stdDev = Math.sqrt(variance);
+      consistency = Math.max(0, 100 - ((stdDev / average) * 100));
+    }
 
     return {
       data: metricData,
       average,
       trend,
       consistency,
-      bestDay,
-      worstDay,
-      weeklyAverages
+      checkinsCount: filteredCheckins.length,
+      daysWithData: valuesWithData.length
     };
   };
 
   const analysis = getMetricAnalysis();
 
-  // Função para renderizar diferentes tipos de visualização
+  // Função para renderizar o gráfico simples
   const renderVisualization = () => {
     if (analysis.data.length === 0) {
+      // Verificar se é o primeiro check-in ou se não há dados no período
+      const isFirstTime = analysis.checkinsCount === 0;
+      const hasCheckinsButNoData = analysis.checkinsCount > 0 && analysis.daysWithData === 0;
+      
+      let title, subtitle, icon;
+      
+      if (isFirstTime) {
+        title = "Bem-vindo ao RunMind!";
+        subtitle = "Faça seu primeiro check-in diário para começar a acompanhar seu bem-estar e receber insights personalizados sobre sua performance.";
+        icon = "hand-wave";
+      } else if (hasCheckinsButNoData) {
+        title = "Nenhum dado para este período";
+        subtitle = `Você tem ${analysis.checkinsCount} check-in(s) cadastrado(s), mas nenhum com dados de ${selectedMetricInfo?.label?.toLowerCase() || 'esta métrica'} no período selecionado.`;
+        icon = "calendar-search";
+      } else {
+        title = "Nenhum dado disponível";
+        subtitle = `Faça check-ins com dados de ${selectedMetricInfo?.label?.toLowerCase() || 'bem-estar'} para ver análises detalhadas.`;
+        icon = "chart-line";
+      }
+
       return (
         <Card style={styles.card}>
           <Card.Content>
-            <View style={styles.noDataContainer}>
-              <MaterialCommunityIcons name="chart-line" size={isMobile ? 36 : 48} color="#ccc" />
-              <Text style={styles.noDataText}>Nenhum dado disponível</Text>
-              <Text style={styles.noDataSubtext}>
-                Faça alguns check-ins para ver análises de bem-estar
-              </Text>
-            </View>
+            <EmptyState
+              icon={icon}
+              title={title}
+              subtitle={subtitle}
+              actionText={isFirstTime ? "Fazer Primeiro Check-in" : undefined}
+              onAction={isFirstTime ? () => {
+                // Navegar para tela de check-in - implementar conforme necessário
+                console.log('Navegar para check-in');
+              } : undefined}
+            />
           </Card.Content>
         </Card>
       );
     }
 
-    switch (selectedViewType) {
-      case 'chart':
-        return renderChartView();
-      case 'comparison':
-        return renderComparisonView();
-      case 'evolution':
-        return renderEvolutionView();
-      default:
-        return renderChartView();
-    }
+    return renderChartView();
   };
 
   const renderChartView = () => {
-    const maxValue = Math.max(...analysis.data.map(d => d.value), 1);
+    const displayData = analysis.data;
+    const valuesWithData = displayData.filter(d => d.value > 0).map(d => d.value);
+    const maxValue = valuesWithData.length > 0 ? Math.max(...valuesWithData) : 10;
+    
+    const { startDate, endDate } = getCurrentPeriod();
     
     return (
       <Card style={styles.card}>
@@ -254,191 +385,119 @@ export default function WellbeingChartsTab() {
               />
               <Text style={styles.chartTitle}>{selectedMetricInfo?.label}</Text>
             </View>
-            <Text style={styles.scaleInfo}>{selectedMetricInfo?.scale}</Text>
+            <Text style={styles.periodLabel}>
+              {startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} - {endDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+            </Text>
           </View>
           
           <View style={styles.chartContainer}>
-            <View style={styles.chartBars}>
-              {analysis.data.slice(-7).map((item, index) => (
-                <View key={index} style={styles.barWrapper}>
-                  <View 
-                    style={[
-                      styles.bar,
-                      {
-                        height: (item.value / maxValue) * 100,
-                        backgroundColor: selectedMetricInfo?.color
-                      }
-                    ]}
-                  />
-                  <Text style={styles.barLabel}>
-                    {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                  </Text>
-                  <Text style={styles.barValue}>{item.value.toFixed(1)}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  const renderComparisonView = () => {
-    return (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Comparação Detalhada</Text>
-          
-          <View style={styles.comparisonGrid}>
-            <View style={styles.comparisonItem}>
-              <Text style={styles.comparisonLabel}>Média Geral</Text>
-              <Text style={styles.comparisonValue}>{analysis.average.toFixed(1)}</Text>
-              <ProgressBar 
-                progress={analysis.average / 10} 
-                color={selectedMetricInfo?.color}
-                style={styles.progressBar}
-              />
-            </View>
-            
-            <View style={styles.comparisonItem}>
-              <Text style={styles.comparisonLabel}>Consistência</Text>
-              <Text style={styles.comparisonValue}>{analysis.consistency.toFixed(0)}%</Text>
-              <ProgressBar 
-                progress={analysis.consistency / 100} 
-                color={analysis.consistency > 70 ? '#4CAF50' : analysis.consistency > 40 ? '#FF9800' : '#F44336'}
-                style={styles.progressBar}
-              />
-            </View>
-            
-            {analysis.bestDay && (
-              <View style={styles.comparisonItem}>
-                <Text style={styles.comparisonLabel}>Melhor Dia</Text>
-                <Text style={styles.comparisonValue}>{analysis.bestDay.value.toFixed(1)}</Text>
-                <Text style={styles.comparisonDate}>
-                  {new Date(analysis.bestDay.date).toLocaleDateString('pt-BR')}
-                </Text>
-              </View>
-            )}
-            
-            {analysis.worstDay && (
-              <View style={styles.comparisonItem}>
-                <Text style={styles.comparisonLabel}>Pior Dia</Text>
-                <Text style={styles.comparisonValue}>{analysis.worstDay.value.toFixed(1)}</Text>
-                <Text style={styles.comparisonDate}>
-                  {new Date(analysis.worstDay.date).toLocaleDateString('pt-BR')}
-                </Text>
-              </View>
-            )}
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  const renderEvolutionView = () => {
-    return (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Evolução por Semana</Text>
-          
-          {analysis.weeklyAverages.length > 0 ? (
-            <View style={styles.evolutionContainer}>
-              {analysis.weeklyAverages.map((week, index) => (
-                <View key={index} style={styles.weekItem}>
-                  <View style={styles.weekHeader}>
-                    <Text style={styles.weekLabel}>
-                      Semana {new Date(week.weekStart).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                    </Text>
-                    <Text style={styles.weekCount}>{week.count} check-ins</Text>
-                  </View>
-                  
-                  <View style={styles.weekMetrics}>
-                    <Text style={styles.weekAverage}>{week.average.toFixed(1)}</Text>
-                    <ProgressBar 
-                      progress={week.average / 10} 
-                      color={selectedMetricInfo?.color}
-                      style={styles.weekProgressBar}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContainer}
+            >
+              <View style={styles.chartBars}>
+                {displayData.map((item, index) => (
+                  <View key={index} style={styles.barWrapper}>
+                    <View 
+                      style={[
+                        styles.bar,
+                        {
+                          height: Math.max((item.value / maxValue) * 100, 2),
+                          backgroundColor: item.value > 0 ? selectedMetricInfo?.color : '#e0e0e0'
+                        }
+                      ]}
                     />
+                    <Text style={styles.barLabel}>
+                      {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    </Text>
+                    <Text style={styles.barValue}>
+                      {item.value > 0 ? item.value.toFixed(1) : '-'}
+                    </Text>
                   </View>
-                  
-                  {index > 0 && (
-                    <View style={styles.weekTrend}>
-                      {week.average > analysis.weeklyAverages[index - 1].average ? (
-                        <MaterialCommunityIcons name="trending-up" size={16} color="#4CAF50" />
-                      ) : week.average < analysis.weeklyAverages[index - 1].average ? (
-                        <MaterialCommunityIcons name="trending-down" size={16} color="#F44336" />
-                      ) : (
-                        <MaterialCommunityIcons name="trending-neutral" size={16} color="#666" />
-                      )}
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.noDataText}>Dados insuficientes para análise semanal</Text>
-          )}
+                ))}
+              </View>
+            </ScrollView>
+          </View>
         </Card.Content>
       </Card>
     );
   };
+
+  // Mostrar loading enquanto os dados estão sendo carregados
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <LoadingState 
+          message="Carregando dados de bem-estar..." 
+          icon="heart-pulse"
+        />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Controles de Período e Visualização */}
+      {/* Navegação de Período */}
       <Card style={styles.controlsCard}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Análise de Bem-estar</Text>
           
-          {/* Seleção de Período */}
+          {/* Tipo de Período */}
           <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Período de Análise:</Text>
-            <View style={styles.periodGrid}>
-              {ANALYSIS_PERIODS.map((period) => (
-                <Chip
-                  key={period.value}
-                  selected={selectedPeriod === period.value}
-                  onPress={() => setSelectedPeriod(period.value)}
-                  style={[
-                    styles.controlChip,
-                    selectedPeriod === period.value && { backgroundColor: '#2196F3' + '20' }
-                  ]}
-                  textStyle={[
-                    styles.controlChipText,
-                    selectedPeriod === period.value && { color: '#2196F3', fontWeight: 'bold' }
-                  ]}
-                  compact={isMobile}
-                >
-                  {period.label}
-                </Chip>
-              ))}
-            </View>
-          </View>
-
-          {/* Tipo de Visualização */}
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Tipo de Visualização:</Text>
-            <View style={styles.viewTypeGrid}>
-              {VIEW_TYPES.map((type) => (
+            <Text style={styles.controlLabel}>Tipo de Período:</Text>
+            <View style={styles.periodTypeGrid}>
+              {PERIOD_TYPES.map((type) => (
                 <Chip
                   key={type.value}
-                  selected={selectedViewType === type.value}
-                  onPress={() => setSelectedViewType(type.value)}
+                  selected={periodType === type.value}
+                  onPress={() => setPeriodType(type.value as 'week' | 'month')}
                   style={[
                     styles.controlChip,
-                    selectedViewType === type.value && { backgroundColor: '#4CAF50' + '20' }
+                    periodType === type.value && { backgroundColor: '#2196F3' + '20' }
                   ]}
                   textStyle={[
                     styles.controlChipText,
-                    selectedViewType === type.value && { color: '#4CAF50', fontWeight: 'bold' }
+                    periodType === type.value && { color: '#2196F3', fontWeight: 'bold' }
                   ]}
-                  icon={type.icon}
                   compact={isMobile}
                 >
                   {type.label}
                 </Chip>
               ))}
             </View>
+          </View>
+
+          {/* Navegação */}
+          <View style={styles.navigationSection}>
+            <Button
+              mode="outlined"
+              onPress={() => handleNavigatePeriod('prev')}
+              icon="chevron-left"
+              style={styles.navButton}
+              compact={isMobile}
+            >
+              Anterior
+            </Button>
+            
+            <View style={styles.currentPeriodContainer}>
+              <Text style={styles.currentPeriodText}>
+                {periodType === 'week' ? 
+                  `Semana de ${getCurrentPeriod().startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} a ${getCurrentPeriod().endDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}` :
+                  `Mês de ${getCurrentPeriod().startDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+                }
+              </Text>
+            </View>
+            
+            <Button
+              mode="outlined"
+              onPress={() => handleNavigatePeriod('next')}
+              icon="chevron-right"
+              style={styles.navButton}
+              compact={isMobile}
+            >
+              Próximo
+            </Button>
           </View>
         </Card.Content>
       </Card>
@@ -469,39 +528,45 @@ export default function WellbeingChartsTab() {
             ))}
           </View>
           
-          {/* Descrição da Métrica Selecionada */}
-          {selectedMetricInfo && (
-            <View style={styles.metricDescription}>
-              <Text style={styles.descriptionText}>{selectedMetricInfo.description}</Text>
-              <Text style={styles.scaleText}>{selectedMetricInfo.scale}</Text>
+          {!isAuthenticated && (
+            <View style={styles.noAuthContainer}>
+              <MaterialCommunityIcons name="account-alert" size={24} color="#666" />
+              <Text style={styles.noAuthText}>Faça login para ver seus dados de bem-estar</Text>
             </View>
           )}
         </Card.Content>
       </Card>
 
-      {/* Resumo de Tendência */}
-      {analysis.data.length > 0 && (
-        <Card style={styles.summaryCard}>
-          <Card.Content>
-            <View style={styles.summaryHeader}>
-              <MaterialCommunityIcons 
-                name="chart-timeline-variant" 
-                size={isMobile ? 18 : 20} 
-                color="#666" 
-              />
-              <Text style={styles.summaryTitle}>Resumo - {selectedPeriodInfo?.label}</Text>
+      {/* Visualização Principal */}
+      {renderVisualization()}
+
+      {/* Resumo com Dados Reais e Legendas */}
+      <Card style={styles.summaryCard}>
+        <Card.Content>
+          <View style={styles.summaryHeader}>
+            <MaterialCommunityIcons 
+              name="chart-timeline-variant" 
+              size={isMobile ? 18 : 20} 
+              color="#666" 
+            />
+            <Text style={styles.summaryTitle}>
+              Resumo - {periodType === 'week' ? 'Semana' : 'Mês'}
+            </Text>
+          </View>
+          
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Média</Text>
+              <Text style={styles.summaryLegend}>Valor médio da métrica no período</Text>
+              <Text style={[styles.summaryValue, { color: selectedMetricInfo?.color }]}>
+                {analysis.average !== null ? analysis.average.toFixed(1) : '-'}
+              </Text>
             </View>
             
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Média</Text>
-                <Text style={[styles.summaryValue, { color: selectedMetricInfo?.color }]}>
-                  {analysis.average.toFixed(1)}
-                </Text>
-              </View>
-              
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Tendência</Text>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Tendência</Text>
+              <Text style={styles.summaryLegend}>Evolução da primeira para segunda metade</Text>
+              {analysis.trend !== null ? (
                 <View style={styles.trendContainer}>
                   <MaterialCommunityIcons 
                     name={
@@ -525,32 +590,33 @@ export default function WellbeingChartsTab() {
                      analysis.trend === 'declining' ? 'Piorando' : 'Estável'}
                   </Text>
                 </View>
-              </View>
-              
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Check-ins</Text>
-                <Text style={styles.summaryValue}>{analysis.data.length}</Text>
-              </View>
-              
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Consistência</Text>
-                <Text style={[
-                  styles.summaryValue,
-                  { 
-                    color: analysis.consistency > 70 ? '#4CAF50' : 
-                           analysis.consistency > 40 ? '#FF9800' : '#F44336'
-                  }
-                ]}>
-                  {analysis.consistency.toFixed(0)}%
-                </Text>
-              </View>
+              ) : (
+                <Text style={styles.summaryValue}>-</Text>
+              )}
             </View>
-          </Card.Content>
-        </Card>
-      )}
-
-      {/* Visualização Principal */}
-      {renderVisualization()}
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Check-ins</Text>
+              <Text style={styles.summaryLegend}>Total de avaliações registradas</Text>
+              <Text style={styles.summaryValue}>{analysis.checkinsCount}</Text>
+            </View>
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Consistência</Text>
+              <Text style={styles.summaryLegend}>Regularidade dos valores (baixa variação)</Text>
+              <Text style={[
+                styles.summaryValue,
+                { 
+                  color: analysis.consistency !== null && analysis.consistency > 70 ? '#4CAF50' : 
+                         analysis.consistency !== null && analysis.consistency > 40 ? '#FF9800' : '#F44336'
+                }
+              ]}>
+                {analysis.consistency !== null ? analysis.consistency.toFixed(0) + '%' : '-'}
+              </Text>
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
     </ScrollView>
   );
 }
@@ -581,15 +647,52 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 8,
   },
-  periodGrid: {
+  periodTypeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: isMobile ? 6 : 8,
   },
-  viewTypeGrid: {
+  navigationSection: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: isMobile ? 6 : 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  navButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    minWidth: isMobile ? 80 : 100,
+  },
+  currentPeriodContainer: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  currentPeriodText: {
+    fontSize: isMobile ? 14 : 16,
+    fontWeight: 'bold',
+    color: '#2196F3',
+    textAlign: 'center',
+  },
+  periodLabel: {
+    fontSize: isMobile ? 10 : 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  noAuthContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  noAuthText: {
+    fontSize: isMobile ? 12 : 14,
+    color: '#666',
+    marginLeft: 8,
   },
   controlChip: {
     marginBottom: 8,
@@ -671,6 +774,15 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 4,
     textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  summaryLegend: {
+    fontSize: isMobile ? 8 : 10,
+    color: '#999',
+    marginBottom: 6,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: isMobile ? 12 : 14,
   },
   summaryValue: {
     fontSize: isMobile ? 16 : 18,
@@ -724,15 +836,22 @@ const styles = StyleSheet.create({
   },
   chartBars: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
     alignItems: 'flex-end',
     height: '100%',
+    paddingHorizontal: 8,
+  },
+  scrollContainer: {
+    paddingHorizontal: 12,
+    minWidth: '100%',
+    justifyContent: 'flex-start',
   },
   barWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
-    width: isMobile ? 32 : 40,
+    width: isMobile ? 40 : 48,
     height: '100%',
+    marginHorizontal: isMobile ? 6 : 8,
   },
   bar: {
     width: '100%',

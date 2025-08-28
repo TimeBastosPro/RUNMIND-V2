@@ -3,7 +3,10 @@ import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Card, Text, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
-import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
+import { filterDataByPeriod, getPeriodLabel, ExtendedPeriodType } from '../../../utils/periodFilter';
+import EmptyState from '../../../components/ui/EmptyState';
+import LoadingState from '../../../components/ui/LoadingState';
+import { validateWellbeingMetric, validateTrainingMetric, validateDuration, logValidationErrors } from '../../../utils/dataValidation';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isMobile = screenWidth < 768;
@@ -50,7 +53,7 @@ const WELLBEING_METRICS = [
     value: 'energy',
     icon: 'heart',
     color: '#E91E63',
-    field: 'emocional',
+    field: 'energy_score',
   },
 ];
 
@@ -89,9 +92,9 @@ const TRAINING_METRICS = [
 export default function CrossAnalysisTab() {
   const [selectedWellbeingMetric, setSelectedWellbeingMetric] = useState('sleep_quality');
   const [selectedTrainingMetric, setSelectedTrainingMetric] = useState('distance');
-  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'custom'>('month');
+  const [selectedPeriod, setSelectedPeriod] = useState<ExtendedPeriodType>('month');
   
-  const { recentCheckins, trainingSessions, loadRecentCheckins } = useCheckinStore();
+  const { recentCheckins, trainingSessions, loadRecentCheckins, isLoading } = useCheckinStore();
 
   useEffect(() => {
     loadRecentCheckins();
@@ -106,66 +109,79 @@ export default function CrossAnalysisTab() {
       return [];
     }
 
-    // Filtrar check-ins por período
-    let filteredCheckins = recentCheckins;
-    if (selectedPeriod === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      filteredCheckins = recentCheckins.filter(checkin => new Date(checkin.date) >= weekAgo);
-    } else if (selectedPeriod === 'month') {
-      const monthAgo = new Date();
-      monthAgo.setMonth(monthAgo.getMonth() - 1);
-      filteredCheckins = recentCheckins.filter(checkin => new Date(checkin.date) >= monthAgo);
-    }
+    // Filtrar check-ins por período usando função centralizada
+    const filteredCheckins = filterDataByPeriod(recentCheckins, selectedPeriod);
+    
+    // Filtrar treinos por período usando função centralizada
+    // ✅ CORRIGIDO: Incluir treinos sem status definido como 'completed' se tiverem dados
+    const completedSessions = trainingSessions.filter(session => {
+      if (session.status === 'completed') return true;
+      // Se não tem status definido mas tem dados de execução, considerar como completed
+      if (!session.status && (session.distance_km || session.perceived_effort || session.session_satisfaction || session.avg_heart_rate)) {
+        return true;
+      }
+      return false;
+    });
+    const filteredSessions = filterDataByPeriod(completedSessions, selectedPeriod);
 
-    // Filtrar treinos por período
-    let filteredSessions = trainingSessions.filter(session => session.status === 'completed');
-    if (selectedPeriod === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      filteredSessions = filteredSessions.filter(session => new Date(session.training_date) >= weekAgo);
-    } else if (selectedPeriod === 'month') {
-      const monthAgo = new Date();
-      monthAgo.setMonth(monthAgo.getMonth() - 1);
-      filteredSessions = filteredSessions.filter(session => new Date(session.training_date) >= monthAgo);
-    }
-
-    // Obter dados de bem-estar
+    // Obter dados de bem-estar com validação
+    const validationErrors: string[] = [];
+    
     const wellbeingData = filteredCheckins
       .map(checkin => {
         const field = selectedWellbeingInfo?.field as keyof typeof checkin;
         const value = checkin[field];
         
+        const validationResult = validateWellbeingMetric(value, field as string);
+        
+        if (!validationResult.isValid) {
+          validationErrors.push(validationResult.error || 'Erro de validação de bem-estar');
+        }
+        
         return {
           date: checkin.date,
-          wellbeing: typeof value === 'number' ? value : 0,
+          wellbeing: validationResult.isValid ? validationResult.value : 0,
         };
       })
       .filter(item => item.wellbeing > 0);
+    
+    logValidationErrors(validationErrors);
 
-    // Obter dados de treino
+    // Obter dados de treino com validação
+    const trainingValidationErrors: string[] = [];
+    
     const trainingData = filteredSessions
       .map(session => {
-        let value = 0;
+        let validationResult;
         
         if (selectedTrainingInfo?.field === 'distance_km') {
-          value = session.distance_km || 0;
+          validationResult = validateTrainingMetric(session.distance_km, 'distance_km', 1000);
         } else if (selectedTrainingInfo?.field === 'duration_minutes') {
-          const hours = session.duracao_horas ? parseInt(String(session.duracao_horas)) : 0;
-          const minutes = session.duracao_minutos ? parseInt(String(session.duracao_minutos)) : 0;
-          value = hours * 60 + minutes;
+          validationResult = validateDuration(
+            session.duracao_horas, 
+            session.duracao_minutos, 
+            'duration'
+          );
         } else if (selectedTrainingInfo?.field === 'perceived_effort') {
-          value = session.perceived_effort || 0;
+          validationResult = validateTrainingMetric(session.perceived_effort, 'perceived_effort', 10);
         } else if (selectedTrainingInfo?.field === 'session_satisfaction') {
-          value = session.session_satisfaction || 0;
+          validationResult = validateTrainingMetric(session.session_satisfaction, 'session_satisfaction', 5);
+        } else {
+          validationResult = { isValid: false, value: 0, error: 'Campo de treino não reconhecido' };
+        }
+        
+        if (!validationResult.isValid) {
+          trainingValidationErrors.push(validationResult.error || 'Erro de validação de treino');
         }
         
         return {
           date: session.training_date,
-          training: value,
+          training: validationResult.isValid ? validationResult.value : 0,
         };
       })
       .filter(item => item.training > 0);
+    
+    logValidationErrors(trainingValidationErrors);
 
     // Combinar dados por data
     const combinedData: Array<{date: string, wellbeing: number, training: number}> = [];
@@ -193,8 +209,7 @@ export default function CrossAnalysisTab() {
     });
 
     return combinedData
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(-10); // Últimos 10 dias com dados
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
   const correlationData = getCorrelationData();
@@ -253,6 +268,18 @@ export default function CrossAnalysisTab() {
   };
 
   const correlation = calculateCorrelation();
+
+  // Mostrar loading enquanto os dados estão sendo carregados
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <LoadingState 
+          message="Carregando dados de correlação..." 
+          icon="chart-scatter-plot"
+        />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -395,13 +422,11 @@ export default function CrossAnalysisTab() {
               </View>
             </>
           ) : (
-            <View style={styles.noDataContainer}>
-              <MaterialCommunityIcons name="chart-line" size={isMobile ? 36 : 48} color="#ccc" />
-              <Text style={styles.noDataText}>Nenhum dado para correlação</Text>
-              <Text style={styles.noDataSubtext}>
-                Faça check-ins e treinos no mesmo dia para ver correlações
-              </Text>
-            </View>
+            <EmptyState
+              icon="chart-scatter-plot"
+              title="Nenhum dado para correlação"
+              subtitle={`Para ver correlações entre ${selectedWellbeingInfo?.label || 'bem-estar'} e ${selectedTrainingInfo?.label || 'treino'}, você precisa ter check-ins e treinos no mesmo período. Faça check-ins diários e complete treinos para descobrir padrões interessantes!`}
+            />
           )}
         </Card.Content>
       </Card>

@@ -5,6 +5,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
 import PeriodSelector, { PeriodType } from '../../../components/ui/PeriodSelector';
 import { filterDataByPeriod, getPeriodLabel } from '../../../utils/periodFilter';
+import LoadingState from '../../../components/ui/LoadingState';
+import { validateNumericValue, validateDuration, logValidationErrors } from '../../../utils/dataValidation';
 
 const TRAINING_METRICS = [
   { 
@@ -58,7 +60,7 @@ export default function PsychologicalChartsTab() {
   
   const [customStartDate, setCustomStartDate] = useState<Date>(defaultStartDate);
   const [customEndDate, setCustomEndDate] = useState<Date>(defaultEndDate);
-  const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
+  const { trainingSessions, fetchTrainingSessions, isLoading } = useCheckinStore();
 
   useEffect(() => {
     fetchTrainingSessions();
@@ -81,37 +83,93 @@ export default function PsychologicalChartsTab() {
     if (!field) return [];
 
     // Filtrar apenas treinos completados
-    const completedSessions = trainingSessions.filter(session => session.status === 'completed');
+    // ✅ CORRIGIDO: Incluir treinos sem status definido como 'completed' se tiverem dados
+    const completedSessions = trainingSessions.filter(session => {
+      if (session.status === 'completed') return true;
+      // Se não tem status definido mas tem dados de execução, considerar como completed
+      if (!session.status && (session.distance_km || session.perceived_effort || session.session_satisfaction || session.avg_heart_rate)) {
+        return true;
+      }
+      return false;
+    });
     
     // Filtrar dados por período
     const filteredSessions = filterDataByPeriod(completedSessions, selectedPeriod, customStartDate, customEndDate);
     
-    return filteredSessions
+    const validationErrors: string[] = [];
+    
+    const processedData = filteredSessions
       .map(session => {
         const value = session[field as keyof typeof session];
-        if (value === undefined || value === null) return null;
         
-        let numericValue = 0;
+        let validationResult;
         if (field === 'duration_minutes') {
-          // Converter duração para minutos
-          const hours = session.duracao_horas ? parseInt(session.duracao_horas) : 0;
-          const minutes = session.duracao_minutos ? parseInt(session.duracao_minutos) : 0;
-          numericValue = hours * 60 + minutes;
+          // Validar duração usando função especializada
+          validationResult = validateDuration(
+            session.duracao_horas, 
+            session.duracao_minutos, 
+            'duration'
+          );
         } else {
-          numericValue = typeof value === 'number' ? value : parseFloat(value as string) || 0;
+          // Validar outros campos numéricos
+          validationResult = validateNumericValue(value, field as string, 0);
+        }
+        
+        if (!validationResult.isValid) {
+          validationErrors.push(validationResult.error || 'Erro de validação');
+          return null;
         }
         
         return {
           date: session.training_date,
-          value: numericValue,
+          value: validationResult.value,
         };
       })
-      .filter(item => item !== null && item.value > 0)
-      .sort((a, b) => new Date(a!.date).getTime() - new Date(b!.date).getTime())
-      .slice(-7); // Últimos 7 treinos
+      .filter(item => item !== null && item!.value > 0)
+      .sort((a, b) => new Date(a!.date).getTime() - new Date(b!.date).getTime());
+    
+    // Log de erros de validação
+    logValidationErrors(validationErrors);
+    
+    return processedData;
   };
 
-  const metricData = getMetricData();
+  const rawMetricData = getMetricData();
+  
+  // Agrupar dados por semana se há muitos dados (>14 pontos)
+  const getProcessedMetricData = () => {
+    if (rawMetricData.length <= 14) {
+      return rawMetricData; // Mostrar todos os dados se são poucos
+    }
+    
+    // Agrupar por semana para períodos longos
+    const weeklyData = new Map<string, { total: number; count: number; date: string }>();
+    
+    rawMetricData.forEach(item => {
+      const date = new Date(item.date);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay()); // Domingo da semana
+      const weekKey = weekStart.toISOString().split('T')[0];
+      
+      if (!weeklyData.has(weekKey)) {
+        weeklyData.set(weekKey, { total: 0, count: 0, date: weekKey });
+      }
+      
+      const weekData = weeklyData.get(weekKey)!;
+      weekData.total += item.value;
+      weekData.count += 1;
+    });
+    
+    // Converter para array e calcular médias
+    return Array.from(weeklyData.values())
+      .map(week => ({
+        date: week.date,
+        value: week.total / week.count // Média da semana
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+  
+  const metricData = getProcessedMetricData();
   const maxValue = Math.max(...metricData.map(d => d?.value || 0), 1);
 
   // Calcular estatísticas
@@ -149,6 +207,18 @@ export default function PsychologicalChartsTab() {
   };
 
   const statistics = getStatistics();
+
+  // Mostrar loading enquanto os dados estão sendo carregados
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <LoadingState 
+          message="Carregando dados de treinos..." 
+          icon="chart-line"
+        />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>

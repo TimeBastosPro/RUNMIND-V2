@@ -356,8 +356,22 @@ export default function TrainingScreen() {
     const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
 
     useEffect(() => {
-      setCurrentWeekIndex(0);
-    }, [displayDate]);
+      // ✅ CORRIGIDO: Encontrar a semana que contém o dia atual
+      const today = new Date();
+      const todayString = formatDate(today);
+      
+      // Encontrar qual semana contém o dia de hoje
+      let weekIndex = 0;
+      for (let i = 0; i < weeks.length; i++) {
+        const weekDays = weeks[i].map(day => formatDate(day));
+        if (weekDays.includes(todayString)) {
+          weekIndex = i;
+          break;
+        }
+      }
+      
+      setCurrentWeekIndex(weekIndex);
+    }, [displayDate, weeks]);
 
     const trainingSessionsByDate = useMemo(() => {
         const map: Record<string, TrainingSession> = {};

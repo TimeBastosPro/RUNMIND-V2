@@ -3,12 +3,18 @@ import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Card, Text, Chip, Button, ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCheckinStore } from '../../../stores/checkin';
+import { useAuthStore } from '../../../stores/auth';
+import { navigatePeriod, ExtendedPeriodType } from '../../../utils/periodFilter';
+import EmptyState from '../../../components/ui/EmptyState';
+import LoadingState from '../../../components/ui/LoadingState';
+import { validateTrainingMetric, validateDuration, validateHeartRate, validateDistance, validateElevation, logValidationErrors } from '../../../utils/dataValidation';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isMobile = screenWidth < 768;
 
-// Métricas de Treino com descrições detalhadas
+// TODAS as Métricas de Treino Disponíveis (Planejado + Realizado)
 const TRAINING_METRICS = [
+  // === MÉTRICAS BÁSICAS ===
   { 
     label: 'Distância', 
     value: 'distance',
@@ -17,6 +23,7 @@ const TRAINING_METRICS = [
     unit: 'km',
     field: 'distance_km',
     description: 'Distância total percorrida no treino',
+    type: 'both' // disponível em treinos planejados e realizados
   },
   { 
     label: 'Duração', 
@@ -26,7 +33,52 @@ const TRAINING_METRICS = [
     unit: 'min',
     field: 'duration_minutes',
     description: 'Tempo total de duração do treino',
+    type: 'both'
   },
+  
+  // === MÉTRICAS DE PLANEJAMENTO ===
+  { 
+    label: 'Modalidade', 
+    value: 'modalidade',
+    icon: 'run-fast',
+    color: '#9C27B0',
+    unit: '',
+    field: 'modalidade',
+    description: 'Tipo de modalidade do treino (corrida, força, etc.)',
+    type: 'planned'
+  },
+  { 
+    label: 'Tipo de Treino', 
+    value: 'treino_tipo',
+    icon: 'chart-timeline-variant',
+    color: '#FF5722',
+    unit: '',
+    field: 'treino_tipo',
+    description: 'Tipo específico do treino (contínuo, intervalado, etc.)',
+    type: 'planned'
+  },
+  { 
+    label: 'Terreno', 
+    value: 'terreno',
+    icon: 'terrain',
+    color: '#795548',
+    unit: '',
+    field: 'terreno',
+    description: 'Tipo de terreno do treino (asfalto, trilha, etc.)',
+    type: 'planned'
+  },
+  { 
+    label: 'Intensidade Planejada', 
+    value: 'intensidade',
+    icon: 'speedometer',
+    color: '#FF9800',
+    unit: 'Z1-Z5',
+    field: 'intensidade',
+    description: 'Zona de intensidade planejada para o treino',
+    type: 'planned'
+  },
+  
+  // === MÉTRICAS DE EXECUÇÃO ===
   { 
     label: 'Esforço Percebido', 
     value: 'perceived_effort',
@@ -34,25 +86,65 @@ const TRAINING_METRICS = [
     color: '#FF9800',
     unit: '1-10',
     field: 'perceived_effort',
-    description: 'Nível de esforço percebido durante o treino',
+    description: 'Nível de esforço percebido durante o treino (PSE)',
+    type: 'completed'
   },
   { 
     label: 'Satisfação', 
     value: 'satisfaction',
     icon: 'heart-outline',
     color: '#E91E63',
-    unit: '1-10',
+    unit: '1-5',
     field: 'session_satisfaction',
     description: 'Nível de satisfação com o treino realizado',
+    type: 'completed'
   },
+  { 
+    label: 'Frequência Cardíaca Média', 
+    value: 'avg_heart_rate',
+    icon: 'heart-pulse',
+    color: '#F44336',
+    unit: 'bpm',
+    field: 'avg_heart_rate',
+    description: 'Frequência cardíaca média durante o treino',
+    type: 'completed'
+  },
+  { 
+    label: 'FC Máxima', 
+    value: 'max_heart_rate',
+    icon: 'heart-flash',
+    color: '#D32F2F',
+    unit: 'bpm',
+    field: 'max_heart_rate',
+    description: 'Frequência cardíaca máxima atingida no treino',
+    type: 'completed'
+  },
+  { 
+    label: 'Ganho de Elevação', 
+    value: 'elevation_gain',
+    icon: 'trending-up',
+    color: '#388E3C',
+    unit: 'm',
+    field: 'elevation_gain_meters',
+    description: 'Metros de elevação ganhos durante o treino',
+    type: 'completed'
+  },
+  { 
+    label: 'Perda de Elevação', 
+    value: 'elevation_loss',
+    icon: 'trending-down',
+    color: '#1976D2',
+    unit: 'm',
+    field: 'elevation_loss_meters',
+    description: 'Metros de elevação perdidos durante o treino',
+    type: 'completed'
+  }
 ];
 
-// Períodos de análise
-const ANALYSIS_PERIODS = [
-  { label: 'Última Semana', value: 'week', days: 7 },
-  { label: 'Últimas 2 Semanas', value: 'two_weeks', days: 14 },
-  { label: 'Último Mês', value: 'month', days: 30 },
-  { label: 'Últimos 3 Meses', value: 'three_months', days: 90 },
+// Tipos de período para navegação
+const PERIOD_TYPES = [
+  { label: 'Semana', value: 'week' },
+  { label: 'Mês', value: 'month' },
 ];
 
 // Tipos de análise
@@ -90,56 +182,249 @@ const VIEW_TYPES = [
 export default function TrainingChartsTab() {
   const [selectedMetric, setSelectedMetric] = useState('distance');
   const [selectedAnalysis, setSelectedAnalysis] = useState('completed');
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
-  const [selectedViewType, setSelectedViewType] = useState('chart');
+  const [periodType, setPeriodType] = useState<'week' | 'month'>('week');
   
-  const { trainingSessions, fetchTrainingSessions } = useCheckinStore();
+  // Inicializar com a data atual para sincronizar com a aba de treinos
+  const [currentDate, setCurrentDate] = useState(() => {
+    const today = new Date();
+    return today;
+  });
+  
+  const { trainingSessions, fetchTrainingSessions, isLoading } = useCheckinStore();
+  const { user, isAuthenticated } = useAuthStore();
+
+  // Função centralizada para processar métricas de treino com validação
+  const getMetricValue = (session: any, metricValue: string): number => {
+    const validationErrors: string[] = [];
+    let validationResult;
+
+    switch (metricValue) {
+      case 'distance':
+        validationResult = validateDistance(session.distance_km, 'distance_km');
+        break;
+      case 'duration':
+        validationResult = validateDuration(
+          session.duracao_horas, 
+          session.duracao_minutos, 
+          'duration'
+        );
+        break;
+      case 'perceived_effort':
+        validationResult = validateTrainingMetric(session.perceived_effort, 'perceived_effort', 10);
+        break;
+      case 'satisfaction':
+        validationResult = validateTrainingMetric(session.session_satisfaction, 'session_satisfaction', 5);
+        break;
+      case 'avg_heart_rate':
+        validationResult = validateHeartRate(session.avg_heart_rate, 'avg_heart_rate');
+        break;
+      case 'max_heart_rate':
+        validationResult = validateHeartRate(session.max_heart_rate, 'max_heart_rate');
+        break;
+      case 'elevation_gain':
+        validationResult = validateElevation(session.elevation_gain_meters, 'elevation_gain_meters');
+        break;
+      case 'elevation_loss':
+        validationResult = validateElevation(session.elevation_loss_meters, 'elevation_loss_meters');
+        break;
+      default:
+        validationResult = { isValid: false, value: 0, error: `Métrica ${metricValue} não reconhecida` };
+    }
+
+    if (!validationResult.isValid) {
+      validationErrors.push(validationResult.error || 'Erro de validação');
+      logValidationErrors(validationErrors);
+    }
+
+    return validationResult.isValid ? validationResult.value : 0;
+  };
 
   useEffect(() => {
-    fetchTrainingSessions();
-  }, [fetchTrainingSessions]);
+    // ✅ GARANTIR: Carregar apenas dados reais do usuário logado
+    if (isAuthenticated && user?.id) {
+      console.log('🔍 DEBUG - Carregando treinos do usuário logado:', user.id);
+      fetchTrainingSessions(); // Carrega treinos reais do usuário logado
+    }
+  }, [fetchTrainingSessions, isAuthenticated, user?.id]);
+
+  // ✅ DEBUG: Log dos dados do store
+  useEffect(() => {
+    console.log('🔍 DEBUG - Dados do Store:', {
+      isAuthenticated,
+      userId: user?.id,
+      totalTrainingSessions: trainingSessions.length,
+      sampleSessions: trainingSessions.slice(0, 3).map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance: s.distance_km,
+        userId: s.user_id
+      }))
+    });
+  }, [trainingSessions, isAuthenticated, user?.id]);
 
   const selectedMetricInfo = TRAINING_METRICS.find(m => m.value === selectedMetric);
   const selectedAnalysisInfo = ANALYSIS_TYPES.find(a => a.value === selectedAnalysis);
-  const selectedPeriodInfo = ANALYSIS_PERIODS.find(p => p.value === selectedPeriod);
 
-  // Filtrar treinos por período selecionado
+  // Calcular período atual baseado na data e tipo selecionado
+  const getCurrentPeriod = () => {
+    // ✅ CORRIGIDO: Usar data local sem problemas de fuso horário
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const day = currentDate.getDate();
+    
+    if (periodType === 'week') {
+      // Início da semana (segunda-feira)
+      const startOfWeek = new Date(year, month, day);
+      const dayOfWeek = startOfWeek.getDay(); // 0 = domingo, 1 = segunda, etc.
+      
+      // Calcular diferença para segunda-feira
+      let diff = 1 - dayOfWeek; // Para segunda-feira
+      if (dayOfWeek === 0) diff = -6; // Se for domingo, voltar 6 dias
+      
+      startOfWeek.setDate(startOfWeek.getDate() + diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      // Fim da semana (domingo)
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+      
+      console.log('🔍 DEBUG - Cálculo da Semana (Treinos) - ATUALIZADO:', {
+        inputDate: currentDate.toISOString().split('T')[0],
+        dayOfWeek,
+        diff,
+        startOfWeek: startOfWeek.toISOString().split('T')[0],
+        endOfWeek: endOfWeek.toISOString().split('T')[0],
+        startWeekday: startOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' }),
+        endWeekday: endOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' }),
+        timestamp: new Date().toISOString()
+      });
+      
+      return { startDate: startOfWeek, endDate: endOfWeek };
+    } else {
+      // Início do mês
+      const startOfMonth = new Date(year, month, 1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      // Fim do mês
+      const endOfMonth = new Date(year, month + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
+      
+      return { startDate: startOfMonth, endDate: endOfMonth };
+    }
+  };
+
+  // Navegar para período anterior/posterior usando função centralizada
+  const handleNavigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = navigatePeriod(currentDate, periodType, direction);
+    setCurrentDate(newDate);
+  };
+
+  // Filtrar treinos pelo período atual
   const getFilteredSessions = () => {
     if (!trainingSessions || trainingSessions.length === 0) return [];
     
-    const today = new Date();
-    const startDate = new Date();
-    startDate.setDate(today.getDate() - (selectedPeriodInfo?.days || 7));
+    const { startDate, endDate } = getCurrentPeriod();
     
     return trainingSessions.filter(session => {
       if (!session.training_date) return false;
       const sessionDate = new Date(session.training_date);
-      return sessionDate >= startDate && sessionDate <= today;
+      sessionDate.setHours(0, 0, 0, 0); // Normalizar para início do dia
+      return sessionDate >= startDate && sessionDate <= endDate;
     }).sort((a, b) => new Date(a.training_date).getTime() - new Date(b.training_date).getTime());
   };
 
-  // Processar dados de treinos para análise
+  // Processar dados de treinos para análise - APENAS DADOS REAIS
   const getTrainingAnalysis = () => {
-    const filteredSessions = getFilteredSessions();
-    
-    if (filteredSessions.length === 0) {
+    // ✅ GARANTIR: Só processar se usuário está autenticado
+    if (!isAuthenticated || !user?.id) {
+      console.log('🚫 Usuário não autenticado - não exibindo dados');
       return {
         completedSessions: [],
         plannedSessions: [],
-        completionRate: 0,
+        completionRate: null,
         averageMetrics: {},
         weeklyData: [],
-        comparisonData: []
+        comparisonData: [],
+        sessionsCount: 0,
+        userSessions: [] // ✅ NOVO: Array vazio para usuário não logado
+      };
+    }
+    
+    const filteredSessions = getFilteredSessions();
+    const periodInfo = getCurrentPeriod();
+    
+    // ✅ GARANTIR: Filtrar apenas sessões do usuário logado
+    const userSessions = filteredSessions.filter(session => session.user_id === user.id);
+    
+    console.log('🔍 DEBUG - Análise Treinos Real (USUÁRIO LOGADO):', {
+      userId: user.id,
+      periodType,
+      currentDate: currentDate.toISOString().split('T')[0],
+      startDate: periodInfo.startDate.toISOString().split('T')[0],
+      endDate: periodInfo.endDate.toISOString().split('T')[0],
+      totalSessionsDB: filteredSessions.length,
+      userSessionsOnly: userSessions.length,
+      selectedMetric,
+      selectedAnalysis,
+      // ✅ NOVO: Debug detalhado dos dados
+      allUserSessions: userSessions.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        type: s.training_type || 'unknown',
+        distance: s.distance_km,
+        status: s.status || 'unknown'
+      }))
+    });
+    
+    if (userSessions.length === 0) {
+      return {
+        completedSessions: [],
+        plannedSessions: [],
+        completionRate: null,
+        averageMetrics: {},
+        weeklyData: [],
+        comparisonData: [],
+        sessionsCount: 0,
+        userSessions: []
       };
     }
 
-    // Separar treinos por status
-    const completedSessions = filteredSessions.filter(s => s.status === 'completed');
-    const plannedSessions = filteredSessions.filter(s => s.status === 'planned');
+    // Separar treinos por status - APENAS DO USUÁRIO LOGADO
+    // ✅ CORRIGIDO: Incluir treinos sem status definido como 'completed' se tiverem dados
+    const completedSessions = userSessions.filter(s => {
+      if (s.status === 'completed') return true;
+      // Se não tem status definido mas tem dados de execução, considerar como completed
+      if (!s.status && (s.distance_km || s.perceived_effort || s.session_satisfaction || s.avg_heart_rate)) {
+        return true;
+      }
+      return false;
+    });
+    const plannedSessions = userSessions.filter(s => s.status === 'planned');
+    
+    console.log('🔍 DEBUG - Separação por Status - ATUALIZADO:', {
+      totalUserSessions: userSessions.length,
+      completedCount: completedSessions.length,
+      plannedCount: plannedSessions.length,
+      statusValues: [...new Set(userSessions.map(s => s.status))],
+      completedSample: completedSessions.slice(0, 2).map(s => ({ id: s.id, date: s.training_date, status: s.status })),
+      plannedSample: plannedSessions.slice(0, 2).map(s => ({ id: s.id, date: s.training_date, status: s.status })),
+      allSessionsWithData: userSessions.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance: s.distance_km,
+        effort: s.perceived_effort,
+        satisfaction: s.session_satisfaction,
+        heartRate: s.avg_heart_rate
+      })),
+      timestamp: new Date().toISOString()
+    });
 
-    // Calcular taxa de conclusão
+    // Calcular taxa de conclusão - real
     const completionRate = plannedSessions.length > 0 ? 
-      (completedSessions.length / plannedSessions.length) * 100 : 0;
+      (completedSessions.length / plannedSessions.length) * 100 : null;
 
     // Calcular métricas médias para treinos realizados
     const averageMetrics = TRAINING_METRICS.reduce((acc, metric) => {
@@ -194,7 +479,7 @@ export default function TrainingChartsTab() {
               return session.perceived_effort || 0;
             case 'satisfaction':
               return session.session_satisfaction || 0;
-            default:
+          default:
               return 0;
           }
         }).filter((v: number) => v > 0);
@@ -212,7 +497,7 @@ export default function TrainingChartsTab() {
       };
     }).sort((a, b) => new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime());
 
-    // Dados de comparação (últimos 7 dias)
+    // Dados de comparação baseados no período real selecionado
     const comparisonData: Array<{
       date: string;
       planned: number;
@@ -220,28 +505,89 @@ export default function TrainingChartsTab() {
       plannedMetric: number;
       completedMetric: number;
     }> = [];
-    const last7Days: string[] = [];
-    const today = new Date();
     
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - i);
-      last7Days.push(date.toISOString().split('T')[0]);
+    // ✅ CORRIGIDO: Usar datas do período selecionado, não últimos 7 dias fixos
+    const currentPeriod = getCurrentPeriod();
+    const periodDays: string[] = [];
+    const current = new Date(currentPeriod.startDate);
+    
+    // Garantir que o loop pare no domingo correto
+    const endDateNormalized = new Date(currentPeriod.endDate);
+    endDateNormalized.setHours(0, 0, 0, 0);
+    
+    while (current <= endDateNormalized) {
+      periodDays.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
     }
+    
+    console.log('🔍 DEBUG - Datas do Período (Treinos):', {
+      totalDays: periodDays.length,
+      firstDate: periodDays[0],
+      lastDate: periodDays[periodDays.length - 1],
+      allDates: periodDays.map(date => {
+        const d = new Date(date);
+        return `${date} (${d.toLocaleDateString('pt-BR', { weekday: 'short' })})`;
+      })
+    });
 
-    last7Days.forEach(dateStr => {
-      const plannedForDay = plannedSessions.filter(s => s.training_date === dateStr);
-      const completedForDay = completedSessions.filter(s => s.training_date === dateStr);
+    periodDays.forEach(dateStr => {
+      const plannedForDay = plannedSessions.filter(s => {
+        const sessionDate = new Date(s.training_date).toISOString().split('T')[0];
+        return sessionDate === dateStr;
+      });
+      const completedForDay = completedSessions.filter(s => {
+        const sessionDate = new Date(s.training_date).toISOString().split('T')[0];
+        return sessionDate === dateStr;
+      });
+      
+      // ✅ DEBUG: Log detalhado para cada dia
+      if (plannedForDay.length > 0 || completedForDay.length > 0) {
+        console.log(`🔍 DEBUG - Data ${dateStr}:`, {
+          planned: plannedForDay.length,
+          completed: completedForDay.length,
+          plannedSessions: plannedForDay.map(s => ({ id: s.id, date: s.training_date, distance: s.distance_km, status: s.status })),
+          completedSessions: completedForDay.map(s => ({ id: s.id, date: s.training_date, distance: s.distance_km, status: s.status }))
+        });
+      }
+      
+      // ✅ CORRIGIDO: Calcular métricas corretamente
+      let plannedMetric = 0;
+      let completedMetric = 0;
+      
+      if (plannedForDay.length > 0) {
+        // Para treinos planejados, somar todos os valores do dia
+        plannedMetric = plannedForDay.reduce((sum, session) => {
+          const value = getMetricValue(session, selectedMetric);
+          console.log(`🔍 DEBUG - Planned session ${session.id} metric value:`, value);
+          return sum + value;
+        }, 0);
+      }
+      
+      if (completedForDay.length > 0) {
+        // Para treinos completados, somar todos os valores do dia
+        completedMetric = completedForDay.reduce((sum, session) => {
+          const value = getMetricValue(session, selectedMetric);
+          console.log(`🔍 DEBUG - Completed session ${session.id} metric value:`, value);
+          return sum + value;
+        }, 0);
+      }
+      
+      console.log(`🔍 DEBUG - Métricas finais para ${dateStr}:`, { plannedMetric, completedMetric });
       
       comparisonData.push({
         date: dateStr,
         planned: plannedForDay.length,
         completed: completedForDay.length,
-        plannedMetric: plannedForDay.length > 0 ? 
-          getMetricValue(plannedForDay[0], selectedMetric) : 0,
-        completedMetric: completedForDay.length > 0 ? 
-          getMetricValue(completedForDay[0], selectedMetric) : 0,
+        plannedMetric,
+        completedMetric,
       });
+    });
+    
+    console.log('🔍 DEBUG - ComparisonData Final:', {
+      totalDays: comparisonData.length,
+      daysWithData: comparisonData.filter(d => d.planned > 0 || d.completed > 0).length,
+      sample: comparisonData.slice(0, 3),
+      allData: comparisonData
     });
 
     return {
@@ -250,58 +596,85 @@ export default function TrainingChartsTab() {
       completionRate,
       averageMetrics,
       weeklyData,
-      comparisonData
+      comparisonData,
+      sessionsCount: userSessions.length,
+      userSessions
     };
   };
 
-  // Função auxiliar para extrair valor da métrica
-  const getMetricValue = (session: any, metric: string) => {
-    switch (metric) {
-      case 'distance':
-        return session.distance_km || 0;
-      case 'duration':
-        const hours = parseInt(String(session.duracao_horas)) || 0;
-        const minutes = parseInt(String(session.duracao_minutos)) || 0;
-        return hours * 60 + minutes;
-      case 'perceived_effort':
-        return session.perceived_effort || 0;
-      case 'satisfaction':
-        return session.session_satisfaction || 0;
-      default:
-        return 0;
-    }
+  // Função auxiliar para extrair valor da métrica (usando validação)
+  const getMetricValueLegacy = (session: any, metric: string) => {
+    console.log('🔍 DEBUG - getMetricValue:', { metric, session: { id: session.id, date: session.training_date, distance_km: session.distance_km } });
+    
+    const value = getMetricValue(session, metric);
+    console.log('🔍 DEBUG - Validated value:', value);
+    return value;
   };
 
   const analysis = getTrainingAnalysis();
 
-  // Funções de renderização para diferentes tipos de visualização
+  // ✅ DEBUG: Log detalhado da análise
+  console.log('🔍 DEBUG - Análise Completa:', {
+    completedSessions: analysis.completedSessions.length,
+    plannedSessions: analysis.plannedSessions.length,
+    comparisonData: analysis.comparisonData.length,
+    completionRate: analysis.completionRate,
+    averageMetrics: analysis.averageMetrics,
+    sessionsCount: analysis.sessionsCount,
+    userSessions: analysis.userSessions.length,
+    // ✅ NOVO: Verificar dados específicos
+    sampleCompletedSessions: analysis.completedSessions.slice(0, 2).map(s => ({
+      date: s.training_date,
+      distance: s.distance_km,
+      status: s.status
+    })),
+    sampleComparisonData: analysis.comparisonData.slice(0, 3).map(d => ({
+      date: d.date,
+      completed: d.completed,
+      completedMetric: d.completedMetric,
+      value: (d as any).value
+    }))
+  });
+
+  // ✅ DEBUG: Verificar se há dados para renderizar
+  console.log('🔍 DEBUG - Dados para Renderização:', {
+    hasCompletedSessions: analysis.completedSessions.length > 0,
+    hasPlannedSessions: analysis.plannedSessions.length > 0,
+    hasComparisonData: analysis.comparisonData.length > 0,
+    willShowNoData: analysis.completedSessions.length === 0 && analysis.plannedSessions.length === 0
+  });
+
+  // Função de renderização simplificada
   const renderVisualization = () => {
+    // ✅ DEBUG: Verificar condição de renderização
+    console.log('🔍 DEBUG - Condição de Renderização:', {
+      completedSessions: analysis.completedSessions.length,
+      plannedSessions: analysis.plannedSessions.length,
+      comparisonData: analysis.comparisonData.length,
+      willShowNoData: analysis.completedSessions.length === 0 && analysis.plannedSessions.length === 0,
+      hasAnyData: analysis.completedSessions.length > 0 || analysis.plannedSessions.length > 0 || analysis.comparisonData.length > 0
+    });
+
     if (analysis.completedSessions.length === 0 && analysis.plannedSessions.length === 0) {
       return (
         <Card style={styles.card}>
           <Card.Content>
-            <View style={styles.noDataContainer}>
-              <MaterialCommunityIcons name="run" size={isMobile ? 36 : 48} color="#ccc" />
-              <Text style={styles.noDataText}>Nenhum dado de treino disponível</Text>
-              <Text style={styles.noDataSubtext}>
-                Cadastre alguns treinos para ver as análises
-              </Text>
-            </View>
+            <EmptyState
+              icon="run"
+              title="Nenhum treino cadastrado"
+              subtitle="Cadastre seus primeiros treinos para começar a acompanhar sua evolução e receber insights personalizados sobre sua performance. Você pode planejar treinos futuros ou registrar treinos já realizados."
+              actionText="Cadastrar Primeiro Treino"
+              onAction={() => {
+                // Navegar para tela de cadastro de treino - implementar conforme necessário
+                console.log('Navegar para cadastro de treino');
+              }}
+            />
           </Card.Content>
         </Card>
       );
     }
 
-    switch (selectedViewType) {
-      case 'chart':
-        return renderChartView();
-      case 'stats':
-        return renderStatsView();
-      case 'evolution':
-        return renderEvolutionView();
-      default:
-        return renderChartView();
-    }
+    return renderChartView();
   };
 
   const renderChartView = () => {
@@ -312,11 +685,54 @@ export default function TrainingChartsTab() {
         value: selectedAnalysis === 'planned' ? d.plannedMetric : d.completedMetric
       }));
 
+    // ✅ DEBUG: Log dos dados do gráfico
+    console.log('🔍 DEBUG - Dados do Gráfico:', {
+      selectedAnalysis,
+      selectedMetric,
+      totalDataPoints: data.length,
+      dataWithValues: data.filter(d => {
+        if (selectedAnalysis === 'comparison') {
+          return d.plannedMetric > 0 || d.completedMetric > 0;
+        } else {
+          return (d as any).value > 0;
+        }
+      }).length,
+      sampleData: data.slice(0, 3).map(d => ({
+        date: d.date,
+        planned: d.plannedMetric,
+        completed: d.completedMetric,
+        value: (d as any).value
+      })),
+      // ✅ NOVO: Debug detalhado de todos os dados
+      allData: data.map(d => ({
+        date: d.date,
+        planned: d.plannedMetric,
+        completed: d.completedMetric,
+        value: (d as any).value,
+        hasData: (d as any).value > 0 || d.plannedMetric > 0 || d.completedMetric > 0
+      }))
+    });
+
     const maxValue = Math.max(...data.map(d => 
       selectedAnalysis === 'comparison' ? 
         Math.max(d.plannedMetric, d.completedMetric) : 
-        d.value || 0
+        (typeof (d as any).value === 'number' ? (d as any).value : 0)
     ), 1);
+
+    console.log('🔍 DEBUG - MaxValue do Gráfico:', maxValue);
+
+    // ✅ DEBUG: Verificar se vai renderizar barras
+    console.log('🔍 DEBUG - Renderização das Barras:', {
+      totalBars: data.length,
+      barsWithData: data.filter(d => {
+        if (selectedAnalysis === 'comparison') {
+          return d.plannedMetric > 0 || d.completedMetric > 0;
+        } else {
+          return (d as any).value > 0;
+        }
+      }).length,
+      willRenderBars: data.length > 0
+    });
 
     return (
       <Card style={styles.card}>
@@ -336,8 +752,13 @@ export default function TrainingChartsTab() {
           </View>
           
           <View style={styles.chartContainer}>
-            <View style={styles.chartBars}>
-              {data.slice(-7).map((item, index) => (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContainer}
+            >
+              <View style={styles.chartBars}>
+                {data.map((item, index) => (
                 <View key={index} style={styles.barWrapper}>
                   {selectedAnalysis === 'comparison' ? (
                     <View style={styles.comparisonBars}>
@@ -361,8 +782,9 @@ export default function TrainingChartsTab() {
                       style={[
                         styles.bar,
                         {
-                          height: ((item.value || 0) / maxValue) * 100,
-                          backgroundColor: selectedAnalysisInfo?.color
+                          height: Math.max((typeof (item as any).value === 'number' ? (item as any).value : 0) / maxValue * 100, 4),
+                          backgroundColor: selectedAnalysisInfo?.color,
+                          minHeight: 4
                         }
                       ]}
                     />
@@ -372,12 +794,13 @@ export default function TrainingChartsTab() {
                   </Text>
                   {selectedAnalysis !== 'comparison' && (
                     <Text style={styles.barValue}>
-                      {(item.value || 0).toFixed(1)}
+                      {(typeof (item as any).value === 'number' ? (item as any).value : 0).toFixed(1)}
                     </Text>
                   )}
                 </View>
               ))}
-            </View>
+              </View>
+            </ScrollView>
           </View>
 
           {selectedAnalysis === 'comparison' && (
@@ -397,197 +820,44 @@ export default function TrainingChartsTab() {
     );
   };
 
-  const renderStatsView = () => {
-    return (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Estatísticas Detalhadas</Text>
-          
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Taxa de Conclusão</Text>
-              <Text style={[styles.statValue, { color: '#4CAF50' }]}>
-                {analysis.completionRate.toFixed(1)}%
-              </Text>
-              <ProgressBar 
-                progress={analysis.completionRate / 100} 
-                color="#4CAF50"
-                style={styles.progressBar}
-              />
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Treinos Realizados</Text>
-              <Text style={[styles.statValue, { color: '#4CAF50' }]}>
-                {analysis.completedSessions.length}
-              </Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Treinos Planejados</Text>
-              <Text style={[styles.statValue, { color: '#2196F3' }]}>
-                {analysis.plannedSessions.length}
-              </Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Média {selectedMetricInfo?.label}</Text>
-              <Text style={[styles.statValue, { color: selectedMetricInfo?.color }]}>
-                {(analysis.averageMetrics[selectedMetric] || 0).toFixed(1)} {selectedMetricInfo?.unit}
-              </Text>
-            </View>
-          </View>
 
-          <View style={styles.metricsOverview}>
-            <Text style={styles.overviewTitle}>Médias Gerais (Treinos Realizados)</Text>
-            {TRAINING_METRICS.map((metric) => (
-              <View key={metric.value} style={styles.overviewItem}>
-                <View style={styles.overviewHeader}>
-                  <MaterialCommunityIcons 
-                    name={metric.icon as any} 
-                    size={16} 
-                    color={metric.color} 
-                  />
-                  <Text style={styles.overviewLabel}>{metric.label}</Text>
-                </View>
-                <Text style={[styles.overviewValue, { color: metric.color }]}>
-                  {(analysis.averageMetrics[metric.value] || 0).toFixed(1)} {metric.unit}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  };
 
-  const renderEvolutionView = () => {
+  // Mostrar loading enquanto os dados estão sendo carregados
+  if (isLoading) {
     return (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Evolução Semanal</Text>
-          
-          {analysis.weeklyData.length > 0 ? (
-            <View style={styles.evolutionContainer}>
-              {analysis.weeklyData.map((week, index) => (
-                <View key={index} style={styles.weekItem}>
-                  <View style={styles.weekHeader}>
-                    <Text style={styles.weekLabel}>
-                      Semana {new Date(week.weekStart).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                    </Text>
-                    <Text style={styles.weekCount}>{week.sessionCount} treinos</Text>
-                  </View>
-                  
-                  <View style={styles.weekMetrics}>
-                    <Text style={styles.weekAverage}>
-                      {(week.metrics[selectedMetric] || 0).toFixed(1)} {selectedMetricInfo?.unit}
-                    </Text>
-                    <ProgressBar 
-                      progress={Math.min(week.metrics[selectedMetric] / 
-                        Math.max(...analysis.weeklyData.map(w => w.metrics[selectedMetric]), 1), 1)} 
-                      color={selectedMetricInfo?.color}
-                      style={styles.weekProgressBar}
-                    />
-                  </View>
-                  
-                  {index > 0 && (
-                    <View style={styles.weekTrend}>
-                      {week.metrics[selectedMetric] > analysis.weeklyData[index - 1].metrics[selectedMetric] ? (
-                        <MaterialCommunityIcons name="trending-up" size={16} color="#4CAF50" />
-                      ) : week.metrics[selectedMetric] < analysis.weeklyData[index - 1].metrics[selectedMetric] ? (
-                        <MaterialCommunityIcons name="trending-down" size={16} color="#F44336" />
-                      ) : (
-                        <MaterialCommunityIcons name="trending-neutral" size={16} color="#666" />
-                      )}
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.noDataText}>Dados insuficientes para análise semanal</Text>
-          )}
-        </Card.Content>
-      </Card>
+      <View style={styles.container}>
+        <LoadingState 
+          message="Carregando dados de treinos..." 
+          icon="run"
+        />
+      </View>
     );
-  };
+  }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Controles Principais */}
+      {/* Navegação de Período */}
       <Card style={styles.controlsCard}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Análise de Treinos</Text>
           
-          {/* Seleção de Período */}
+          {/* Tipo de Período */}
           <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Período de Análise:</Text>
-            <View style={styles.periodGrid}>
-              {ANALYSIS_PERIODS.map((period) => (
-                <Chip
-                  key={period.value}
-                  selected={selectedPeriod === period.value}
-                  onPress={() => setSelectedPeriod(period.value)}
-                  style={[
-                    styles.controlChip,
-                    selectedPeriod === period.value && { backgroundColor: '#2196F3' + '20' }
-                  ]}
-                  textStyle={[
-                    styles.controlChipText,
-                    selectedPeriod === period.value && { color: '#2196F3', fontWeight: 'bold' }
-                  ]}
-                  compact={isMobile}
-                >
-                  {period.label}
-                </Chip>
-              ))}
-            </View>
-          </View>
-
-          {/* Tipo de Análise */}
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Tipo de Análise:</Text>
-            <View style={styles.analysisGrid}>
-              {ANALYSIS_TYPES.map((type) => (
+            <Text style={styles.controlLabel}>Tipo de Período:</Text>
+            <View style={styles.periodTypeGrid}>
+              {PERIOD_TYPES.map((type) => (
                 <Chip
                   key={type.value}
-                  selected={selectedAnalysis === type.value}
-                  onPress={() => setSelectedAnalysis(type.value)}
+                  selected={periodType === type.value}
+                  onPress={() => setPeriodType(type.value as 'week' | 'month')}
                   style={[
                     styles.controlChip,
-                    selectedAnalysis === type.value && { backgroundColor: type.color + '20' }
+                    periodType === type.value && { backgroundColor: '#2196F3' + '20' }
                   ]}
                   textStyle={[
                     styles.controlChipText,
-                    selectedAnalysis === type.value && { color: type.color, fontWeight: 'bold' }
+                    periodType === type.value && { color: '#2196F3', fontWeight: 'bold' }
                   ]}
-                  icon={type.icon}
-                  compact={isMobile}
-                >
-                  {isMobile ? type.label.split(' ')[0] : type.label}
-                </Chip>
-              ))}
-            </View>
-          </View>
-
-          {/* Tipo de Visualização */}
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Visualização:</Text>
-            <View style={styles.viewTypeGrid}>
-              {VIEW_TYPES.map((type) => (
-                <Chip
-                  key={type.value}
-                  selected={selectedViewType === type.value}
-                  onPress={() => setSelectedViewType(type.value)}
-                  style={[
-                    styles.controlChip,
-                    selectedViewType === type.value && { backgroundColor: '#4CAF50' + '20' }
-                  ]}
-                  textStyle={[
-                    styles.controlChipText,
-                    selectedViewType === type.value && { color: '#4CAF50', fontWeight: 'bold' }
-                  ]}
-                  icon={type.icon}
                   compact={isMobile}
                 >
                   {type.label}
@@ -595,15 +865,97 @@ export default function TrainingChartsTab() {
               ))}
             </View>
           </View>
+
+          {/* Navegação */}
+          <View style={styles.navigationSection}>
+            <Button
+              mode="outlined"
+              onPress={() => handleNavigatePeriod('prev')}
+              icon="chevron-left"
+              style={styles.navButton}
+              compact={isMobile}
+            >
+              Anterior
+            </Button>
+            
+            <View style={styles.currentPeriodContainer}>
+              <Text style={styles.currentPeriodText}>
+                {periodType === 'week' ? 
+                  `Semana de ${getCurrentPeriod().startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} a ${getCurrentPeriod().endDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}` :
+                  `Mês de ${getCurrentPeriod().startDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+                }
+              </Text>
+            </View>
+            
+            <Button
+              mode="outlined"
+              onPress={() => handleNavigatePeriod('next')}
+              icon="chevron-right"
+              style={styles.navButton}
+              compact={isMobile}
+            >
+              Próximo
+            </Button>
+          </View>
         </Card.Content>
       </Card>
       
-      {/* Seleção de Métrica */}
+      {/* Controles de Análise */}
+      <Card style={styles.controlsCard}>
+        <Card.Content>
+
+          {/* Tipo de Análise */}
+          <View style={styles.controlSection}>
+            <Text style={styles.controlLabel}>Tipo de Análise:</Text>
+          <View style={styles.analysisGrid}>
+            {ANALYSIS_TYPES.map((type) => (
+              <Chip
+                key={type.value}
+                selected={selectedAnalysis === type.value}
+                onPress={() => setSelectedAnalysis(type.value)}
+                style={[
+                    styles.controlChip,
+                  selectedAnalysis === type.value && { backgroundColor: type.color + '20' }
+                ]}
+                textStyle={[
+                    styles.controlChipText,
+                  selectedAnalysis === type.value && { color: type.color, fontWeight: 'bold' }
+                ]}
+                  icon={type.icon}
+                  compact={isMobile}
+              >
+                  {isMobile ? type.label.split(' ')[0] : type.label}
+              </Chip>
+            ))}
+          </View>
+          </View>
+
+        </Card.Content>
+      </Card>
+
+      {/* Seleção de Métrica - FILTRADA POR TIPO DE ANÁLISE */}
       <Card style={styles.metricsCard}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Métrica de Treino:</Text>
+          <Text style={styles.metricSubtitle}>
+            {selectedAnalysis === 'planned' ? 'Métricas de Planejamento' : 
+             selectedAnalysis === 'completed' ? 'Métricas de Execução' : 
+             'Métricas para Comparação'}
+          </Text>
           <View style={styles.metricsGrid}>
-            {TRAINING_METRICS.map((metric) => (
+            {TRAINING_METRICS
+              .filter(metric => {
+                // ✅ FILTRAR: Métricas baseadas no tipo de análise
+                if (selectedAnalysis === 'planned') {
+                  return metric.type === 'planned' || metric.type === 'both';
+                } else if (selectedAnalysis === 'completed') {
+                  return metric.type === 'completed' || metric.type === 'both';
+                } else {
+                  // Para comparação, mostrar apenas métricas que existem em ambos
+                  return metric.type === 'both';
+                }
+              })
+              .map((metric) => (
               <Chip
                 key={metric.value}
                 selected={selectedMetric === metric.value}
@@ -617,76 +969,99 @@ export default function TrainingChartsTab() {
                   selectedMetric === metric.value && { color: metric.color, fontWeight: 'bold' }
                 ]}
                 icon={metric.icon}
-                compact={isMobile}
+                  compact={isMobile}
               >
-                {isMobile ? metric.label.split(' ')[0] : metric.label}
+                  {isMobile ? metric.label.split(' ')[0] : metric.label}
               </Chip>
             ))}
           </View>
           
-          {/* Descrição da Métrica Selecionada */}
-          {selectedMetricInfo && (
-            <View style={styles.metricDescription}>
-              <Text style={styles.descriptionText}>{selectedMetricInfo.description}</Text>
-              <Text style={styles.unitText}>Unidade: {selectedMetricInfo.unit}</Text>
+          {!isAuthenticated && (
+            <View style={styles.noAuthContainer}>
+              <MaterialCommunityIcons name="account-alert" size={24} color="#666" />
+              <Text style={styles.noAuthText}>Faça login para ver seus dados de treino</Text>
             </View>
           )}
         </Card.Content>
       </Card>
 
-      {/* Resumo Geral */}
-      {(analysis.completedSessions.length > 0 || analysis.plannedSessions.length > 0) && (
-        <Card style={styles.summaryCard}>
-          <Card.Content>
-            <View style={styles.summaryHeader}>
-              <MaterialCommunityIcons 
-                name="chart-timeline-variant" 
-                size={isMobile ? 18 : 20} 
-                color="#666" 
-              />
-              <Text style={styles.summaryTitle}>Resumo - {selectedPeriodInfo?.label}</Text>
-            </View>
-            
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Taxa de Conclusão</Text>
-                <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
-                  {analysis.completionRate.toFixed(1)}%
-                </Text>
-                <ProgressBar 
-                  progress={analysis.completionRate / 100} 
-                  color="#4CAF50"
-                  style={styles.progressBar}
-                />
-              </View>
-              
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Realizados</Text>
-                <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
-                  {analysis.completedSessions.length}
-                </Text>
-              </View>
-              
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Planejados</Text>
-                <Text style={[styles.summaryValue, { color: '#2196F3' }]}>
-                  {analysis.plannedSessions.length}
-                </Text>
-              </View>
-              
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Média {selectedMetricInfo?.label}</Text>
-                <Text style={[styles.summaryValue, { color: selectedMetricInfo?.color }]}>
-                  {(analysis.averageMetrics[selectedMetric] || 0).toFixed(1)}
-                </Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-      )}
-
       {/* Visualização Principal */}
       {renderVisualization()}
+
+      {/* Resumo com Dados Reais e Legendas */}
+      <Card style={styles.summaryCard}>
+        <Card.Content>
+          <View style={styles.summaryHeader}>
+              <MaterialCommunityIcons 
+              name="chart-timeline-variant" 
+              size={isMobile ? 18 : 20} 
+              color="#666" 
+            />
+          <Text style={styles.summaryTitle}>
+              Resumo - {periodType === 'week' ? 'Semana' : 'Mês'}
+          </Text>
+                </View>
+          
+          {/* ✅ DEBUG: Log dos dados do resumo */}
+          {(() => {
+            console.log('🔍 DEBUG - Dados do Resumo:', {
+              completionRate: analysis.completionRate,
+              completedSessions: analysis.completedSessions.length,
+              plannedSessions: analysis.plannedSessions.length,
+              averageMetrics: analysis.averageMetrics,
+              selectedMetric,
+              selectedMetricValue: analysis.averageMetrics[selectedMetric]
+            });
+            return null;
+          })()}
+          
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Taxa de Conclusão</Text>
+              <Text style={styles.summaryLegend}>Percentual de treinos planejados realizados</Text>
+              {analysis.completionRate !== null ? (
+                <>
+                  <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
+                    {(analysis.completionRate || 0).toFixed(1)}%
+                  </Text>
+                  <ProgressBar 
+                    progress={(analysis.completionRate || 0) / 100} 
+                    color="#4CAF50"
+                    style={styles.progressBar}
+                  />
+                </>
+              ) : (
+                <Text style={styles.summaryValue}>-</Text>
+              )}
+            </View>
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Realizados</Text>
+              <Text style={styles.summaryLegend}>Total de treinos completados</Text>
+              <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
+                {analysis.completedSessions.length}
+              </Text>
+            </View>
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Planejados</Text>
+              <Text style={styles.summaryLegend}>Total de treinos programados</Text>
+              <Text style={[styles.summaryValue, { color: '#2196F3' }]}>
+                {analysis.plannedSessions.length}
+              </Text>
+            </View>
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Média {selectedMetricInfo?.label}</Text>
+              <Text style={styles.summaryLegend}>Valor médio nos treinos realizados</Text>
+              <Text style={[styles.summaryValue, { color: selectedMetricInfo?.color }]}>
+                {analysis.averageMetrics[selectedMetric] ? 
+                  analysis.averageMetrics[selectedMetric].toFixed(1) : '-'}
+              </Text>
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
     </ScrollView>
   );
 }
@@ -717,10 +1092,33 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 8,
   },
-  periodGrid: {
+  periodTypeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: isMobile ? 6 : 8,
+  },
+  navigationSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  navButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    minWidth: isMobile ? 80 : 100,
+  },
+  currentPeriodContainer: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  currentPeriodText: {
+    fontSize: isMobile ? 14 : 16,
+    fontWeight: 'bold',
+    color: '#2196F3',
+    textAlign: 'center',
   },
   analysisGrid: {
     flexDirection: 'row',
@@ -745,6 +1143,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 12,
     elevation: 2,
+  },
+  metricSubtitle: {
+    fontSize: isMobile ? 11 : 12,
+    color: '#666',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  noAuthContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  noAuthText: {
+    fontSize: isMobile ? 12 : 14,
+    color: '#666',
+    marginLeft: 8,
   },
   metricsGrid: {
     flexDirection: 'row',
@@ -812,6 +1230,15 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 4,
     textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  summaryLegend: {
+    fontSize: isMobile ? 8 : 10,
+    color: '#999',
+    marginBottom: 6,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: isMobile ? 12 : 14,
   },
   summaryValue: {
     fontSize: isMobile ? 16 : 18,
@@ -854,15 +1281,22 @@ const styles = StyleSheet.create({
   },
   chartBars: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
     alignItems: 'flex-end',
     height: '100%',
+    paddingHorizontal: 8,
+  },
+  scrollContainer: {
+    paddingHorizontal: 12,
+    minWidth: '100%',
+    justifyContent: 'flex-start',
   },
   barWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
-    width: isMobile ? 32 : 40,
+    width: isMobile ? 40 : 48,
     height: '100%',
+    marginHorizontal: isMobile ? 6 : 8,
   },
   bar: {
     borderRadius: 4,
