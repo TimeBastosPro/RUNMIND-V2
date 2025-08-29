@@ -204,15 +204,11 @@ export default function WellbeingChartsTab() {
     });
     
     // Criar array completo de datas do período
-    const allDatesInPeriod = [];
+    const allDatesInPeriod: Date[] = [];
     const current = new Date(startDate);
-    
-    // Garantir que o loop pare no domingo correto (31/08, não 01/09)
-    const endDateNormalized = new Date(endDate);
-    endDateNormalized.setHours(0, 0, 0, 0);
-    
-    while (current <= endDateNormalized) {
-      allDatesInPeriod.push(current.toISOString().split('T')[0]);
+
+    while (current <= endDate) {
+      allDatesInPeriod.push(new Date(current)); // ✅ Armazena o objeto Date completo
       current.setDate(current.getDate() + 1);
     }
     
@@ -231,9 +227,10 @@ export default function WellbeingChartsTab() {
     });
     
     // Mapear dados para cada dia do período
-    const metricData = allDatesInPeriod.map(dateStr => {
+    const metricData = allDatesInPeriod.map(dateObj => {
+      // ✅ Compara usando strings normalizadas para segurança
+      const dateStr = dateObj.toISOString().split('T')[0]; 
       const checkinForDay = filteredCheckins.find(c => {
-        // Comparar datas normalizadas
         const checkinDate = new Date(c.date).toISOString().split('T')[0];
         return checkinDate === dateStr;
       });
@@ -263,7 +260,7 @@ export default function WellbeingChartsTab() {
       }
       
       return {
-        date: dateStr,
+        date: dateObj, // ✅ Retorna o objeto Date completo
         value: value,
         hasData: value > 0
       };
@@ -409,7 +406,8 @@ export default function WellbeingChartsTab() {
                       ]}
                     />
                     <Text style={styles.barLabel}>
-                      {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      {/* ✅ Formata diretamente o objeto Date, que agora está correto */}
+                      {item.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                     </Text>
                     <Text style={styles.barValue}>
                       {item.value > 0 ? item.value.toFixed(1) : '-'}

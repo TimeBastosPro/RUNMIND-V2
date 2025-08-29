@@ -557,13 +557,15 @@ export default function TrainingScreen() {
                 console.log('🔍 Treino existente encontrado, marcando como realizado:', editingSession.id);
                 // ✅ CORRIGIDO: Converter tipos para compatibilidade
                 const markData = {
-                    perceived_effort: completedData.perceived_effort || undefined,
-                    session_satisfaction: completedData.session_satisfaction || undefined,
+                    perceived_effort: completedData.perceived_effort ? Number(completedData.perceived_effort) : undefined,
+                    session_satisfaction: completedData.session_satisfaction ? Number(completedData.session_satisfaction) : undefined,
                     notes: completedData.observacoes || undefined,
-                    avg_heart_rate: completedData.avg_heart_rate || undefined,
-                    elevation_gain_meters: completedData.elevation_gain_meters || undefined,
-                    distance_km: completedData.distance_km || undefined,
-                    duration_minutes: completedData.duration_minutes || undefined,
+                    avg_heart_rate: completedData.avg_heart_rate ? Number(completedData.avg_heart_rate) : undefined,
+                    elevation_gain_meters: completedData.elevation_gain_meters ? Number(completedData.elevation_gain_meters) : undefined,
+                    distance_km: completedData.distance_km ? Number(completedData.distance_km) : undefined,
+                    // ✅ CORRIGIDO: Usar os campos corretos de duração
+                    duracao_horas: completedData.duracao_horas || undefined,
+                    duracao_minutos: completedData.duracao_minutos || undefined,
                 };
                 await markTrainingAsCompleted(editingSession.id, markData);
                 console.log('✅ Treino marcado como realizado com sucesso');

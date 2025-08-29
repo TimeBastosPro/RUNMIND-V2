@@ -756,17 +756,46 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       
       console.log('🔍 Buscando treinos para usuário:', targetUserId, 'período:', _startDate, 'a', _endDate);
       
+      // ✅ CORREÇÃO: Buscar TODOS os treinos do usuário, não apenas do período
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
         .eq('user_id', targetUserId)
-        .gte('training_date', _startDate)
-        .lte('training_date', _endDate)
         .order('training_date', { ascending: true });
         
       if (error) throw error;
       
       console.log('✅ Treinos encontrados:', data?.length || 0);
+      
+      // Debug: verificar dados brutos do banco
+      console.log('🔍 DEBUG - Dados brutos do Supabase:', data?.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance_km: s.distance_km,
+        duracao_horas: s.duracao_horas,
+        duracao_minutos: s.duracao_minutos,
+        perceived_effort: s.perceived_effort,
+        session_satisfaction: s.session_satisfaction,
+        avg_heart_rate: s.avg_heart_rate
+      })));
+      
+      // Debug: verificar especificamente dados da semana 25/08-31/08
+      const weekData = data?.filter(s => {
+        const date = new Date(s.training_date);
+        const weekStart = new Date('2025-08-25');
+        const weekEnd = new Date('2025-08-31');
+        return date >= weekStart && date <= weekEnd;
+      });
+      
+      console.log('🔍 DEBUG - Dados da semana 25/08-31/08:', weekData?.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance_km: s.distance_km,
+        duracao_horas: s.duracao_horas,
+        duracao_minutos: s.duracao_minutos
+      })));
       
       const processedData = (data || []).map(session => ({
         ...session,
