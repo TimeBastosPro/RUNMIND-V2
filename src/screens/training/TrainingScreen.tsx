@@ -20,6 +20,7 @@ import CreateMacrocicloModal from './CreateMacrocicloModal';
 import CreateMesocicloModal from './CreateMesocicloModal';
 import CyclesOverview from './CyclesOverview';
 import type { Macrociclo, Mesociclo, Microciclo } from '../../types/database';
+import { getWeekStart, getWeekEnd, formatWeekPeriod } from '../../utils/weekCalculation';
 
 // --- Constantes e Funções de Data ---
 const WEEKDAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
@@ -331,11 +332,10 @@ export default function TrainingScreen() {
         } catch {}
     };
 
-    function getWeekStart(date: Date) {
-      const d = new Date(date);
-      d.setHours(0,0,0,0);
-      d.setDate(d.getDate() - d.getDay());
-      return d.toISOString().split('T')[0];
+    // ✅ CORREÇÃO: Usar função padronizada para cálculo de semanas
+    function getWeekStartString(date: Date) {
+      const weekStart = getWeekStart(date);
+      return weekStart.toISOString().split('T')[0];
     }
 
     useEffect(() => {

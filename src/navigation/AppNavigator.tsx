@@ -699,7 +699,6 @@ export default function AppNavigator() {
         console.log('🔍 Inicializando autenticação...');
         
         // ✅ NOVO: LIMPEZA IMEDIATA ANTES DE QUALQUER VERIFICAÇÃO
-        console.log('🧹 LIMPEZA IMEDIATA no carregamento da aplicação...');
         await useAuthStore.getState().clearAllLocalData();
         
         // ✅ NOVO: Verificar e reparar sessão corrompida

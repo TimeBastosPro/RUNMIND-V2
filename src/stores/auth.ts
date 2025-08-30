@@ -502,7 +502,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Limpar AsyncStorage
       try { 
         await AsyncStorage.clear(); 
-        console.log('✅ AsyncStorage limpo');
       } catch (e) {
         console.log('⚠️ Erro ao limpar AsyncStorage:', e);
       }
@@ -627,11 +626,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // ✅ MELHORADO: Função para limpar todos os dados locais de forma mais agressiva
   clearAllLocalData: async () => {
-    console.log('🧹 Iniciando limpeza AGESSIVA de dados locais...');
     try {
       // ✅ NOVO: Limpeza mais específica do AsyncStorage
       const allKeys = await AsyncStorage.getAllKeys();
-      console.log('🔍 Chaves encontradas no AsyncStorage:', allKeys);
       
       // Remover todas as chaves relacionadas ao Supabase
       const supabaseKeys = allKeys.filter(key => 
@@ -643,7 +640,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       );
       
       if (supabaseKeys.length > 0) {
-        console.log('🧹 Removendo chaves do Supabase:', supabaseKeys);
         await AsyncStorage.multiRemove(supabaseKeys);
       }
       
@@ -655,7 +651,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       );
       
       if (zustandKeys.length > 0) {
-        console.log('🧹 Removendo chaves do Zustand:', zustandKeys);
         await AsyncStorage.multiRemove(zustandKeys);
       }
       
@@ -673,13 +668,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         races: [],
       });
       
-      console.log('✅ Limpeza AGESSIVA concluída com sucesso');
+      console.log('🧹 Limpeza de dados concluída');
     } catch (error) {
       console.error('❌ Erro ao limpar dados locais:', error);
       // ✅ NOVO: Fallback para limpeza completa
       try {
         await AsyncStorage.clear();
-        console.log('✅ Fallback: AsyncStorage limpo completamente');
       } catch (fallbackError) {
         console.error('❌ Erro no fallback:', fallbackError);
       }
@@ -923,20 +917,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateProfile: async (updates: Partial<Profile>) => {
-    console.log('🔍 DEBUG - updateProfile chamado com:', updates);
-    console.log('🔍 DEBUG - PAR-Q+ enviado:', updates.parq_answers);
-    console.log('🔍 DEBUG - Preferências enviadas:', {
-      training_days: updates.training_days,
-      preferred_training_period: updates.preferred_training_period,
-      terrain_preference: updates.terrain_preference,
-      work_stress_level: updates.work_stress_level
-    });
-    
     const { user, profile } = get();
-    console.log('🔍 DEBUG - user:', user?.id, 'profile:', profile?.id);
     
     if (!user) {
-      console.log('❌ DEBUG - Usuário não encontrado');
       return;
     }
     
@@ -948,17 +931,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .eq('user_id', user.id)
         .single();
       
-      if (coachData) {
-        console.log('🔍 Usuário é treinador, mas permitindo atualização do perfil');
-        // Não impedir a atualização, apenas logar
-      }
-      
       if (!profile) {
-        console.log('DEBUG - Perfil não encontrado');
         return;
       }
       
-      console.log('🔍 DEBUG - Enviando update para Supabase...');
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
@@ -966,27 +942,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select()
         .single();
         
-      console.log('🔍 DEBUG - Resposta do Supabase:', { data, error });
-      
       if (error) {
-        console.error('❌ DEBUG - Erro do Supabase:', error);
         throw error;
       }
       
-      // Verificar se os dados foram realmente salvos
-      console.log('✅ DEBUG - Dados salvos no banco:');
-      console.log('✅ PAR-Q+ salvo:', data?.parq_answers);
-      console.log('✅ Preferências salvas:', {
-        training_days: data?.training_days,
-        preferred_training_period: data?.preferred_training_period,
-        terrain_preference: data?.terrain_preference,
-        work_stress_level: data?.work_stress_level
-      });
-      
       set({ profile: data });
-      console.log('✅ DEBUG - Perfil atualizado com sucesso no estado');
     } catch (error) {
-      console.error('DEBUG - Erro ao atualizar perfil:', error);
+      console.error('Erro ao atualizar perfil:', error);
       throw error;
     }
   },
@@ -1259,36 +1221,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   deleteFitnessTest: async (testId: string) => {
-    console.log('DEBUG - deleteFitnessTest chamado com testId:', testId);
-    console.log('DEBUG - Tipo do testId:', typeof testId);
-    
     try {
-      console.log('DEBUG - Enviando delete para Supabase...');
       const { error } = await supabase
         .from('fitness_tests')
         .delete()
         .eq('id', testId);
 
-      console.log('DEBUG - Resposta do Supabase:', { error });
-
       if (error) {
-        console.log('DEBUG - Erro retornado pelo Supabase:', error);
         throw error;
       }
 
-      console.log('DEBUG - Delete executado com sucesso no Supabase');
-
       // Atualizar a lista de testes
       const currentTests = get().fitnessTests;
-      console.log('DEBUG - Testes atuais:', currentTests.length);
-      
       const updatedTests = currentTests.filter(test => test.id !== testId);
-      console.log('DEBUG - Testes filtrados:', updatedTests.length);
-      
       set({ fitnessTests: updatedTests });
-      console.log('DEBUG - Estado atualizado com sucesso');
     } catch (error) {
-      console.error('DEBUG - Erro ao deletar teste de fitness:', error);
+      console.error('Erro ao deletar teste de fitness:', error);
       throw error;
     }
   },
@@ -1301,18 +1249,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // ✅ NOVO: Verificar se está no modo coach
       const { isCoachView, viewAsAthleteId } = useViewStore.getState();
       if (isCoachView && viewAsAthleteId) {
-        console.log('🔍 Modo Coach - Buscando provas do atleta:', viewAsAthleteId);
         targetUserId = viewAsAthleteId;
-      } else {
-        console.log('🔍 Modo Atleta - Buscando próprias provas:', targetUserId);
       }
       
       if (!targetUserId) {
-        console.log('DEBUG - fetchRaces: Usuário não autenticado');
         return;
       }
 
-      console.log('DEBUG - fetchRaces: Buscando provas para usuário:', targetUserId);
       const { data, error } = await supabase
         .from('races')
         .select('*')
@@ -1320,22 +1263,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .order('start_date', { ascending: true });
 
       if (error) {
-        console.error('DEBUG - fetchRaces: Erro do Supabase:', error);
         throw error;
       }
       
-      console.log('DEBUG - fetchRaces: Provas encontradas:', data);
-      console.log('DEBUG - fetchRaces: Número de provas:', data?.length || 0);
-      console.log('DEBUG - fetchRaces: Atualizando estado com:', data || []);
-      
       set({ races: data || [] });
-      
-      console.log('DEBUG - fetchRaces: Estado atualizado, verificando...');
-      setTimeout(() => {
-        const currentRaces = get().races;
-        console.log('DEBUG - fetchRaces: Estado após atualização:', currentRaces);
-        console.log('DEBUG - fetchRaces: Número de provas no estado:', currentRaces?.length || 0);
-      }, 100);
     } catch (error) {
       console.error('Erro ao buscar provas:', error);
     }
@@ -1345,9 +1276,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
-
-      console.log('DEBUG - saveRace: Salvando prova:', raceData);
-      console.log('DEBUG - saveRace: Para usuário:', user.id);
 
       // Validar dados antes de salvar
       if (!raceData.event_name || !raceData.city || !raceData.start_date || !raceData.start_time || !raceData.distance_km) {
@@ -1371,8 +1299,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (isNaN(distance) || distance <= 0) {
         throw new Error('Distância deve ser um número positivo');
       }
-
-      console.log('DEBUG - saveRace: Dados validados, inserindo no Supabase...');
       
       const { data, error } = await supabase
         .from('races')
@@ -1385,11 +1311,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single();
 
       if (error) {
-        console.error('DEBUG - saveRace: Erro do Supabase:', error);
         throw error;
       }
-
-      console.log('DEBUG - saveRace: Prova salva com sucesso:', data);
 
       // Atualizar a lista de provas no estado
       const currentRaces = get().races;
@@ -1398,7 +1321,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       );
       
       set({ races: updatedRaces });
-      console.log('DEBUG - saveRace: Estado atualizado com', updatedRaces.length, 'provas');
 
       return data;
     } catch (error) {
@@ -1425,7 +1347,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       );
       const sortedRaces = updatedRaces.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
       set({ races: sortedRaces });
-      console.log('DEBUG - updateRace: Estado após atualizar:', get().races);
 
       return data;
     } catch (error) {
@@ -1447,7 +1368,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const currentRaces = get().races;
       const updatedRaces = currentRaces.filter(race => race.id !== raceId);
       set({ races: updatedRaces });
-      console.log('DEBUG - deleteRace: Estado após deletar:', get().races);
     } catch (error) {
       console.error('Erro ao deletar prova:', error);
       throw error;
@@ -1456,7 +1376,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // ✅ NOVO: Função para forçar limpeza completa e recarregamento
   forceCleanReload: async () => {
-    console.log('🧹 FORÇANDO limpeza completa e recarregamento...');
     try {
       // 1. Limpar todos os dados locais
       await get().clearAllLocalData();
@@ -1478,7 +1397,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         races: [],
       });
       
-      console.log('✅ Limpeza completa forçada com sucesso');
+      console.log('🧹 Limpeza completa forçada');
     } catch (error) {
       console.error('❌ Erro na limpeza forçada:', error);
     }

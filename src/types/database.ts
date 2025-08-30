@@ -109,6 +109,23 @@ export interface Profile {
     notes?: string;
     effort_level?: number;
     duracao_tipo?: string;
+    
+    // === NOVOS CAMPOS PARA RASTREAR ORIGEM ===
+    original_planned_id?: number; // ID do treino planejado original (se foi executado)
+    execution_type?: 'planned_executed' | 'spontaneous' | 'planned_pending'; // Tipo de execução
+    
+    // === CAMPOS PARA PRESERVAR DADOS PLANEJADOS ===
+    planned_distance_km?: number; // Distância originalmente planejada
+    planned_duration_hours?: string; // Duração originalmente planejada (horas)
+    planned_duration_minutes?: string; // Duração originalmente planejada (minutos)
+    planned_perceived_effort?: number; // Esforço originalmente planejado
+    planned_intensity?: string; // Intensidade originalmente planejada
+    planned_modalidade?: string; // Modalidade originalmente planejada
+    planned_treino_tipo?: string; // Tipo de treino originalmente planejado
+    planned_terreno?: string; // Terreno originalmente planejado
+    planned_percurso?: string; // Percurso originalmente planejado
+    planned_esforco?: string; // Esforço originalmente planejado
+    planned_observacoes?: string; // Observações originalmente planejadas
   }
   
   export interface Insight {

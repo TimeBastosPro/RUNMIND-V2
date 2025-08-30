@@ -376,26 +376,41 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       }
       console.log('✅ Usuário encontrado:', user.id);
 
-      // ✅ MELHORADO: Coletar dados de forma mais eficiente
-      const [profileResult, sessionsResult] = await Promise.allSettled([
+      // ✅ NOVO: Coletar dados de aderência ao planejamento
+      const [profileResult, sessionsResult, adherenceResult] = await Promise.allSettled([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('training_sessions').select('*').eq('user_id', user.id).eq('status', 'completed').gte('training_date', new Date(Date.now() - 42 * 24 * 60 * 60 * 1000).toISOString())
+        supabase.from('training_sessions').select('*').eq('user_id', user.id).eq('status', 'completed').gte('training_date', new Date(Date.now() - 42 * 24 * 60 * 60 * 1000).toISOString()),
+        supabase.from('training_adherence_analysis').select('*').eq('user_id', user.id).gte('training_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
       ]);
 
       const profile = profileResult.status === 'fulfilled' ? profileResult.value.data : null;
       const sessions = sessionsResult.status === 'fulfilled' ? sessionsResult.value.data : [];
+      const adherenceData = adherenceResult.status === 'fulfilled' ? adherenceResult.value.data : [];
+
+      // ✅ NOVO: Calcular métricas de aderência
+      const adherenceMetrics = {
+        totalPlanned: adherenceData.filter((item: any) => item.planned_id).length,
+        totalExecuted: adherenceData.filter((item: any) => item.executed_id).length,
+        excellentAdherence: adherenceData.filter((item: any) => item.adherence_classification === 'excellent_adherence').length,
+        goodAdherence: adherenceData.filter((item: any) => item.adherence_classification === 'good_adherence').length,
+        moderateAdherence: adherenceData.filter((item: any) => item.adherence_classification === 'moderate_adherence').length,
+        poorAdherence: adherenceData.filter((item: any) => item.adherence_classification === 'poor_adherence').length,
+        avgDistanceVariance: adherenceData.reduce((sum: number, item: any) => sum + Math.abs(item.distance_variance_percent || 0), 0) / adherenceData.length || 0
+      };
 
       const athleteData = {
         completedTraining,
         profile,
-        sessions: sessions || []
+        sessions: sessions || [],
+        adherenceMetrics
       };
 
       console.log('🔍 Chamando Edge Function de assimilação...');
       console.log('🔍 Dados enviados para Edge Function:', {
         completedTraining: athleteData.completedTraining?.id,
         profile: !!athleteData.profile,
-        sessionsCount: athleteData.sessions?.length
+        sessionsCount: athleteData.sessions?.length,
+        adherenceMetrics: athleteData.adherenceMetrics
       });
 
       try {
@@ -550,9 +565,39 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   markTrainingAsCompleted: async (id, completedData) => {
     set({ isSubmitting: true, error: null });
     try {
+      // ✅ NOVO: Buscar o treino planejado original para preservar dados
+      const { data: plannedTraining, error: fetchError } = await supabase
+        .from('training_sessions')
+        .select('*')
+        .eq('id', id)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      
+      // ✅ NOVO: Preparar dados de atualização preservando dados planejados
+      const updateData = {
+        ...completedData,
+        status: 'completed',
+        // Preservar dados planejados originais
+        planned_distance_km: plannedTraining.distance_km,
+        planned_duration_hours: plannedTraining.duracao_horas,
+        planned_duration_minutes: plannedTraining.duracao_minutos,
+        planned_perceived_effort: plannedTraining.esforco ? parseInt(plannedTraining.esforco) : null,
+        planned_intensity: plannedTraining.intensidade,
+        planned_modalidade: plannedTraining.modalidade,
+        planned_treino_tipo: plannedTraining.treino_tipo,
+        planned_terreno: plannedTraining.terreno,
+        planned_percurso: plannedTraining.percurso,
+        planned_esforco: plannedTraining.esforco,
+        planned_observacoes: plannedTraining.observacoes,
+        // Marcar como treino planejado executado
+        execution_type: 'planned_executed',
+        original_planned_id: id, // Referência ao treino planejado original
+      };
+
       const { data, error } = await supabase
         .from('training_sessions')
-        .update({ ...completedData, status: 'completed' })
+        .update(updateData)
         .eq('id', id)
         .select()
         .single();
@@ -625,11 +670,14 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   },
 
   saveTrainingSession: async (trainingData) => {
+    console.log('🔍 saveTrainingSession iniciado com dados:', trainingData);
     set({ isLoading: true, error: null });
     try {
+      console.log('🔍 Obtendo usuário...');
       const { data: { user } } = await supabase.auth.getUser();
       const targetUserId: string | null = (user && (user as any).id) ? (user as any).id : null;
       if (!targetUserId) throw new Error('Usuário não autenticado');
+      console.log('✅ Usuário obtido:', targetUserId);
       
       const allowedKeys = new Set([
         'user_id', 'training_date', 'title', 'training_type', 'status',
@@ -659,13 +707,19 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         }
       });
       
+      console.log('🔍 Executando upsert no Supabase com dados:', upsertData);
       const { data, error } = await supabase
         .from('training_sessions')
         .upsert([upsertData], { onConflict: 'id' })
         .select()
         .single();
         
-      if (error) throw error;
+      console.log('🔍 Resultado do upsert:', { data, error });
+      if (error) {
+        console.error('❌ Erro no upsert:', error);
+        throw error;
+      }
+      console.log('✅ Upsert executado com sucesso');
       
       // ✅ NOVO: Se o treino foi salvo como 'completed', disparar insight
       if (data.status === 'completed') {
@@ -686,8 +740,13 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         return { trainingSessions } as any;
       });
       
-      try { await get().fetchTrainingSessions(); } catch {}
+      console.log('🔍 Recarregando treinos...');
+      try { await get().fetchTrainingSessions(); } catch (reloadError) {
+        console.error('❌ Erro ao recarregar treinos:', reloadError);
+      }
+      console.log('🔍 Finalizando saveTrainingSession...');
       set({ isLoading: false, error: null });
+      console.log('✅ saveTrainingSession finalizado com sucesso');
       return data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar treino.';
@@ -797,6 +856,48 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         duracao_minutos: s.duracao_minutos
       })));
       
+      // ✅ DEBUG ESPECÍFICO: Verificar dados da semana 01/09-07/09
+      const septemberWeekData = data?.filter(s => {
+        const date = new Date(s.training_date);
+        const weekStart = new Date('2025-09-01');
+        const weekEnd = new Date('2025-09-07');
+        return date >= weekStart && date <= weekEnd;
+      });
+      
+      console.log('🔍 DEBUG - Dados da semana 01/09-07/09:', septemberWeekData?.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        status: s.status,
+        distance_km: s.distance_km,
+        duracao_horas: s.duracao_horas,
+        duracao_minutos: s.duracao_minutos,
+        esforco: s.esforco,
+        intensidade: s.intensidade,
+        modalidade: s.modalidade,
+        treino_tipo: s.treino_tipo
+      })));
+      
+      // ✅ DEBUG ESPECÍFICO: Verificar especificamente 01/09
+      const mondayData = data?.filter(s => {
+        const dateStr = s.training_date.split('T')[0];
+        return dateStr === '2025-09-01';
+      });
+      
+      console.log('🔍 DEBUG - Dados específicos de 01/09:', mondayData?.map(s => ({
+        id: s.id,
+        date: s.training_date,
+        dateStr: s.training_date.split('T')[0],
+        status: s.status,
+        distance_km: s.distance_km,
+        duracao_horas: s.duracao_horas,
+        duracao_minutos: s.duracao_minutos,
+        esforco: s.esforco,
+        intensidade: s.intensidade,
+        modalidade: s.modalidade,
+        treino_tipo: s.treino_tipo,
+        title: s.title
+      })));
+      
       const processedData = (data || []).map(session => ({
         ...session,
         sensacoes: session.sensacoes ? JSON.parse(session.sensacoes) : [],
@@ -815,8 +916,19 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     const { trainingSessions } = get();
     if (!trainingSessions || trainingSessions.length === 0) return null;
 
+    // ✅ CORREÇÃO: Separar treinos por tipo de execução
     const plannedSessions = trainingSessions.filter(t => t.status === 'planned');
     const completedSessions = trainingSessions.filter(t => t.status === 'completed');
+    
+    // ✅ NOVO: Separar treinos executados por origem
+    const plannedExecutedSessions = completedSessions.filter(t => 
+      (t as any).execution_type === 'planned_executed' || 
+      (t as any).original_planned_id !== null
+    );
+    const spontaneousSessions = completedSessions.filter(t => 
+      (t as any).execution_type === 'spontaneous' || 
+      ((t as any).execution_type === null && (t as any).original_planned_id === null)
+    );
 
     const completedExt: ExtTrainingSession[] = (completedSessions as any[]).map((s: any) => {
       const coerced: ExtTrainingSession = {
@@ -876,31 +988,72 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         };
       });
 
-    const plannedVsCompleted = (completedExt as any[])
-      .filter(t => {
-        const planned = ((plannedSessions as any[]).map(ps => (ps as any as ExtTrainingSession))).find(p => (p as any).training_date === (t as any).training_date);
-        return planned && (t.distance_km as any) && (planned.planned_distance_km as any);
-      })
-      .map(t => {
-        const plannedList: ExtTrainingSession[] = (plannedSessions as any[]).map(ps => ps as any as ExtTrainingSession);
-        const planned = plannedList.find(p => (p as any).training_date === (t as any).training_date)!;
-        const pHours = planned.planned_duration_hours && planned.planned_duration_hours !== '' ? (isNaN(parseInt(planned.planned_duration_hours)) ? 0 : parseInt(planned.planned_duration_hours)) : 0;
-        const pMinutes = planned.planned_duration_minutes && planned.planned_duration_minutes !== '' ? (isNaN(parseInt(planned.planned_duration_minutes)) ? 0 : parseInt(planned.planned_duration_minutes)) : 0;
-        const plannedDuration = pHours * 60 + pMinutes;
-        const actualDuration = getDurationMinutesFrom(t);
-        
-        return {
-          date: (t as any).training_date,
-          plannedDistance: (planned.planned_distance_km as any) || 0,
-          actualDistance: (t.distance_km as any) || 0,
-          plannedDuration: plannedDuration,
-          actualDuration: actualDuration,
-          plannedEffort: (planned.planned_perceived_effort as any) || 0,
-          actualEffort: (t.perceived_effort as any) || 0,
-          completionRate: (planned.planned_distance_km as any) && (t.distance_km as any) ? 
-            ((t.distance_km as any) / (planned.planned_distance_km as any)) * 100 : 0,
-        };
-      });
+    // ✅ CORREÇÃO COMPLETA: Análise planejado vs realizado
+    const plannedVsCompleted = plannedExecutedSessions.map(executed => {
+      // Buscar o treino planejado original
+      const originalPlannedId = (executed as any).original_planned_id;
+      let planned: any = null;
+      
+      if (originalPlannedId) {
+        // Se tem ID do planejado original, buscar por ID
+        planned = plannedSessions.find(p => p.id === originalPlannedId);
+      } else {
+        // Fallback: buscar por data (lógica antiga)
+        planned = plannedSessions.find(p => p.training_date === executed.training_date);
+      }
+      
+      if (!planned) return null;
+      
+      // Calcular durações
+      const plannedHours = planned.duracao_horas ? parseInt(planned.duracao_horas) || 0 : 0;
+      const plannedMinutes = planned.duracao_minutos ? parseInt(planned.duracao_minutos) || 0 : 0;
+      const plannedDuration = plannedHours * 60 + plannedMinutes;
+      
+      const actualHours = executed.duracao_horas ? parseInt(executed.duracao_horas) || 0 : 0;
+      const actualMinutes = executed.duracao_minutos ? parseInt(executed.duracao_minutos) || 0 : 0;
+      const actualDuration = actualHours * 60 + actualMinutes;
+      
+      // Calcular variâncias
+      const plannedDistance = planned.distance_km || 0;
+      const actualDistance = executed.distance_km || 0;
+      const distanceVariance = plannedDistance > 0 ? 
+        ((actualDistance - plannedDistance) / plannedDistance) * 100 : 0;
+      
+      const durationVariance = plannedDuration > 0 ? 
+        ((actualDuration - plannedDuration) / plannedDuration) * 100 : 0;
+      
+      const effortVariance = (executed.perceived_effort || 0) - (parseInt(planned.esforco) || 0);
+      
+      // Classificar aderência
+      let adherenceLevel = 'unknown';
+      if (Math.abs(distanceVariance) <= 5) adherenceLevel = 'excellent';
+      else if (Math.abs(distanceVariance) <= 15) adherenceLevel = 'good';
+      else if (Math.abs(distanceVariance) <= 30) adherenceLevel = 'moderate';
+      else adherenceLevel = 'poor';
+      
+      return {
+        date: executed.training_date,
+        plannedId: planned.id,
+        executedId: executed.id,
+        plannedDistance,
+        actualDistance,
+        plannedDuration,
+        actualDuration,
+        plannedEffort: parseInt(planned.esforco) || 0,
+        actualEffort: executed.perceived_effort || 0,
+        plannedIntensity: planned.intensidade,
+        actualIntensity: executed.intensidade,
+        plannedModality: planned.modalidade,
+        actualModality: executed.modalidade,
+        plannedTrainingType: planned.treino_tipo,
+        actualTrainingType: executed.treino_tipo,
+        distanceVariance,
+        durationVariance,
+        effortVariance,
+        adherenceLevel,
+        completionRate: plannedDistance > 0 ? (actualDistance / plannedDistance) * 100 : 0,
+      };
+    }).filter(Boolean);
 
     const metricsByModality = completedSessions.reduce((acc, t) => {
       const modality = t.modalidade || 'outro';
@@ -931,6 +1084,24 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       data.avgSatisfaction = data.count > 0 ? data.avgSatisfaction / data.count : 0;
     });
 
+    // ✅ NOVO: Cálculo correto de aderência
+    const totalPlannedExecuted = plannedExecutedSessions.length;
+    const totalPlannedPending = plannedSessions.length;
+    const totalSpontaneous = spontaneousSessions.length;
+    
+    // Taxa de execução: treinos planejados executados / total de treinos planejados
+    const executionRate = totalPlannedPending > 0 ? 
+      (totalPlannedExecuted / (totalPlannedExecuted + totalPlannedPending)) * 100 : 0;
+    
+    // Taxa de aderência: média da aderência dos treinos executados
+    const adherenceRate = plannedVsCompleted.length > 0 ? 
+      plannedVsCompleted.reduce((sum, t) => {
+        const adherenceScore = t.adherenceLevel === 'excellent' ? 100 :
+                              t.adherenceLevel === 'good' ? 80 :
+                              t.adherenceLevel === 'moderate' ? 60 : 30;
+        return sum + adherenceScore;
+      }, 0) / plannedVsCompleted.length : 0;
+
     return {
       trainingLoad,
       acuteLoad,
@@ -939,10 +1110,15 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       plannedVsCompleted,
       metricsByModality,
       summary: {
-        totalPlanned: plannedSessions.length,
+        // ✅ CORREÇÃO: Métricas corretas
+        totalPlanned: totalPlannedPending,
+        totalPlannedExecuted: totalPlannedExecuted,
         totalCompleted: completedSessions.length,
-        completionRate: plannedSessions.length > 0 ? 
-          (completedSessions.length / plannedSessions.length) * 100 : 0,
+        totalSpontaneous: totalSpontaneous,
+        executionRate: executionRate,
+        adherenceRate: adherenceRate,
+        // Manter compatibilidade
+        completionRate: executionRate,
       }
     };
   },

@@ -1,0 +1,319 @@
+-- SCRIPT PARA CORRIGIR SEGURANÇA APENAS NAS TABELAS REAIS
+-- ⚠️ ATENÇÃO: Este script aplica RLS apenas em TABELAS, não em VIEWS
+
+-- 1. REMOVER POLÍTICAS EXISTENTES (se existirem)
+-- Profiles
+DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+
+-- Coaches
+DROP POLICY IF EXISTS "Coaches can view own data" ON coaches;
+DROP POLICY IF EXISTS "Coaches can update own data" ON coaches;
+DROP POLICY IF EXISTS "Coaches can insert own data" ON coaches;
+
+-- Training Sessions
+DROP POLICY IF EXISTS "Users can view own training sessions" ON training_sessions;
+DROP POLICY IF EXISTS "Users can insert own training sessions" ON training_sessions;
+DROP POLICY IF EXISTS "Users can update own training sessions" ON training_sessions;
+DROP POLICY IF EXISTS "Users can delete own training sessions" ON training_sessions;
+DROP POLICY IF EXISTS "Coaches can view athlete training sessions" ON training_sessions;
+DROP POLICY IF EXISTS "Coaches can update athlete training sessions" ON training_sessions;
+
+-- Daily Checkins
+DROP POLICY IF EXISTS "Users can view own checkins" ON daily_checkins;
+DROP POLICY IF EXISTS "Users can insert own checkins" ON daily_checkins;
+DROP POLICY IF EXISTS "Users can update own checkins" ON daily_checkins;
+DROP POLICY IF EXISTS "Coaches can view athlete checkins" ON daily_checkins;
+
+-- Races
+DROP POLICY IF EXISTS "Users can view own races" ON races;
+DROP POLICY IF EXISTS "Users can insert own races" ON races;
+DROP POLICY IF EXISTS "Users can update own races" ON races;
+DROP POLICY IF EXISTS "Users can delete own races" ON races;
+DROP POLICY IF EXISTS "Coaches can view athlete races" ON races;
+DROP POLICY IF EXISTS "Coaches can update athlete races" ON races;
+
+-- Fitness Tests
+DROP POLICY IF EXISTS "Users can view own fitness tests" ON fitness_tests;
+DROP POLICY IF EXISTS "Users can insert own fitness tests" ON fitness_tests;
+DROP POLICY IF EXISTS "Users can update own fitness tests" ON fitness_tests;
+DROP POLICY IF EXISTS "Users can delete own fitness tests" ON fitness_tests;
+DROP POLICY IF EXISTS "Coaches can view athlete fitness tests" ON fitness_tests;
+DROP POLICY IF EXISTS "Coaches can update athlete fitness tests" ON fitness_tests;
+
+-- Anamnesis
+DROP POLICY IF EXISTS "Users can view own anamnesis" ON anamnesis;
+DROP POLICY IF EXISTS "Users can insert own anamnesis" ON anamnesis;
+DROP POLICY IF EXISTS "Users can update own anamnesis" ON anamnesis;
+DROP POLICY IF EXISTS "Coaches can view athlete anamnesis" ON anamnesis;
+
+-- PARQ Responses
+DROP POLICY IF EXISTS "Users can view own parq responses" ON parq_responses;
+DROP POLICY IF EXISTS "Users can insert own parq responses" ON parq_responses;
+DROP POLICY IF EXISTS "Users can update own parq responses" ON parq_responses;
+DROP POLICY IF EXISTS "Coaches can view athlete parq responses" ON parq_responses;
+
+-- Training Preferences
+DROP POLICY IF EXISTS "Users can view own training preferences" ON training_preferences;
+DROP POLICY IF EXISTS "Users can insert own training preferences" ON training_preferences;
+DROP POLICY IF EXISTS "Users can update own training preferences" ON training_preferences;
+DROP POLICY IF EXISTS "Coaches can view athlete training preferences" ON training_preferences;
+DROP POLICY IF EXISTS "Coaches can update athlete training preferences" ON training_preferences;
+
+-- Insights
+DROP POLICY IF EXISTS "Users can view own insights" ON insights;
+DROP POLICY IF EXISTS "Users can insert own insights" ON insights;
+DROP POLICY IF EXISTS "Coaches can view athlete insights" ON insights;
+
+-- Macrociclos
+DROP POLICY IF EXISTS "Users can view own macrociclos" ON macrociclos;
+DROP POLICY IF EXISTS "Users can insert own macrociclos" ON macrociclos;
+DROP POLICY IF EXISTS "Users can update own macrociclos" ON macrociclos;
+DROP POLICY IF EXISTS "Users can delete own macrociclos" ON macrociclos;
+DROP POLICY IF EXISTS "Coaches can view athlete macrociclos" ON macrociclos;
+DROP POLICY IF EXISTS "Coaches can update athlete macrociclos" ON macrociclos;
+
+-- Mesociclos
+DROP POLICY IF EXISTS "Users can view own mesociclos" ON mesociclos;
+DROP POLICY IF EXISTS "Users can insert own mesociclos" ON mesociclos;
+DROP POLICY IF EXISTS "Users can update own mesociclos" ON mesociclos;
+DROP POLICY IF EXISTS "Users can delete own mesociclos" ON mesociclos;
+DROP POLICY IF EXISTS "Coaches can view athlete mesociclos" ON mesociclos;
+DROP POLICY IF EXISTS "Coaches can update athlete mesociclos" ON mesociclos;
+
+-- Microciclos
+DROP POLICY IF EXISTS "Users can view own microciclos" ON microciclos;
+DROP POLICY IF EXISTS "Users can insert own microciclos" ON microciclos;
+DROP POLICY IF EXISTS "Users can update own microciclos" ON microciclos;
+DROP POLICY IF EXISTS "Users can delete own microciclos" ON microciclos;
+DROP POLICY IF EXISTS "Coaches can view athlete microciclos" ON microciclos;
+DROP POLICY IF EXISTS "Coaches can update athlete microciclos" ON microciclos;
+
+-- Cycle Training Sessions
+DROP POLICY IF EXISTS "Users can view own cycle training sessions" ON cycle_training_sessions;
+DROP POLICY IF EXISTS "Users can insert own cycle training sessions" ON cycle_training_sessions;
+DROP POLICY IF EXISTS "Users can update own cycle training sessions" ON cycle_training_sessions;
+DROP POLICY IF EXISTS "Users can delete own cycle training sessions" ON cycle_training_sessions;
+DROP POLICY IF EXISTS "Coaches can view athlete cycle training sessions" ON cycle_training_sessions;
+DROP POLICY IF EXISTS "Coaches can update athlete cycle training sessions" ON cycle_training_sessions;
+
+-- Weekly Reflections
+DROP POLICY IF EXISTS "Users can view own weekly reflections" ON weekly_reflections;
+DROP POLICY IF EXISTS "Users can insert own weekly reflections" ON weekly_reflections;
+DROP POLICY IF EXISTS "Users can update own weekly reflections" ON weekly_reflections;
+DROP POLICY IF EXISTS "Coaches can view athlete weekly reflections" ON weekly_reflections;
+
+-- Weekly Summaries
+DROP POLICY IF EXISTS "Users can view own weekly summaries" ON weekly_summaries;
+DROP POLICY IF EXISTS "Users can insert own weekly summaries" ON weekly_summaries;
+DROP POLICY IF EXISTS "Coaches can view athlete weekly summaries" ON weekly_summaries;
+
+-- 2. HABILITAR ROW LEVEL SECURITY (RLS) APENAS NAS TABELAS CONFIRMADAS
+-- (Removendo as que são VIEWS)
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coaches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE training_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_checkins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE races ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fitness_tests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE anamnesis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE parq_responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE training_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE macrociclos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mesociclos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE microciclos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cycle_training_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_reflections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_summaries ENABLE ROW LEVEL SECURITY;
+
+-- NOTA: Removidas as seguintes porque são VIEWS:
+-- - active_athlete_coach_relationships
+-- - pending_athlete_coach_relationships  
+-- - training_adherence_analysis
+
+-- 3. CRIAR POLÍTICAS PARA PROFILES (Usuários só veem seus próprios dados)
+CREATE POLICY "Users can view own profile" ON profiles
+    FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON profiles
+    FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile" ON profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- 4. CRIAR POLÍTICAS PARA COACHES (Treinadores só veem seus próprios dados)
+CREATE POLICY "Coaches can view own data" ON coaches
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Coaches can update own data" ON coaches
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Coaches can insert own data" ON coaches
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 5. CRIAR POLÍTICAS PARA TRAINING_SESSIONS (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own training sessions" ON training_sessions
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own training sessions" ON training_sessions
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own training sessions" ON training_sessions
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own training sessions" ON training_sessions
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- NOTA: Políticas de treinador-atleta serão implementadas quando descobrirmos
+-- qual é a tabela real de relacionamentos (não a VIEW)
+
+-- 6. CRIAR POLÍTICAS PARA DAILY_CHECKINS (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own checkins" ON daily_checkins
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own checkins" ON daily_checkins
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own checkins" ON daily_checkins
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- 7. CRIAR POLÍTICAS PARA RACES (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own races" ON races
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own races" ON races
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own races" ON races
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own races" ON races
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- 8. CRIAR POLÍTICAS PARA FITNESS_TESTS (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own fitness tests" ON fitness_tests
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own fitness tests" ON fitness_tests
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own fitness tests" ON fitness_tests
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own fitness tests" ON fitness_tests
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- 9. CRIAR POLÍTICAS PARA ANAMNESIS (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own anamnesis" ON anamnesis
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own anamnesis" ON anamnesis
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own anamnesis" ON anamnesis
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- 10. CRIAR POLÍTICAS PARA PARQ_RESPONSES (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own parq responses" ON parq_responses
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own parq responses" ON parq_responses
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own parq responses" ON parq_responses
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- 11. CRIAR POLÍTICAS PARA TRAINING_PREFERENCES (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own training preferences" ON training_preferences
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own training preferences" ON training_preferences
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own training preferences" ON training_preferences
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- 12. CRIAR POLÍTICAS PARA INSIGHTS (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own insights" ON insights
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own insights" ON insights
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 13. CRIAR POLÍTICAS PARA CICLOS (Usuários + Treinadores vinculados)
+-- Macrociclos
+CREATE POLICY "Users can view own macrociclos" ON macrociclos
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own macrociclos" ON macrociclos
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own macrociclos" ON macrociclos
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own macrociclos" ON macrociclos
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Mesociclos
+CREATE POLICY "Users can view own mesociclos" ON mesociclos
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own mesociclos" ON mesociclos
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own mesociclos" ON mesociclos
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own mesociclos" ON mesociclos
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Microciclos
+CREATE POLICY "Users can view own microciclos" ON microciclos
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own microciclos" ON microciclos
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own microciclos" ON microciclos
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own microciclos" ON microciclos
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Cycle Training Sessions
+CREATE POLICY "Users can view own cycle training sessions" ON cycle_training_sessions
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own cycle training sessions" ON cycle_training_sessions
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own cycle training sessions" ON cycle_training_sessions
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own cycle training sessions" ON cycle_training_sessions
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- 14. CRIAR POLÍTICAS PARA WEEKLY_REFLECTIONS (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own weekly reflections" ON weekly_reflections
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own weekly reflections" ON weekly_reflections
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own weekly reflections" ON weekly_reflections
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- 15. CRIAR POLÍTICAS PARA WEEKLY_SUMMARIES (Usuários + Treinadores vinculados)
+CREATE POLICY "Users can view own weekly summaries" ON weekly_summaries
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own weekly summaries" ON weekly_summaries
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 16. VERIFICAR SE AS POLÍTICAS FORAM CRIADAS
+SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual 
+FROM pg_policies 
+WHERE schemaname = 'public' 
+ORDER BY tablename, policyname;
