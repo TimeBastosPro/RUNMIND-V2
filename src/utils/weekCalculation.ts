@@ -1,6 +1,8 @@
 // Utilitários para padronização de cálculo de semanas
 // Semana sempre começa na segunda-feira e termina no domingo
 
+import { formatDateToISO, formatDateToBrazilian } from './dateUtils';
+
 /**
  * Calcula o início da semana (segunda-feira) para uma data específica
  * @param date Data de referência
@@ -23,11 +25,11 @@ export function getWeekStart(date: Date): Date {
   weekStart.setHours(0, 0, 0, 0);
   
   console.log('🔧 DEBUG - getWeekStart:', {
-    inputDate: date.toISOString().split('T')[0],
+    inputDate: formatDateToISO(date),
     dayOfWeek: dayOfWeek,
     dayName: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][dayOfWeek],
     daysToMonday: daysToMonday,
-    weekStart: weekStart.toISOString().split('T')[0]
+    weekStart: formatDateToISO(weekStart)
   });
   
   return weekStart;
@@ -40,15 +42,42 @@ export function getWeekStart(date: Date): Date {
  */
 export function getWeekEnd(date: Date): Date {
   const weekStart = getWeekStart(date);
-  // ✅ SOLUÇÃO DEFINITIVA: Calcular domingo usando setDate
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6); // Adicionar 6 dias para chegar no domingo
+  
+  // ✅ SOLUÇÃO DEFINITIVA: Calcular domingo usando UTC para evitar problemas de timezone
+  const weekEnd = new Date(weekStart.getTime() + (6 * 24 * 60 * 60 * 1000)); // Adicionar 6 dias em milissegundos
   weekEnd.setHours(23, 59, 59, 999);
   
+  // ✅ VERIFICAÇÃO: Garantir que o resultado é realmente domingo
+  const dayOfWeek = weekEnd.getDay();
+  if (dayOfWeek !== 0) {
+    console.error('❌ ERRO CRÍTICO: getWeekEnd não retornou domingo!', {
+      inputDate: formatDateToISO(date),
+      weekStart: formatDateToISO(weekStart),
+      weekEnd: formatDateToISO(weekEnd),
+      dayOfWeek: dayOfWeek,
+      dayName: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][dayOfWeek]
+    });
+    
+    // ✅ CORREÇÃO DE EMERGÊNCIA: Forçar domingo usando cálculo direto
+    const correctedWeekEnd = new Date(weekStart);
+    correctedWeekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+    correctedWeekEnd.setHours(23, 59, 59, 999);
+    
+    console.log('🔧 CORREÇÃO APLICADA:', {
+      originalWeekEnd: formatDateToISO(weekEnd),
+      correctedWeekEnd: formatDateToISO(correctedWeekEnd),
+      correctedDayOfWeek: correctedWeekEnd.getDay()
+    });
+    
+    return correctedWeekEnd;
+  }
+  
   console.log('🔧 DEBUG - getWeekEnd DEFINITIVO:', {
-    inputDate: date.toISOString().split('T')[0],
-    weekStart: weekStart.toISOString().split('T')[0],
-    weekEnd: weekEnd.toISOString().split('T')[0],
+    inputDate: formatDateToISO(date),
+    weekStart: formatDateToISO(weekStart),
+    weekEnd: formatDateToISO(weekEnd),
+    dayOfWeek: dayOfWeek,
+    dayName: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][dayOfWeek],
     daysDifference: Math.floor((weekEnd.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24))
   });
   
@@ -99,10 +128,7 @@ export function navigateWeek(currentDate: Date, direction: 'prev' | 'next'): Dat
  */
 export function formatWeekPeriod(startDate: Date, endDate: Date): string {
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('pt-BR', { 
-      day: '2-digit', 
-      month: '2-digit' 
-    });
+    return formatDateToBrazilian(date).substring(0, 5); // DD/MM
   };
   
   return `${formatDate(startDate)} - ${formatDate(endDate)}`;
@@ -132,7 +158,7 @@ export function generateWeekDates(weekStart: Date): Date[] {
  * @returns String no formato YYYY-MM-DD
  */
 export function dateToISOString(date: Date): string {
-  return date.toISOString().split('T')[0];
+  return formatDateToISO(date);
 }
 
 /**

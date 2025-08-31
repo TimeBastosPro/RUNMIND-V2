@@ -10,7 +10,7 @@ import WellbeingChartsTab from './tabs/WellbeingChartsTab';
 import TrainingChartsTab from './tabs/TrainingChartsTab';
 import CrossAnalysisTab from './tabs/CrossAnalysisTab';
 import TrainingLoadTab from './tabs/TrainingLoadTab';
-import AdherenceAnalysisTab from './tabs/AdherenceAnalysisTab';
+
 
 const Tab = createMaterialTopTabNavigator();
 const { width: screenWidth } = Dimensions.get('window');
@@ -101,16 +101,7 @@ export default function ComparativeChartsScreen() {
             ),
           }}
         />
-        <Tab.Screen 
-          name="Adherence"
-          component={AdherenceAnalysisTab}
-          options={{ 
-            tabBarLabel: isMobile ? 'Aderência' : 'Aderência ao Planejamento',
-            tabBarIcon: ({ color }) => (
-              <Text style={{ color, fontSize: 16 }}>🎯</Text>
-            ),
-          }}
-        />
+
       </Tab.Navigator>
     </View>
   );

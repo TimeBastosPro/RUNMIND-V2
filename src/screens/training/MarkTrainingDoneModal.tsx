@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView } from 'react-native';
+import { View, ScrollView, Alert } from 'react-native';
 import { Modal, Portal, Text, Button, TextInput, Divider, RadioButton, Checkbox } from 'react-native-paper';
 import type { TrainingSession } from '../../types/database'; // Importação do tipo correto
 import { useCheckinStore } from '../../stores/checkin';
@@ -46,7 +46,20 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
   const { deleteTrainingSession, fetchTrainingSessions } = useCheckinStore();
 
   useEffect(() => {
+    console.log('🔍 MarkTrainingDoneModal - useEffect triggered');
+    console.log('🔍 plannedData:', plannedData);
+    
     if (plannedData) {
+      console.log('🔍 Carregando dados no modal:', {
+        distance_km: plannedData.distance_km,
+        distance_m: plannedData.distance_m,
+        duracao_horas: plannedData.duracao_horas,
+        duracao_minutos: plannedData.duracao_minutos,
+        intensidade: plannedData.intensidade,
+        avg_heart_rate: plannedData.avg_heart_rate,
+        observacoes: plannedData.observacoes
+      });
+      
       setDistanceKm(plannedData.distance_km ? String(plannedData.distance_km) : '');
       setDistanceM(plannedData.distance_m ? String(plannedData.distance_m) : '');
       setDurationH(plannedData.duracao_horas ? String(plannedData.duracao_horas) : '0');
@@ -54,6 +67,10 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
       setEffort(plannedData.intensidade ? String(plannedData.intensidade) : '5');
       setAvgHeartRate(plannedData.avg_heart_rate ? String(plannedData.avg_heart_rate) : '');
       setNotes(plannedData.observacoes || '');
+      
+      console.log('✅ Dados carregados no modal com sucesso');
+    } else {
+      console.log('❌ Nenhum plannedData fornecido ao modal');
     }
   }, [plannedData]);
 
@@ -100,12 +117,32 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
     
     if (!plannedData || !plannedData.id) {
       console.error('Não é possível excluir: treino sem ID válido');
-      alert('Erro: Treino sem ID válido para exclusão');
+      // ✅ CORREÇÃO: Usar Alert.alert em vez de alert
+      Alert.alert('Erro', 'Treino sem ID válido para exclusão');
       return;
     }
     
     // Confirmar exclusão com o usuário
-    if (!confirm('Tem certeza que deseja excluir este treino?')) {
+    // ✅ CORREÇÃO: Usar Alert.alert em vez de confirm (React Native)
+    const confirmed = await new Promise((resolve) => {
+      // Para web, usar confirm
+      if (typeof window !== 'undefined' && window.confirm) {
+        resolve(window.confirm('Tem certeza que deseja excluir este treino?'));
+      } else {
+        // Para React Native, usar Alert
+        Alert.alert(
+          'Confirmar exclusão',
+          'Tem certeza que deseja excluir este treino?',
+          [
+            { text: 'Cancelar', onPress: () => resolve(false), style: 'cancel' },
+            { text: 'Excluir', onPress: () => resolve(true), style: 'destructive' }
+          ]
+        );
+      }
+    });
+    
+    if (!confirmed) {
+      console.log('❌ Exclusão cancelada pelo usuário');
       return;
     }
     
@@ -118,13 +155,14 @@ export default function MarkTrainingDoneModal({ visible, plannedData, onSave, on
         console.log('Recarregando dados...');
         await fetchTrainingSessions();
         onCancel();
-        alert('✅ Treino excluído com sucesso!');
+        // ✅ CORREÇÃO: Usar Alert.alert em vez de alert
+        Alert.alert('Sucesso', 'Treino excluído com sucesso!');
       } else {
-        alert('❌ Falha ao excluir treino');
+        Alert.alert('Erro', 'Falha ao excluir treino');
       }
     } catch (error) {
       console.error('Erro ao excluir treino:', error);
-      alert('❌ Erro ao excluir treino: ' + (error instanceof Error ? error.message : String(error)));
+      Alert.alert('Erro', 'Erro ao excluir treino: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 

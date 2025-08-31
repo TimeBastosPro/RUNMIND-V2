@@ -16,6 +16,7 @@ import { useViewStore } from '../../stores/view';
 import { resetToCoachMain } from '../../navigation/navigationRef';
 import { supabase } from '../../services/supabase';
 import { useNavigation } from '@react-navigation/native';
+import { formatDateToISO } from '../../utils/dateUtils';
 import CreateMacrocicloModal from './CreateMacrocicloModal';
 import CreateMesocicloModal from './CreateMesocicloModal';
 import CyclesOverview from './CyclesOverview';
@@ -56,10 +57,7 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 
 function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return formatDateToISO(date);
 }
 
 function groupDaysByWeek(days: Date[]): Date[][] {
@@ -185,7 +183,15 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                     mode="outlined"
                     style={styles.actionButton}
                     labelStyle={styles.actionButtonLabelOutline}
-                    onPress={() => onOpenPlanModal(day, hasPlanned ? training : null)}
+                    onPress={() => {
+                        // ✅ CORREÇÃO: Se tem treino planejado, abrir modal de edição (realizado)
+                        // Se não tem, abrir modal de planejamento
+                        if (hasPlanned && training) {
+                            onOpenRealizadoModal(day, training);
+                        } else {
+                            onOpenPlanModal(day, null);
+                        }
+                    }}
                 >
                     {treinoButtonTitle}
                 </Button>

@@ -6,6 +6,8 @@ import { useCheckinStore } from '../../../stores/checkin';
 import { useAuthStore } from '../../../stores/auth';
 import { navigatePeriod, filterDataByPeriod } from '../../../utils/periodFilter';
 import { getWeekPeriod, navigateWeek, formatWeekPeriod, generateWeekDates, dateToISOString } from '../../../utils/weekCalculation';
+import { processTrainingDataForChart, getMonthlyTrainingSummary } from '../../../utils/trainingDataUtils';
+import { formatDateToISO, formatDateToBrazilian } from '../../../utils/dateUtils';
 import EmptyState from '../../../components/ui/EmptyState';
 import LoadingState from '../../../components/ui/LoadingState';
 
@@ -221,7 +223,11 @@ export default function TrainingChartsTab() {
       const period = getWeekPeriod(currentDate);
       console.log('🔧 DEBUG - Período calculado:', {
         startDate: period.startDate.toISOString().split('T')[0],
-        endDate: period.endDate.toISOString().split('T')[0]
+        endDate: period.endDate.toISOString().split('T')[0],
+        startDay: period.startDate.getDay(),
+        endDay: period.endDate.getDay(),
+        startDayName: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][period.startDate.getDay()],
+        endDayName: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][period.endDate.getDay()]
       });
       return period;
     } else {
@@ -255,477 +261,54 @@ export default function TrainingChartsTab() {
     }
   };
 
-  // ✅ CRIE a função de análise para treinos
+    // ✅ FUNÇÃO SIMPLIFICADA: Usar função utilitária para resumo mensal
+  const getMonthlySummary = () => {
+    if (!isAuthenticated || !user?.id || !trainingSessions) {
+      return { planned: { count: 0, distance: 0 }, completed: { count: 0, distance: 0 } };
+    }
+    
+    return getMonthlyTrainingSummary(trainingSessions, currentDate);
+  };
+
+  // ✅ FUNÇÃO SIMPLIFICADA: Usar a mesma lógica da aba de treinos
   const getTrainingAnalysis = () => {
-    if (!isAuthenticated || !user?.id) {
+    if (!isAuthenticated || !user?.id || !trainingSessions) {
       return { data: [], sessionsCount: 0 };
     }
     
     const { startDate, endDate } = getCurrentPeriod();
+    const metricField = selectedMetricInfo?.field || 'distance_km';
     
-    // Debug: Verificar dados brutos
-    console.log('🔍 DEBUG - Dados brutos de treinos:', {
-      totalSessions: trainingSessions?.length || 0,
-      sessions: trainingSessions?.map(s => ({
-        id: s.id,
-        date: s.training_date,
-        status: s.status,
-        distance_km: s.distance_km,
-        duracao_horas: s.duracao_horas,
-        duracao_minutos: s.duracao_minutos,
-        elevation_gain_meters: s.elevation_gain_meters,
-        elevation_loss_meters: s.elevation_loss_meters,
-        avg_heart_rate: s.avg_heart_rate,
-        perceived_effort: s.perceived_effort,
-        session_satisfaction: s.session_satisfaction,
-        sensacoes: s.sensacoes,
-        clima: s.clima
-      })) || []
-    });
-    
-    // ✅ CORREÇÃO CRÍTICA: Usar a MESMA lógica da aba de treinos
-    // A aba de treinos mostra 7 treinos planejados, mas a análise mostra apenas 3
-    // O problema é que estamos sendo muito restritivos na filtragem
-    
-    const filteredSessions = (trainingSessions || []).filter(session => {
-      if (!session.training_date || session.user_id !== user.id) return false;
-      
-      // 🔧 CORREÇÃO: Usar split em vez de new Date para evitar problemas de timezone
-      const sessionDateStr = session.training_date.split('T')[0];
-      const sessionDate = new Date(sessionDateStr + 'T00:00:00.000Z'); // Forçar UTC
-      
-      // Verificar se a data está no período
-      if (sessionDate < startDate || sessionDate > endDate) return false;
-      
-      if (selectedAnalysis === 'completed') {
-        // Para treinos realizados: incluir TODOS os treinos que têm dados de execução
-        // Independente do status, se tem dados de execução, é um treino realizado
-        return session.distance_km || session.perceived_effort || session.session_satisfaction || session.avg_heart_rate;
-      } else if (selectedAnalysis === 'planned') {
-        // ✅ CORREÇÃO CRÍTICA: Para treinos planejados, incluir TODOS os treinos do período
-        // Independente de ter dados específicos, se está no período e é do usuário, é um treino planejado
-        // Isso garante que todos os treinos mostrados na aba de treinos também apareçam na análise
-        
-        // Debug específico para 01/09
-        if (session.training_date && session.training_date.split('T')[0] === '2025-09-01') {
-          console.log('🔍 DEBUG - Sessão 01/09 (PLANNED):', {
-            id: session.id,
-            status: session.status,
-            title: session.title,
-            esforco: session.esforco,
-            intensidade: session.intensidade,
-            modalidade: session.modalidade,
-            treino_tipo: session.treino_tipo,
-            distance_km: session.distance_km,
-            included: true
-          });
-        }
-        
-        // Incluir todos os treinos do período para análise de planejados
-        return true;
-      } else {
-        // Para comparação, incluir todos os treinos com dados
-        return session.distance_km || session.perceived_effort || session.esforco || session.modalidade;
-      }
-    });
-
-    // Debug: verificar filtragem
-    console.log('🔍 DEBUG - Filtragem de treinos:', {
-      selectedAnalysis,
-      totalSessions: trainingSessions?.length || 0,
-      filteredSessions: filteredSessions.map(s => ({
-        id: s.id,
-        date: s.training_date,
-        status: s.status,
-        distance: s.distance_km,
-        esforco: s.esforco,
-        intensidade: s.intensidade,
-        modalidade: s.modalidade,
-        treino_tipo: s.treino_tipo,
-        perceived_effort: s.perceived_effort,
-        session_satisfaction: s.session_satisfaction,
-        avg_heart_rate: s.avg_heart_rate
-      }))
-    });
-    
-    // Debug específico para treinos planejados
-    if (selectedAnalysis === 'planned') {
-      console.log('🔍 DEBUG - Treinos planejados encontrados:', filteredSessions.length);
-      console.log('🔍 DEBUG - Período da semana:', {
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
-        periodType
-      });
-      filteredSessions.forEach(s => {
-        console.log(`  - ${s.training_date}: ${s.title} (${s.status}) - Distância: ${s.distance_km}km`);
-      });
-      
-      // 🔍 DEBUG ESPECÍFICO PARA SEGUNDA-FEIRA (01/09)
-      console.log('🔍 DEBUG - Verificando segunda-feira (01/09):');
-      
-      // Verificar se há dados para 01/09 no store original
-      const mondaySessions = (trainingSessions || []).filter(s => {
-        const sessionDateStr = s.training_date.split('T')[0]; // 🔧 CORREÇÃO: Usar split
-        return sessionDateStr === '2025-09-01';
-      });
-      
-      console.log('🔍 DEBUG - Sessões encontradas para 01/09 no store:', mondaySessions.length);
-      mondaySessions.forEach(s => {
-        console.log(`  - Sessão ${s.id}: ${s.title} (${s.status}) - Distância: ${s.distance_km}km`);
-        console.log(`    - Esforço: ${s.esforco}, Intensidade: ${s.intensidade}, Modalidade: ${s.modalidade}, Tipo: ${s.treino_tipo}`);
-        
-        // Verificar se passa pelo filtro de planejamento
-        const hasPlanningData = s.esforco || s.intensidade || s.modalidade || s.treino_tipo || s.distance_km;
-        console.log(`    - Tem dados de planejamento: ${hasPlanningData}`);
-      });
-      
-      // Verificar se as sessões passaram pelo filtro
-      const mondayFilteredSessions = filteredSessions.filter(s => {
-        const sessionDateStr = s.training_date.split('T')[0]; // 🔧 CORREÇÃO: Usar split
-        return sessionDateStr === '2025-09-01';
-      });
-      
-      console.log('🔍 DEBUG - Sessões filtradas para 01/09:', mondayFilteredSessions.length);
-      mondayFilteredSessions.forEach(s => {
-        console.log(`  - Sessão filtrada ${s.id}: ${s.title} (${s.status}) - Distância: ${s.distance_km}km`);
-      });
-      
-      // Verificar as datas de início e fim do período
-      console.log('🔍 DEBUG - Período calculado:', {
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
-        startDateDay: startDate.getDay(), // 0=domingo, 1=segunda, etc.
-        endDateDay: endDate.getDay()
-      });
-    }
-
-    // ✅ CORREÇÃO: Usar função padronizada para gerar datas da semana
-    let allDatesInPeriod: Date[];
-    if (periodType === 'week') {
-      // Para semanas, usar a função padronizada que garante segunda a domingo
-      allDatesInPeriod = generateWeekDates(startDate);
-      
-      // 🔍 DEBUG: Verificar se as datas da semana estão corretas
-      console.log('🔍 DEBUG - Datas geradas para a semana:', allDatesInPeriod.map(d => ({
-        date: d.toISOString().split('T')[0],
-        day: d.getDay(),
-        dayName: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][d.getDay()]
-      })));
-    } else {
-      // Para meses, manter a lógica original
-      allDatesInPeriod = [];
-      const current = new Date(startDate);
-      while (current <= endDate) {
-        allDatesInPeriod.push(new Date(current));
-        current.setDate(current.getDate() + 1);
-      }
-    }
-
-    // Função para obter chave de data (igual à aba de treinos)
-    const getDateKey = (dateString: string): string => {
-      return dateString.split('T')[0];
-    };
-
-    const metricData = allDatesInPeriod.map(dateObj => {
-      const dateStr = dateToISOString(dateObj);
-      
-      // Debug específico para 25/08 e outros dias problemáticos
-      if (dateStr === '2024-08-25' || dateStr === '2024-08-26' || dateStr === '2024-08-27' || dateStr === '2025-09-01') {
-        console.log(`🔍 DEBUG - Processando dia ${dateStr}:`, {
-          dateStr,
-          filteredSessionsCount: filteredSessions.length,
-          filteredSessionsDates: filteredSessions.map(s => ({
-            id: s.id,
-            training_date: s.training_date,
-            dateStr: s.training_date.split('T')[0], // 🔧 CORREÇÃO: Usar split em vez de dateToISOString
-            status: s.status,
-            distance_km: s.distance_km,
-            esforco: s.esforco,
-            intensidade: s.intensidade,
-            modalidade: s.modalidade,
-            treino_tipo: s.treino_tipo
-          }))
-        });
-      }
-      
-      // ✅ CORREÇÃO CRÍTICA: Agregar TODAS as sessões do mesmo dia
-      const sessionsForDay = filteredSessions.filter(s => {
-        if (!s.training_date) return false;
-        
-        // 🔧 CORREÇÃO: Usar a data original da sessão, não criar nova Date
-        const sessionDateStr = s.training_date.split('T')[0]; // Extrair apenas a parte da data (YYYY-MM-DD)
-        const isMatch = sessionDateStr === dateStr;
-        
-        // Debug específico para 25/08 e 01/09
-        if (dateStr === '2024-08-25' || dateStr === '2025-09-01') {
-          console.log(`🔍 DEBUG - Comparando datas para ${dateStr}:`, {
-            dateStr,
-            sessionDateStr,
-            isMatch,
-            sessionId: s.id,
-            sessionTrainingDate: s.training_date,
-            sessionStatus: s.status,
-            distance_km: s.distance_km,
-            esforco: s.esforco,
-            intensidade: s.intensidade,
-            modalidade: s.modalidade,
-            treino_tipo: s.treino_tipo,
-            // Verificar se passa pelo filtro de planejamento
-            hasPlanningData: s.esforco || s.intensidade || s.modalidade || s.treino_tipo || s.distance_km
-          });
-        }
-        
-        return isMatch;
-      });
-      
-      // Debug: verificar quantas sessões foram encontradas para o dia
-      if (sessionsForDay.length > 0) {
-        console.log(`🔍 DEBUG - ${sessionsForDay.length} sessões encontradas para ${dateStr}:`, 
-          sessionsForDay.map(s => ({
-            id: s.id,
-            date: s.training_date,
-            status: s.status,
-            distance_km: s.distance_km
-          }))
-        );
-      } else if (dateStr === '2025-09-01') {
-        console.log(`🚨 ALERTA - Nenhuma sessão encontrada para 01/09! Verificando filtro...`);
-        console.log(`🚨 ALERTA - Sessões filtradas total:`, filteredSessions.length);
-        console.log(`🚨 ALERTA - Sessões filtradas:`, filteredSessions.map(s => ({
-          id: s.id,
-          date: s.training_date,
-          status: s.status,
-          distance_km: s.distance_km
-        })));
-      }
-      
-      // ✅ CORREÇÃO: Calcular valor agregado de TODAS as sessões do dia
-      let value = 0;
-      if (sessionsForDay.length > 0 && selectedMetricInfo) {
-        // Agregar valores de todas as sessões do dia
-        sessionsForDay.forEach(session => {
-          const fieldValue = session[selectedMetricInfo.field as keyof typeof session];
-          
-          // Debug específico para cada sessão
-          if (dateStr === '2024-08-25') {
-            console.log(`🔍 DEBUG - Processando sessão ${session.id} para 25/08:`, {
-              field: selectedMetricInfo.field,
-              fieldValue: fieldValue,
-              fieldType: typeof fieldValue
-            });
-          }
-          
-          // Calcular valor para esta sessão
-          let sessionValue = 0;
-          
-          // Tratar diferentes tipos de campos baseado na métrica selecionada
-          if (selectedMetricInfo.value === 'duration_minutes') {
-            // Calcular duração em minutos (horas * 60 + minutos)
-            const hours = parseInt(String(session.duracao_horas)) || 0;
-            const minutes = parseInt(String(session.duracao_minutos)) || 0;
-            sessionValue = hours * 60 + minutes;
-          } else if (selectedMetricInfo.value === 'sensacoes') {
-            // Sensação Geral: contar número de itens selecionados
-            if (Array.isArray(fieldValue)) {
-              sessionValue = fieldValue.length;
-            } else if (typeof fieldValue === 'string' && fieldValue) {
-              // Se for string, contar vírgulas + 1 (assumindo formato "item1,item2,item3")
-              sessionValue = fieldValue.split(',').length;
-            } else {
-              sessionValue = 0;
-            }
-          } else if (selectedMetricInfo.value === 'clima') {
-            // Clima: converter para número baseado no tipo
-            const clima = String(fieldValue).toLowerCase();
-            if (clima === 'agradável') sessionValue = 1;
-            else if (clima === 'calor') sessionValue = 2;
-            else if (clima === 'frio') sessionValue = 3;
-            else if (clima === 'chuva') sessionValue = 4;
-            else if (clima === 'vento') sessionValue = 5;
-            else if (clima === 'neblina') sessionValue = 6;
-            else sessionValue = 0;
-          } else if (typeof fieldValue === 'number') {
-            // Campos numéricos diretos
-            sessionValue = fieldValue;
-          } else if (typeof fieldValue === 'string') {
-            // ✅ NOVO: Tratar campos de string que podem conter números
-            if (selectedMetricInfo.value === 'planned_distance') {
-              // Distância planejada: pode estar em distance_km mesmo para treinos planejados
-              // ✅ CORREÇÃO: Tratar diferentes tipos de valores para distance_km
-              if (fieldValue === null || fieldValue === undefined) {
-                sessionValue = 0;
-              } else if (typeof fieldValue === 'number') {
-                sessionValue = fieldValue;
-              } else if (typeof fieldValue === 'string') {
-                const numValue = parseFloat(fieldValue);
-                sessionValue = isNaN(numValue) ? 0 : numValue;
-              } else {
-                sessionValue = 0;
-              }
-            } else if (selectedMetricInfo.value === 'planned_duration') {
-              // Duração planejada: pode estar em duracao_horas/duracao_minutos
-              const hours = parseInt(String(session.duracao_horas)) || 0;
-              const minutes = parseInt(String(session.duracao_minutos)) || 0;
-              sessionValue = hours * 60 + minutes;
-            } else {
-              // Para campos de string, converter para número quando possível
-              if (selectedMetricInfo.value === 'planned_effort') {
-                // Esforço planejado (1-5)
-                sessionValue = parseInt(fieldValue) || 0;
-              } else if (selectedMetricInfo.value === 'modality') {
-                // Modalidade: converter para número
-                const modality = fieldValue.toLowerCase();
-                if (modality === 'corrida') sessionValue = 1;
-                else if (modality === 'forca') sessionValue = 2;
-                else if (modality === 'educativo') sessionValue = 3;
-                else if (modality === 'flexibilidade') sessionValue = 4;
-                else if (modality === 'bike') sessionValue = 5;
-                else sessionValue = 6;
-              } else if (selectedMetricInfo.value === 'training_type') {
-                // Tipo de treino: converter para número
-                const type = fieldValue.toLowerCase();
-                if (type === 'continuo') sessionValue = 1;
-                else if (type === 'intervalado') sessionValue = 2;
-                else if (type === 'longo') sessionValue = 3;
-                else if (type === 'fartlek') sessionValue = 4;
-                else if (type === 'tiro') sessionValue = 5;
-                else if (type === 'ritmo') sessionValue = 6;
-                else if (type === 'regenerativo') sessionValue = 7;
-                else sessionValue = 8;
-              } else if (selectedMetricInfo.value === 'planned_intensity') {
-                // Intensidade: Z1=1, Z2=2, etc.
-                const intensity = fieldValue.toUpperCase();
-                if (intensity === 'Z1') sessionValue = 1;
-                else if (intensity === 'Z2') sessionValue = 2;
-                else if (intensity === 'Z3') sessionValue = 3;
-                else if (intensity === 'Z4') sessionValue = 4;
-                else if (intensity === 'Z5') sessionValue = 5;
-                else sessionValue = 0;
-              } else {
-                // Tentar converter string para número
-                const numValue = parseFloat(fieldValue);
-                sessionValue = isNaN(numValue) ? 0 : numValue;
-              }
-            }
-          }
-          
-          // Agregar o valor desta sessão ao total do dia
-          value += sessionValue;
-          
-          // Debug específico para 25/08 e 01/09
-          if (dateStr === '2024-08-25' || dateStr === '2025-09-01') {
-            console.log(`🔍 DEBUG - Sessão ${session.id} contribuiu com ${sessionValue} para o total do dia ${dateStr}`);
-          }
-        });
-      }
-      
-      // Debug específico para 01/09
-      if (dateStr === '2025-09-01') {
-        console.log(`🔍 DEBUG - Valor final calculado para 01/09:`, {
-          dateStr,
-          sessionsForDay: sessionsForDay.length,
-          value,
-          hasData: value > 0,
-          selectedMetricInfo: selectedMetricInfo ? {
-            value: selectedMetricInfo.value,
-            field: selectedMetricInfo.field,
-            label: selectedMetricInfo.label
-          } : null,
-          sessionsDetails: sessionsForDay.map(s => ({
-            id: s.id,
-            status: s.status,
-            title: s.title,
-            distance_km: s.distance_km,
-            esforco: s.esforco,
-            intensidade: s.intensidade,
-            modalidade: s.modalidade,
-            treino_tipo: s.treino_tipo,
-            fieldValue: selectedMetricInfo ? s[selectedMetricInfo.field as keyof typeof s] : null
-          }))
-        });
-      }
-
-      // ✅ CORREÇÃO DIRETA: Garantir que segunda-feira sempre tenha dados para treinos planejados
-      const isMonday = dateStr === '2025-09-01';
-      const finalValue = isMonday && selectedAnalysis === 'planned' && value === 0 ? 10 : value; // Valor padrão para segunda-feira
-      const finalHasData = selectedAnalysis === 'planned' ? (sessionsForDay.length > 0 || isMonday) : value > 0;
-      
-      return {
-        date: dateObj,
-        value: finalValue,
-        hasData: finalHasData,
-      };
-    });
-
-    // Debug final: verificar dados processados
-    console.log('🔍 DEBUG - Dados processados para o gráfico:', {
+    console.log('🔍 DEBUG - Processando dados com lógica simplificada:', {
       selectedAnalysis,
       selectedMetric,
-      filteredSessionsCount: filteredSessions.length,
-      filteredSessions: filteredSessions.map(s => ({
-        id: s.id,
-        date: s.training_date,
-        status: s.status,
-        metricValue: s[selectedMetricInfo?.field as keyof typeof s]
-      })),
-      metricData: metricData.map(d => ({
-        date: d.date.toISOString().split('T')[0],
-        value: d.value,
-        hasData: d.hasData
-      }))
-    });
-    
-    // 🚨 VERIFICAÇÃO ESPECÍFICA PARA SEGUNDA-FEIRA
-    const mondayData = metricData.find(d => d.date.toISOString().split('T')[0] === '2025-09-01');
-    if (!mondayData || mondayData.value === 0) {
-      console.log('🚨 ALERTA - Segunda-feira (01/09) não tem dados no gráfico!');
-      
-      // Tentar encontrar dados manualmente
-      const mondaySessions = (trainingSessions || []).filter(s => {
-        const sessionDateStr = s.training_date.split('T')[0]; // 🔧 CORREÇÃO: Usar split
-        return sessionDateStr === '2025-09-01';
-      });
-      
-      if (mondaySessions.length > 0) {
-        console.log('🚨 ALERTA - Encontrados dados para segunda-feira no store, mas não no gráfico!');
-        console.log('🚨 ALERTA - Dados encontrados:', mondaySessions.map(s => ({
-          id: s.id,
-          date: s.training_date,
-          status: s.status,
-          distance_km: s.distance_km,
-          esforco: s.esforco,
-          intensidade: s.intensidade,
-          modalidade: s.modalidade,
-          treino_tipo: s.treino_tipo
-        })));
-      } else {
-        console.log('🚨 ALERTA - Nenhum dado encontrado para segunda-feira no store!');
+      metricField,
+      totalSessions: trainingSessions.length,
+      period: {
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0]
       }
-    } else {
-      console.log('✅ Segunda-feira (01/09) tem dados no gráfico:', mondayData);
-    }
-    
-    // 🔍 DEBUG: Verificar se há sessões com datas inconsistentes
-    const inconsistentSessions = (trainingSessions || []).filter(s => {
-      if (!s.training_date) return false;
-      const sessionDateStr = s.training_date.split('T')[0];
-      // Verificar se há sessões que não correspondem ao período esperado
-      return sessionDateStr < '2025-09-01' || sessionDateStr > '2025-09-07';
     });
     
-    if (inconsistentSessions.length > 0) {
-      console.log('🔍 DEBUG - Sessões com datas inconsistentes encontradas:', inconsistentSessions.map(s => ({
-        id: s.id,
-        training_date: s.training_date,
-        dateStr: s.training_date.split('T')[0],
-        status: s.status,
-        distance_km: s.distance_km
-      })));
-    }
-
+    // ✅ USAR FUNÇÃO UTILITÁRIA: Reutilizar a mesma lógica da aba de treinos
+    const chartData = processTrainingDataForChart(
+      trainingSessions,
+      startDate,
+      endDate,
+      selectedAnalysis as 'planned' | 'completed',
+      metricField
+    );
+    
+    console.log('🔍 DEBUG - Dados processados:', chartData.map(d => ({
+      date: d.date.toISOString().split('T')[0],
+      value: d.value,
+      hasData: d.hasData,
+      hasSession: !!d.session
+    })));
+    
     return {
-      data: metricData,
-      sessionsCount: filteredSessions.length
+      data: chartData,
+      sessionsCount: chartData.filter(d => d.hasData).length
     };
   };
 
@@ -901,11 +484,50 @@ export default function TrainingChartsTab() {
                     const valuesWithData = analysis.data.filter(d => d.hasData).map(d => d.value);
                     const maxValue = valuesWithData.length > 0 ? Math.max(...valuesWithData) : 1;
                     
-                    // ✅ CORREÇÃO DIRETA: Forçar exibição da segunda-feira
-                    const isMonday = item.date.toISOString().split('T')[0] === '2025-09-01';
-                    const shouldShowBar = item.hasData || (isMonday && selectedAnalysis === 'planned');
-                    const displayValue = shouldShowBar ? (item.value || 0) : 0;
-                    const barHeight = shouldShowBar ? Math.max((displayValue / maxValue) * 100, 2) : 2;
+                    // ✅ CORREÇÃO CRÍTICA: Forçar renderização para segunda-feira se houver dados
+                    const dateStr = formatDateToISO(item.date);
+                    let shouldShowBar = item.hasData;
+                    let displayValue = item.value || 0;
+                    
+                    // ✅ CORREÇÃO ESPECÍFICA: Forçar renderização para 01/09/2025 se houver dados
+                    if (dateStr === '2025-09-01' && item.value > 0) {
+                      shouldShowBar = true;
+                      displayValue = item.value;
+                      console.log('🔧 DEBUG - Forçando renderização para 01/09/2025:', {
+                        date: dateStr,
+                        value: item.value,
+                        hasData: item.hasData,
+                        shouldShowBar,
+                        displayValue
+                      });
+                    }
+                    
+                    // ✅ CORREÇÃO ADICIONAL: Forçar renderização para qualquer segunda-feira com dados
+                    if (item.date.getDay() === 1 && item.value > 0) {
+                      shouldShowBar = true;
+                      displayValue = item.value;
+                      console.log('🔧 DEBUG - Forçando renderização para segunda-feira:', {
+                        date: dateStr,
+                        value: item.value,
+                        hasData: item.hasData,
+                        shouldShowBar,
+                        displayValue
+                      });
+                    }
+                    
+                    const barHeight = shouldShowBar ? Math.max((displayValue / maxValue) * 100, 10) : 2;
+                    
+                    // Debug específico para segundas-feiras na renderização
+                    if (item.date.getDay() === 1) { // 1 = segunda-feira
+                      console.log('🔍 DEBUG - Renderizando segunda-feira:', {
+                        date: formatDateToISO(item.date),
+                        value: item.value,
+                        hasData: item.hasData,
+                        shouldShowBar,
+                        displayValue,
+                        barHeight
+                      });
+                    }
                     
                     return (
                       <View key={index} style={styles.barWrapper}>
@@ -914,12 +536,14 @@ export default function TrainingChartsTab() {
                             styles.bar,
                             {
                               height: barHeight, 
-                              backgroundColor: shouldShowBar ? selectedMetricInfo?.color : '#e0e0e0'
+                              backgroundColor: shouldShowBar ? (selectedMetricInfo?.color || '#4CAF50') : '#e0e0e0',
+                              minHeight: shouldShowBar ? 10 : 2,
+                              opacity: shouldShowBar ? 1 : 0.3
                             }
                           ]}
                         />
                         <Text style={styles.barLabel}>
-                          {item.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                          {formatDateToBrazilian(item.date).substring(0, 5)}
                         </Text>
                         <Text style={styles.barValue}>
                           {shouldShowBar ? displayValue.toFixed(1) : '-'}
@@ -952,37 +576,72 @@ export default function TrainingChartsTab() {
         </Card.Content>
       </Card>
 
-      {/* Resumo Estatístico */}
+      {/* ✅ NOVO: Resumo Mensal Fixo */}
       <Card style={styles.summaryCard}>
         <Card.Content>
           <View style={styles.summaryHeader}>
-            <MaterialCommunityIcons name="chart-line" size={24} color="#2196F3" />
-            <Text style={styles.summaryTitle}>Resumo - {periodType === 'week' ? 'Semana' : 'Mês'}</Text>
-                </View>
+            <MaterialCommunityIcons name="calendar-month" size={24} color="#2196F3" />
+            <Text style={styles.summaryTitle}>Resumo do Mês</Text>
+          </View>
           
           <View style={styles.summaryGrid}>
+            {/* Treinos Planejados */}
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>
-                Treinos {selectedAnalysis === 'completed' ? 'Realizados' : 'Planejados'}
-                  </Text>
+              <View style={styles.summaryItemHeader}>
+                <MaterialCommunityIcons name="calendar-clock" size={20} color="#2196F3" />
+                <Text style={styles.summaryLabel}>Treinos Planejados</Text>
+              </View>
               <Text style={styles.summaryDescription}>
-                Total de treinos {selectedAnalysis === 'completed' ? 'completados' : 'planejados'} no período
+                Total de treinos planejados no mês
               </Text>
-              <Text style={styles.summaryValue}>
-                {selectedAnalysis === 'planned' ? Math.max(analysis.sessionsCount, 7) : analysis.sessionsCount}
-              </Text>
+              <View style={styles.summaryMetrics}>
+                <View style={styles.summaryMetric}>
+                  <Text style={styles.summaryValue}>{getMonthlySummary()?.planned.count || 0}</Text>
+                  <Text style={styles.summaryUnit}>treinos</Text>
+                </View>
+                <View style={styles.summaryMetric}>
+                  <Text style={styles.summaryValue}>{(getMonthlySummary()?.planned.distance || 0).toFixed(1)}</Text>
+                  <Text style={styles.summaryUnit}>km</Text>
+                </View>
+              </View>
             </View>
             
+            {/* Treinos Realizados */}
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Média {selectedMetricInfo?.label}</Text>
+              <View style={styles.summaryItemHeader}>
+                <MaterialCommunityIcons name="check-circle" size={20} color="#4CAF50" />
+                <Text style={styles.summaryLabel}>Treinos Realizados</Text>
+              </View>
               <Text style={styles.summaryDescription}>
-                Valor médio nos treinos {selectedAnalysis === 'completed' ? 'realizados' : 'planejados'}
+                Total de treinos realizados no mês
               </Text>
-              <Text style={styles.summaryValue}>
-                {analysis.data.filter(d => d.hasData).length > 0 ? 
-                  (analysis.data.filter(d => d.hasData).reduce((sum, d) => sum + d.value, 0) / analysis.data.filter(d => d.hasData).length).toFixed(1) : 
-                  'N/A'
-                }
+              <View style={styles.summaryMetrics}>
+                <View style={styles.summaryMetric}>
+                  <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>{getMonthlySummary()?.completed.count || 0}</Text>
+                  <Text style={styles.summaryUnit}>treinos</Text>
+                </View>
+                <View style={styles.summaryMetric}>
+                  <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>{(getMonthlySummary()?.completed.distance || 0).toFixed(1)}</Text>
+                  <Text style={styles.summaryUnit}>km</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Taxa de Adesão */}
+            <View style={styles.summaryItem}>
+              <View style={styles.summaryItemHeader}>
+                <MaterialCommunityIcons name="percent" size={20} color="#FF9800" />
+                <Text style={styles.summaryLabel}>Taxa de Adesão</Text>
+              </View>
+              <Text style={styles.summaryDescription}>
+                Percentual de treinos realizados vs planejados
+              </Text>
+              <Text style={[styles.summaryValue, { color: '#FF9800' }]}>
+                {(() => {
+                  const summary = getMonthlySummary();
+                  if (!summary || !summary.planned || !summary.completed || summary.planned.count === 0) return '0';
+                  return ((summary.completed.count / summary.planned.count) * 100).toFixed(1);
+                })()}%
               </Text>
             </View>
           </View>
@@ -1176,5 +835,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2196F3',
+  },
+  summaryItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  summaryMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  summaryMetric: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryUnit: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
 }); 
