@@ -81,6 +81,29 @@ interface CustomDayProps {
   onLongPress: (day: Date, training: TrainingSession) => void;
 }
 
+// ✅ FUNÇÃO PARA CONVERTER NÚMERO DO TERRENO PARA NOME
+const getTerrenoName = (terrenoValue: string | number | undefined): string => {
+    if (!terrenoValue) return '-';
+    const terrenoNumber = typeof terrenoValue === 'string' ? parseInt(terrenoValue) : terrenoValue;
+    const terrenoNames = ['Asfalto', 'Esteira', 'Trilha/Montanha', 'Pista', 'Outro'];
+    return terrenoNames[terrenoNumber - 1] || '-';
+};
+
+// ✅ FUNÇÃO PARA CONVERTER TIPO DE TREINO PARA NOME CORRETO
+const getTreinoTipoName = (tipoValue: string | undefined): string => {
+    if (!tipoValue) return '-';
+    const tipoMap: Record<string, string> = {
+        'continuo': 'Contínuo',
+        'intervalado': 'Intervalado',
+        'longo': 'Longo',
+        'fartlek': 'Fartlek',
+        'tiro': 'Tiro',
+        'ritmo': 'Ritmo',
+        'regenerativo': 'Regenerativo'
+    };
+    return tipoMap[tipoValue] || tipoValue.charAt(0).toUpperCase() + tipoValue.slice(1);
+};
+
 function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealizadoModal, onLongPress }: CustomDayProps & { onOpenPlanModal: (day: Date, training?: TrainingSession | null) => void, onOpenRealizadoModal: (day: Date, training?: TrainingSession | null) => void, onLongPress: (day: Date, training: TrainingSession) => void }) {
     const isOtherMonth = day.getMonth() !== displayMonth;
     const isToday = isSameDay(day, new Date());
@@ -165,8 +188,8 @@ function CustomDay({ day, displayMonth, training, onOpenPlanModal, onOpenRealiza
                         ) : (
                             <>
                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>Modalidade: </Text><Text style={styles.cardText}>{training.modalidade ? training.modalidade.charAt(0).toUpperCase() + training.modalidade.slice(1) : '-'}</Text></View>
-                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{training.terreno ? training.terreno.charAt(0).toUpperCase() + training.terreno.slice(1) : '-'}</Text></View>
-                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{training.treino_tipo ? training.treino_tipo.charAt(0).toUpperCase() + training.treino_tipo.slice(1) : '-'}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Terreno: </Text><Text style={styles.cardText}>{getTerrenoName(training.terreno)}</Text></View>
+                                <View style={styles.cardRow}><Text style={styles.cardLabel}>Tipo de treino: </Text><Text style={styles.cardText}>{getTreinoTipoName(training.treino_tipo)}</Text></View>
                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>Duração: </Text><Text style={styles.cardText}>{(training.duracao_horas || training.duracao_minutos) ? `${training.duracao_horas || '0'}h ${training.duracao_minutos || '0'}min` : (training.distance_km ? `${training.distance_km}km` : '-')}</Text></View>
                                 <View style={styles.cardRow}><Text style={styles.cardLabel}>Intensidade: </Text><Text style={styles.cardText}>{training.intensidade || '-'}</Text></View>
                             </>

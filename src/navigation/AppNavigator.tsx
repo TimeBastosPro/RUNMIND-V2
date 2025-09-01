@@ -805,7 +805,7 @@ export default function AppNavigator() {
           useAuthStore.setState({
             user: session.user,
             isAuthenticated: true,
-            isInitializing: false
+            isInitializing: true // ✅ CORREÇÃO: Manter inicializando até carregar dados
           });
           
           // ✅ MELHORADO: Carregar perfis em sequência para evitar conflitos
@@ -845,6 +845,9 @@ export default function AppNavigator() {
           if (useCoachStore.getState().currentCoach) {
             setShowCoachProfileSetup(false);
           }
+          
+          // ✅ CORREÇÃO: Definir inicialização como completa após carregar todos os dados
+          useAuthStore.setState({ isInitializing: false });
         } else {
           useAuthStore.setState({
             user: null,

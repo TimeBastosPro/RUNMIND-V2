@@ -286,12 +286,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // ✅ MELHORADO: Carregar dados com correção automática de perfis duplicados
         await Promise.allSettled([get().loadProfileSafely()]);
         
-        // Se for usuário do tipo coach, garantir navegação/coerência de stack
-        try {
-          if ((data.user as any)?.user_metadata?.user_type === 'coach') {
-            useAuthStore.setState({ isAuthenticated: true });
-          }
-        } catch {}
+        // ✅ CORREÇÃO: Definir estado de autenticação para todos os usuários
+        set({ 
+          user: data.user, 
+          isAuthenticated: true, 
+          isLoading: false, 
+          isInitializing: false 
+        });
 
         console.log('🔍 signIn concluído com sucesso');
       }

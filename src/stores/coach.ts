@@ -120,6 +120,14 @@ export const useCoachStore = create<CoachState>((set, get) => ({
         return;
       }
 
+      // ✅ CORREÇÃO: Verificar user_type antes de tentar carregar coach
+      const userType = (user as any)?.user_metadata?.user_type;
+      if (userType !== 'coach') {
+        console.log('🔍 Usuário não é coach, pulando carregamento de coach profile');
+        set({ currentCoach: null, isLoading: false });
+        return;
+      }
+
       console.log('🔍 Verificando se usuário é coach...');
       const { data, error } = await supabase
         .from('coaches')
@@ -130,15 +138,14 @@ export const useCoachStore = create<CoachState>((set, get) => ({
       if (error) {
         console.log('⚠️ Erro ao carregar coach profile:', error.message, error.code);
         
-        // Se for erro 406 (Not Acceptable), pode ser problema de RLS ou estrutura da tabela
-        if (error.code === '406') {
-          console.log('⚠️ Erro 406 - Possível problema de RLS ou estrutura da tabela coaches');
+        // Se for erro 406 (Not Acceptable) ou PGRST116 (não encontrado), usuário não é coach
+        if (error.code === '406' || error.code === 'PGRST116') {
+          console.log('⚠️ Usuário não é coach ou perfil não encontrado');
           set({ currentCoach: null, isLoading: false });
           return;
         }
         
-        // Coach ausente: se o user for do tipo coach, criar registro mínimo idempotente
-        const userType = (user as any)?.user_metadata?.user_type;
+        // Coach ausente: criar registro mínimo idempotente (já verificamos que é coach acima)
         if (userType === 'coach') {
           console.log('🛠️ Tentando criar registro de coach...');
           const fullName = (user as any)?.user_metadata?.full_name || (user.email ?? 'Coach');

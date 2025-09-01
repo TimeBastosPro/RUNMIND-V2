@@ -104,13 +104,7 @@ export default function HomeScreen() {
   
   const { races, fetchRaces } = useAuthStore();
   
-  // ✅ NOVO: Log detalhado do estado das provas
-  console.log('DEBUG - HomeScreen - Estado das provas:', {
-    races: races,
-    racesLength: races?.length || 0,
-    racesType: typeof races,
-    isArray: Array.isArray(races)
-  });
+  // ✅ REMOVIDO: Logs de debug desnecessários
   const { isCoachView, exitCoachView, viewAsAthleteId, athleteName: athleteNameFromStore } = useViewStore();
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -147,7 +141,7 @@ export default function HomeScreen() {
             .order('start_date', { ascending: true });
           
           if (error) throw error;
-          console.log('DEBUG - HomeScreen - Provas do atleta carregadas:', data);
+          // ✅ REMOVIDO: Log de debug desnecessário
           // Atualizar o estado das provas no store
           useAuthStore.setState({ races: data || [] });
         } catch (error) {
@@ -156,7 +150,7 @@ export default function HomeScreen() {
       })();
     } else {
       // Se é atleta, carregar suas próprias provas
-      console.log('DEBUG - HomeScreen - Carregando provas do atleta...');
+      // ✅ REMOVIDO: Log de debug desnecessário
       fetchRaces();
     }
     
@@ -200,7 +194,7 @@ export default function HomeScreen() {
 
   // Recarregar dados ao alternar modo treinador ↔ atleta
   useEffect(() => {
-    console.log('DEBUG - HomeScreen - Recarregando dados, isCoachView:', isCoachView);
+    // ✅ REMOVIDO: Log de debug desnecessário
     fetchTrainingSessions();
     
     // Carregar provas baseado no modo
@@ -215,7 +209,7 @@ export default function HomeScreen() {
             .order('start_date', { ascending: true });
           
           if (error) throw error;
-          console.log('DEBUG - HomeScreen - Provas do atleta recarregadas:', data);
+          // ✅ REMOVIDO: Log de debug desnecessário
           useAuthStore.setState({ races: data || [] });
         } catch (error) {
           console.error('Erro ao recarregar provas do atleta:', error);
@@ -223,7 +217,7 @@ export default function HomeScreen() {
       })();
     } else {
       // Se é atleta, carregar suas próprias provas
-      console.log('DEBUG - HomeScreen - Recarregando provas do atleta...');
+      // ✅ REMOVIDO: Log de debug desnecessário
       fetchRaces();
     }
     
@@ -298,19 +292,7 @@ export default function HomeScreen() {
   // Buscar treino para hoje e próxima prova
   const todayDateString = new Date().toISOString().split('T')[0];
   
-  // ✅ DEBUG: Log detalhado dos treinos para identificar problema
-  console.log('DEBUG - HomeScreen - Treinos carregados:', {
-    totalSessions: trainingSessions?.length || 0,
-    todayDateString,
-    sessions: trainingSessions?.map(s => ({
-      id: s.id,
-      date: s.training_date,
-      status: s.status,
-      title: s.title,
-      distance: s.distance_km,
-      duration: s.duration_minutes
-    }))
-  });
+  // ✅ REMOVIDO: Logs de debug desnecessários
   
   const todayTraining = trainingSessions?.find(session => 
     session.training_date === todayDateString
@@ -330,23 +312,7 @@ export default function HomeScreen() {
   
   const nextPlannedTraining = sortedPlannedTrainings[0];
   
-  // ✅ DEBUG: Log do próximo treino planejado
-  console.log('DEBUG - HomeScreen - Próximo treino planejado:', {
-    nextPlannedTraining: nextPlannedTraining ? {
-      id: nextPlannedTraining.id,
-      date: nextPlannedTraining.training_date,
-      status: nextPlannedTraining.status,
-      title: nextPlannedTraining.title,
-      distance: nextPlannedTraining.distance_km,
-      duration: nextPlannedTraining.duration_minutes
-    } : null,
-    todayTraining: todayTraining ? {
-      id: todayTraining.id,
-      date: todayTraining.training_date,
-      status: todayTraining.status,
-      title: todayTraining.title
-    } : null
-  });
+  // ✅ REMOVIDO: Logs de debug desnecessários
   
   // Lógica do próximo treino: se há treino planejado para hoje, mostra ele. Se não, mostra o próximo planejado
   const nextTraining = nextPlannedTraining;
@@ -374,42 +340,23 @@ export default function HomeScreen() {
 
   // ✅ OTIMIZADO: Buscar a próxima prova (a mais próxima)
   
-  console.log('DEBUG - HomeScreen - races:', races);
-  console.log('DEBUG - HomeScreen - todayDateString:', todayDateString);
-  
-  // ✅ MELHORADO: Log detalhado do conteúdo das provas
-  if (races && races.length > 0) {
-    console.log('DEBUG - HomeScreen - Conteúdo das provas:', JSON.stringify(races, null, 2));
-  }
+  // ✅ REMOVIDO: Logs de debug desnecessários
   
   const filteredRaces = races?.filter((race: any) => {
     // ✅ MELHORADO: Verificação mais robusta
     if (!race || !race.start_date) {
-      console.log('DEBUG - HomeScreen - Prova inválida:', race);
+      // ✅ REMOVIDO: Log de debug desnecessário
       return false;
     }
     
-    console.log('DEBUG - HomeScreen - Comparando datas:', {
-      raceDate: race.start_date,
-      todayDate: todayDateString,
-      comparison: race.start_date >= todayDateString,
-      raceDateType: typeof race.start_date,
-      todayDateType: typeof todayDateString
-    });
+    // ✅ REMOVIDO: Log de debug desnecessário
     return race.start_date >= todayDateString;
   });
-  console.log('DEBUG - HomeScreen - filteredRaces:', filteredRaces);
+  // ✅ REMOVIDO: Log de debug desnecessário
   
   const nextRace = filteredRaces
     ?.sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
-  console.log('DEBUG - HomeScreen - nextRace:', nextRace);
-  console.log('DEBUG - HomeScreen - nextRace detalhado:', nextRace ? {
-    id: nextRace.id,
-    event_name: nextRace.event_name,
-    start_date: nextRace.start_date,
-    start_date_type: typeof nextRace.start_date,
-    start_date_parsed: new Date(nextRace.start_date)
-  } : 'null');
+  // ✅ REMOVIDO: Logs de debug desnecessários
 
   // Calcular dias restantes para a próxima prova
   const daysUntilRace = nextRace ? 
@@ -522,22 +469,7 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.trainingInfo}>
-              {/* ✅ DEBUG: Log dos dados do treino sendo exibido */}
-              {(() => {
-                console.log('DEBUG - HomeScreen - Dados do treino sendo exibido:', {
-                  id: nextTraining.id,
-                  status: nextTraining.status,
-                  title: nextTraining.title,
-                  modalidade: nextTraining.modalidade,
-                  treino_tipo: nextTraining.treino_tipo,
-                  distance_km: nextTraining.distance_km,
-                  duration_minutes: nextTraining.duration_minutes,
-                  perceived_effort: nextTraining.perceived_effort,
-                  elevation_gain_meters: nextTraining.elevation_gain_meters,
-                  elevation_loss_meters: nextTraining.elevation_loss_meters
-                });
-                return null;
-              })()}
+              {/* ✅ REMOVIDO: Log de debug desnecessário */}
               
               <Text style={styles.trainingType}>{nextTraining.modalidade ? nextTraining.modalidade.charAt(0).toUpperCase() + nextTraining.modalidade.slice(1) : 'Treino'}</Text>
               
