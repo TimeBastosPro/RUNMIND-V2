@@ -51,12 +51,28 @@ export function filterDataByPeriod<T extends DateFilterable>(
       return false;
     }
     
-    // CORRIGIR: Comparar apenas as datas, não as horas
+    // ✅ CORREÇÃO: Normalizar datas para comparação segura
     const itemDateOnly = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
     const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
     const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
     
-    const isInRange = itemDateOnly >= startDateOnly && itemDateOnly <= endDateOnly;
+    // ✅ CORREÇÃO: Comparar usando getTime() para evitar problemas de timezone
+    const isInRange = itemDateOnly.getTime() >= startDateOnly.getTime() && 
+                     itemDateOnly.getTime() <= endDateOnly.getTime();
+    
+    // ✅ DEBUG: Log para verificar filtragem
+    if (dateString === '2025-09-01') {
+      console.log('🔍 DEBUG - Filtragem do dia 01/09:', {
+        dateString,
+        itemDateOnly: itemDateOnly.toISOString().split('T')[0],
+        startDateOnly: startDateOnly.toISOString().split('T')[0],
+        endDateOnly: endDateOnly.toISOString().split('T')[0],
+        isInRange,
+        itemTime: itemDateOnly.getTime(),
+        startTime: startDateOnly.getTime(),
+        endTime: endDateOnly.getTime()
+      });
+    }
     
     return isInRange;
   });

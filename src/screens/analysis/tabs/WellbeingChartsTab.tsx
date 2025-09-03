@@ -102,37 +102,41 @@ export default function WellbeingChartsTab() {
 
   // Calcular período atual baseado na data e tipo selecionado
   const getCurrentPeriod = () => {
-    // ✅ CORRIGIDO: Usar data local sem problemas de fuso horário
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const day = currentDate.getDate();
-    
-    if (periodType === 'week') {
-      // Início da semana (segunda-feira)
-      const startOfWeek = new Date(year, month, day);
-      const dayOfWeek = startOfWeek.getDay(); // 0 = domingo, 1 = segunda, etc.
+          // ✅ CORREÇÃO: Usar data local sem problemas de fuso horário
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const day = currentDate.getDate();
       
-      // Calcular diferença para segunda-feira
-      let diff = 1 - dayOfWeek; // Para segunda-feira
-      if (dayOfWeek === 0) diff = -6; // Se for domingo, voltar 6 dias
-      
-      startOfWeek.setDate(startOfWeek.getDate() + diff);
-      startOfWeek.setHours(0, 0, 0, 0);
-      
-      // Fim da semana (domingo) - calcular corretamente
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
-      
-      console.log('🔍 DEBUG - Cálculo da Semana:', {
-        inputDate: currentDate.toISOString().split('T')[0],
-        dayOfWeek,
-        diff,
-        startOfWeek: startOfWeek.toISOString().split('T')[0],
-        endOfWeek: endOfWeek.toISOString().split('T')[0],
-        startWeekday: startOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' }),
-        endWeekday: endOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' })
-      });
+      if (periodType === 'week') {
+        // ✅ CORREÇÃO: Início da semana (segunda-feira) - usar construtor local
+        const startOfWeek = new Date(year, month, day);
+        const dayOfWeek = startOfWeek.getDay(); // 0 = domingo, 1 = segunda, etc.
+        
+        // ✅ CORREÇÃO: Calcular diferença para segunda-feira
+        let diff = 1 - dayOfWeek; // Para segunda-feira
+        if (dayOfWeek === 0) diff = -6; // Se for domingo, voltar 6 dias
+        
+        startOfWeek.setDate(startOfWeek.getDate() + diff);
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        // ✅ CORREÇÃO: Fim da semana (domingo) - calcular corretamente
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23, 59, 59, 999);
+        
+                // ✅ DEBUG: Log para verificar cálculo da semana
+        console.log('🔍 DEBUG - Cálculo da Semana (CORRIGIDO):', {
+          inputDate: currentDate.toISOString().split('T')[0],
+          dayOfWeek,
+          diff,
+          startOfWeek: startOfWeek.toISOString().split('T')[0],
+          endOfWeek: endOfWeek.toISOString().split('T')[0],
+          startWeekday: startOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' }),
+          endWeekday: endOfWeek.toLocaleDateString('pt-BR', { weekday: 'long' }),
+          // ✅ NOVO: Verificar se 01/09 está no período
+          date0109: new Date('2025-09-01').toISOString().split('T')[0],
+          is0109InRange: new Date('2025-09-01') >= startOfWeek && new Date('2025-09-01') <= endOfWeek
+        });
       
       return { startDate: startOfWeek, endDate: endOfWeek };
     } else {
@@ -238,12 +242,28 @@ export default function WellbeingChartsTab() {
       
       if (checkinForDay && selectedMetricInfo?.field) {
         const fieldValue = checkinForDay[selectedMetricInfo.field as keyof typeof checkinForDay];
+        
+        // ✅ DEBUG: Verificar dados antes da validação
+        console.log(`🔍 DEBUG - Validação para ${dateStr}:`, {
+          field: selectedMetricInfo.field,
+          fieldValue,
+          fieldValueType: typeof fieldValue,
+          checkinForDay: {
+            date: checkinForDay.date,
+            sleep_quality: checkinForDay.sleep_quality,
+            soreness: checkinForDay.soreness,
+            motivation: checkinForDay.motivation
+          }
+        });
+        
         const validationResult = validateWellbeingMetric(fieldValue, selectedMetricInfo.field);
         
         if (validationResult.isValid) {
           value = validationResult.value;
+          console.log(`✅ DEBUG - Validação OK para ${dateStr}:`, { value });
         } else {
           // Log do erro de validação
+          console.log(`❌ DEBUG - Erro de validação para ${dateStr}:`, validationResult.error);
           logValidationErrors([validationResult.error || 'Erro de validação']);
           value = 0;
         }
@@ -369,6 +389,20 @@ export default function WellbeingChartsTab() {
     const maxValue = valuesWithData.length > 0 ? Math.max(...valuesWithData) : 10;
     
     const { startDate, endDate } = getCurrentPeriod();
+    
+    // ✅ DEBUG: Verificar dados para renderização
+    console.log('🔍 DEBUG - Renderização do Gráfico:', {
+      displayDataLength: displayData.length,
+      valuesWithDataLength: valuesWithData.length,
+      maxValue,
+      displayData: displayData.map(d => ({
+        date: d.date.toISOString().split('T')[0],
+        value: d.value,
+        hasData: d.hasData
+      })),
+      // ✅ NOVO: Verificar especificamente o dia 01/09
+      dia0109: displayData.find(d => d.date.toISOString().split('T')[0] === '2025-09-01')
+    });
     
     return (
       <Card style={styles.card}>
