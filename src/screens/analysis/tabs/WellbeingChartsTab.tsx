@@ -20,6 +20,7 @@ const DAILY_METRICS = [
     icon: 'sleep',
     color: '#4CAF50',
     field: 'sleep_quality',
+    fallbackField: 'sleep_quality_score', // ✅ NOVO: Campo alternativo
     description: 'Como você avalia a qualidade do seu sono?',
     scale: '1 (Muito ruim) - 10 (Excelente)'
   },
@@ -29,6 +30,7 @@ const DAILY_METRICS = [
     icon: 'human-handsup',
     color: '#FF5722',
     field: 'soreness',
+    fallbackField: 'soreness_score', // ✅ NOVO: Campo alternativo
     description: 'Nível de dores ou desconforto muscular',
     scale: '1 (Sem dor) - 10 (Dor extrema)'
   },
@@ -38,6 +40,7 @@ const DAILY_METRICS = [
     icon: 'lightning-bolt',
     color: '#FFC107',
     field: 'motivation',
+    fallbackField: 'emocional', // ✅ NOVO: Campo alternativo
     description: 'Seu nível de motivação para treinar',
     scale: '1 (Desmotivado) - 10 (Muito motivado)'
   },
@@ -47,6 +50,7 @@ const DAILY_METRICS = [
     icon: 'target',
     color: '#9C27B0',
     field: 'confidence',
+    fallbackField: 'confidence_score', // ✅ NOVO: Campo alternativo
     description: 'Confiança na sua capacidade de performance',
     scale: '1 (Sem confiança) - 10 (Muito confiante)'
   },
@@ -56,6 +60,7 @@ const DAILY_METRICS = [
     icon: 'eye',
     color: '#2196F3',
     field: 'focus',
+    fallbackField: 'focus_score', // ✅ NOVO: Campo alternativo
     description: 'Capacidade de concentração e foco',
     scale: '1 (Disperso) - 10 (Muito focado)'
   },
@@ -65,6 +70,7 @@ const DAILY_METRICS = [
     icon: 'heart',
     color: '#E91E63',
     field: 'energy_score',
+    fallbackField: 'emocional', // ✅ NOVO: Campo alternativo
     description: 'Nível de energia física e mental',
     scale: '1 (Sem energia) - 10 (Muita energia)'
   },
@@ -241,32 +247,67 @@ export default function WellbeingChartsTab() {
       let value = 0;
       
       if (checkinForDay && selectedMetricInfo?.field) {
-        const fieldValue = checkinForDay[selectedMetricInfo.field as keyof typeof checkinForDay];
+        // ✅ CORREÇÃO: Tentar campo principal primeiro, depois fallback
+        let fieldValue = checkinForDay[selectedMetricInfo.field as keyof typeof checkinForDay];
+        
+        // ✅ NOVO: Se não houver valor no campo principal, tentar fallback
+        if ((fieldValue === null || fieldValue === undefined || fieldValue === 0) && selectedMetricInfo.fallbackField) {
+          fieldValue = checkinForDay[selectedMetricInfo.fallbackField as keyof typeof checkinForDay];
+        }
         
         // ✅ DEBUG: Verificar dados antes da validação
         console.log(`🔍 DEBUG - Validação para ${dateStr}:`, {
           field: selectedMetricInfo.field,
+          fallbackField: selectedMetricInfo.fallbackField,
           fieldValue,
+          fallbackValue: selectedMetricInfo.fallbackField ? checkinForDay[selectedMetricInfo.fallbackField as keyof typeof checkinForDay] : null,
           fieldValueType: typeof fieldValue,
           checkinForDay: {
             date: checkinForDay.date,
             sleep_quality: checkinForDay.sleep_quality,
+            sleep_quality_score: (checkinForDay as any).sleep_quality_score,
             soreness: checkinForDay.soreness,
-            motivation: checkinForDay.motivation
+            soreness_score: (checkinForDay as any).soreness_score,
+            motivation: checkinForDay.motivation,
+            emocional: (checkinForDay as any).emocional
           }
         });
         
-        const validationResult = validateWellbeingMetric(fieldValue, selectedMetricInfo.field);
-        
-        if (validationResult.isValid) {
-          value = validationResult.value;
-          console.log(`✅ DEBUG - Validação OK para ${dateStr}:`, { value });
+        // ✅ CORREÇÃO: Validação mais flexível e robusta
+        if (fieldValue !== null && fieldValue !== undefined) {
+          const numericValue = typeof fieldValue === 'number' ? fieldValue : parseFloat(fieldValue);
+          
+          if (!isNaN(numericValue) && numericValue > 0) {
+            value = numericValue;
+            console.log(`✅ DEBUG - Valor válido para ${dateStr}:`, { value, field: selectedMetricInfo.field });
+          } else {
+            console.log(`❌ DEBUG - Valor inválido para ${dateStr}:`, { fieldValue, numericValue });
+            value = 0;
+          }
         } else {
-          // Log do erro de validação
-          console.log(`❌ DEBUG - Erro de validação para ${dateStr}:`, validationResult.error);
-          logValidationErrors([validationResult.error || 'Erro de validação']);
+          console.log(`❌ DEBUG - Campo vazio para ${dateStr}:`, { field: selectedMetricInfo.field });
           value = 0;
         }
+      }
+      
+      // ✅ NOVO: Debug específico para o dia 01/09
+      if (dateStr === '2025-09-01') {
+        console.log(`🔍 DEBUG ESPECÍFICO - Dia 01/09:`, {
+          dateStr,
+          checkinForDay: checkinForDay ? {
+            date: checkinForDay.date,
+            sleep_quality: checkinForDay.sleep_quality,
+            sleep_quality_score: (checkinForDay as any).sleep_quality_score,
+            soreness: checkinForDay.soreness,
+            soreness_score: (checkinForDay as any).soreness_score,
+            motivation: checkinForDay.motivation,
+            emocional: (checkinForDay as any).emocional
+          } : null,
+          selectedMetric: selectedMetricInfo?.field,
+          fallbackField: selectedMetricInfo?.fallbackField,
+          finalValue: value,
+          hasData: value > 0
+        });
       }
       
       // Debug para cada dia

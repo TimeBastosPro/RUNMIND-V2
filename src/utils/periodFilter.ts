@@ -46,29 +46,36 @@ export function filterDataByPeriod<T extends DateFilterable>(
       return false;
     }
     
-    const itemDate = new Date(dateString);
+    // ✅ CORREÇÃO CRÍTICA: Evitar conversões desnecessárias de Date
+    // O problema estava aqui: new Date(dateString) estava causando problemas de timezone
+    
+    // ✅ NOVO: Comparar diretamente as strings de data
+    const itemDateStr = dateString.split('T')[0]; // Extrair apenas YYYY-MM-DD
+    
+    // ✅ CORREÇÃO: Criar datas apenas para comparação de range, não para o item
+    const itemDate = new Date(itemDateStr + 'T00:00:00'); // Forçar meia-noite local
     if (isNaN(itemDate.getTime())) {
       return false;
     }
     
     // ✅ CORREÇÃO: Normalizar datas para comparação segura
-    const itemDateOnly = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
     const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
     const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
     
     // ✅ CORREÇÃO: Comparar usando getTime() para evitar problemas de timezone
-    const isInRange = itemDateOnly.getTime() >= startDateOnly.getTime() && 
-                     itemDateOnly.getTime() <= endDateOnly.getTime();
+    const isInRange = itemDate.getTime() >= startDateOnly.getTime() && 
+                     itemDate.getTime() <= endDateOnly.getTime();
     
     // ✅ DEBUG: Log para verificar filtragem
     if (dateString === '2025-09-01') {
-      console.log('🔍 DEBUG - Filtragem do dia 01/09:', {
+      console.log('🔍 DEBUG - Filtragem do dia 01/09 (CORRIGIDA):', {
         dateString,
-        itemDateOnly: itemDateOnly.toISOString().split('T')[0],
+        itemDateStr,
+        itemDate: itemDate.toISOString().split('T')[0],
         startDateOnly: startDateOnly.toISOString().split('T')[0],
         endDateOnly: endDateOnly.toISOString().split('T')[0],
         isInRange,
-        itemTime: itemDateOnly.getTime(),
+        itemTime: itemDate.getTime(),
         startTime: startDateOnly.getTime(),
         endTime: endDateOnly.getTime()
       });
